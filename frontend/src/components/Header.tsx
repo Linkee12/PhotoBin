@@ -1,8 +1,8 @@
-import headerEnd from "../images/headerEnd.svg";
-import headerStart from "../images/headerStart.svg";
-import bird from "../images/icons/bird.svg";
-import title from "../images/icons/title.svg";
-import git from "../images/icons/git.svg";
+import headerEnd from "../images/headerEnd.svg?no-inline";
+import headerStart from "../images/headerStart.svg?no-inline";
+import bird from "../images/icons/bird.svg?no-inline";
+import title from "../images/icons/title.svg?no-inline";
+import git from "../images/icons/git.svg?no-inline";
 import { styled } from "@stitches/react";
 
 export default function Header() {
