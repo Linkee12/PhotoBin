@@ -1,4 +1,7 @@
-# React &middot; Express &middot; Cuple Boilerplate
+# PhotoBin
+Photobin is a temporary photo album provider with E2E encryption. You can
+share photos and each participant can export them to their storage of
+choice.
 
 # Getting started
 (rootless docker is recommended)
