@@ -1,12 +1,13 @@
+/* eslint-disable promise/always-return */
 /* eslint-disable react/no-unescaped-entities */
 import { styled } from "@stitches/react";
 import bottomBg from "../images/bottomBg.svg?no-inline";
 import Header from "../components/Header";
 import IntroImg from "../images/intro";
 import { useNavigate } from "react-router";
+import { genKey } from "../utils/key";
 export default function Home() {
   const nav = useNavigate();
-
   return (
     <Body>
       <Container>
@@ -36,7 +37,19 @@ export default function Home() {
           <ButtonContainer>
             <Text css={{ "--color": "#808080" }}>Start your E2E encripted album</Text>
 
-            <Button onClick={() => nav("/new")}>
+            <Button
+              onClick={() => {
+                genKey()
+                  .then((key) => {
+                    nav(
+                      `/bin/${encodeURIComponent(crypto.randomUUID())}#${encodeURIComponent(key)}`,
+                    );
+                  })
+                  .catch((e) => {
+                    console.error(e);
+                  });
+              }}
+            >
               <Text css={{ "--weight": "bold" }}>NEW ALBUM</Text>
             </Button>
           </ButtonContainer>
@@ -63,6 +76,7 @@ export const Container = styled("div", {
   minHeight: "100vh",
   display: "flex",
   flexDirection: "column",
+  position: "relative",
 });
 const Intro = styled("div", {
   minHeight: "150px",

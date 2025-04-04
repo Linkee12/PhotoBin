@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="7.0098996mm"
+   height="7.0099082mm"
+   viewBox="0 0 7.0098996 7.0099082"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <filter
+       style="color-interpolation-filters:sRGB"
+       id="filter44"
+       x="-0.20032259"
+       y="-0.20032259"
+       width="1.4006452"
+       height="1.4006452">
+      <feFlood
+         result="flood"
+         in="SourceGraphic"
+         flood-opacity="1.000000"
+         flood-color="rgb(0,0,0)"
+         id="feFlood43" />
+      <feGaussianBlur
+         result="blur"
+         in="SourceGraphic"
+         stdDeviation="41.400002"
+         id="feGaussianBlur43" />
+      <feOffset
+         result="offset"
+         in="blur"
+         dx="0.000000"
+         dy="0.000000"
+         id="feOffset43" />
+      <feComposite
+         result="comp1"
+         operator="in"
+         in="flood"
+         in2="offset"
+         id="feComposite43" />
+      <feComposite
+         result="comp2"
+         operator="over"
+         in="SourceGraphic"
+         in2="comp1"
+         id="feComposite44" />
+    </filter>
+  </defs>
+  <g
+     id="layer1"
+     transform="translate(-103.59059,-130.57809)">
+    <g
+       id="use1-49"
+       style="fill:#f9f9f9;stroke:none;filter:url(#filter44)"
+       transform="matrix(0.01009025,0,0,0.01009025,104.51243,131.49994)">
+      <title
+         id="title3">Check Circle</title>
+      <path
+         d="M 504,256 C 504,392.967 392.967,504 256,504 119.033,504 8,392.967 8,256 8,119.033 119.033,8 256,8 392.967,8 504,119.033 504,256 Z m -276.686,131.314 184,-184 c 6.248,-6.248 6.248,-16.379 0,-22.627 L 388.687,158.06 c -6.248,-6.249 -16.379,-6.249 -22.628,0 L 216,308.118 145.941,238.059 c -6.248,-6.248 -16.379,-6.248 -22.628,0 l -22.627,22.627 c -6.248,6.248 -6.248,16.379 0,22.627 l 104,104 c 6.249,6.249 16.379,6.249 22.628,0.001 z"
+         id="path3" />
+    </g>
+  </g>
+</svg>

@@ -10,7 +10,7 @@ function App() {
   return (
     <Routes>
       <Route path={"/"} element={<Home />}></Route>
-      <Route path={"/new"} element={<NewAlbum />}></Route>
+      <Route path={"/bin/:albumId"} element={<NewAlbum />}></Route>
     </Routes>
   );
 }
