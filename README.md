@@ -1,4 +1,4 @@
-# PhotoBin
+# PhotoBin (work in progress)
 Photobin is a temporary photo album provider with E2E encryption. You can
 share photos and each participant can export them to their storage of
 choice.
