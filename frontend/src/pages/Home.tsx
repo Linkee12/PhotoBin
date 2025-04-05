@@ -7,7 +7,8 @@ import IntroImg from "../images/intro";
 import { useNavigate } from "react-router";
 import { genKey } from "../utils/key";
 export default function Home() {
-  const nav = useNavigate();
+  const navigate = useNavigate();
+
   return (
     <Body>
       <Container>
@@ -41,9 +42,9 @@ export default function Home() {
               onClick={() => {
                 genKey()
                   .then((key) => {
-                    nav(
-                      `/bin/${encodeURIComponent(crypto.randomUUID())}#${encodeURIComponent(key)}`,
-                    );
+                    const albumID = encodeURIComponent(crypto.randomUUID());
+                    const albumKey = encodeURIComponent(key);
+                    navigate(`/bin/${albumID}#${albumKey}`);
                   })
                   .catch((e) => {
                     console.error(e);
