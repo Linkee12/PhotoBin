@@ -1,8 +1,8 @@
 /* eslint-disable sonarjs/no-duplicate-string */
 import { Route, Routes } from "react-router";
 import { globalCss } from "@stitches/react";
-import NewAlbum from "./pages/NewAlbum";
-import Home from "./pages/Home";
+import NewAlbum from "./pages/Album/Album";
+import Home from "./pages/Home/Home";
 
 function App() {
   globalStyles();

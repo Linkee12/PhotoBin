@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "paths": {"@assets/*":["./src/@assets/*"]},
     "target": "ESNext",
     "noErrorTruncation": true,
     "useDefineForClassFields": true,

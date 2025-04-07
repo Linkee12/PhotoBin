@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="4.2332931mm"
+   height="4.2332931mm"
+   viewBox="0 0 4.2332931 4.2332931"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <g
+     id="layer1"
+     transform="translate(-91.518506,-123.3779)">
+    <g
+       id="use1-33"
+       style="fill:#000000;stroke:none"
+       transform="matrix(0.04703659,0,0,0.04703659,94.710278,119.40307)">
+      <title
+         id="title1">cancel</title>
+      <g
+         style="display:inline"
+         id="g3"
+         transform="matrix(0,-1,-1,0,373.50506,516.50504)">
+        <g
+           transform="matrix(0,-1,-1,0,1394.3622,441.36221)"
+           id="g2">
+          <rect
+             y="962.36218"
+             x="0"
+             height="90"
+             width="90"
+             id="rect1"
+             style="display:inline;overflow:visible;visibility:visible;fill:none;stroke:none;stroke-width:7.5;marker:none;enable-background:accumulate" />
+          <path
+             id="path1"
+             d="m 68.334727,979.78562 -50.912118,50.91208 4.242656,4.2427 50.912098,-50.91211 -4.243357,-4.24195 z"
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;line-height:normal;font-family:sans-serif;-inkscape-font-specification:sans-serif;text-indent:0;text-align:start;text-decoration:none;text-decoration-line:none;letter-spacing:normal;word-spacing:normal;text-transform:none;writing-mode:lr-tb;direction:ltr;baseline-shift:baseline;text-anchor:start;clip-rule:nonzero;display:inline;overflow:visible;visibility:visible;isolation:auto;mix-blend-mode:normal;color-interpolation:sRGB;color-interpolation-filters:linearRGB;fill:currentcolor;fill-opacity:1;stroke:none;stroke-width:9;marker:none;color-rendering:auto;image-rendering:auto;shape-rendering:auto;text-rendering:auto;enable-background:accumulate" />
+          <circle
+             r="38"
+             cy="1007.3622"
+             cx="45.000004"
+             id="circle1"
+             style="display:inline;overflow:visible;visibility:visible;opacity:1;fill:none;fill-opacity:1;fill-rule:nonzero;stroke:currentcolor;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker:none;enable-background:accumulate" />
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

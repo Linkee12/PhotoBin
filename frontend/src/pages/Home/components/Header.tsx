@@ -1,9 +1,9 @@
-import headerEnd from "../images/headerEnd.svg?no-inline";
-import headerStart from "../images/headerStart.svg?no-inline";
-import bird from "../images/icons/bird.svg?no-inline";
-import title from "../images/icons/title.svg?no-inline";
-import git from "../images/icons/git.svg?no-inline";
-import { styled } from "@stitches/react";
+import headerEnd from "@assets/images/headerEnd.svg?no-inline";
+import headerStart from "@assets/images/headerStart.svg?no-inline";
+import bird from "@assets/images/icons/bird.svg?no-inline";
+import title from "@assets/images/icons/title.svg?no-inline";
+import git from "@assets/images/icons/git.svg?no-inline";
+import { styled } from "../../../stitches.config";
 
 export default function Header() {
   return (
@@ -47,7 +47,7 @@ const Git = styled("img", {
   objectFit: "cover",
 });
 const Icons = styled("div", {
-  width: "clamp(400px, 100vw, 1500px)",
+  width: "100%",
   display: "flex",
   justifyContent: "space-between",
   padding: "50px ",

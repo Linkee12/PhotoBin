@@ -12,15 +12,36 @@ app.use(express.json({ limit: "2mb" }));
 const builder = createBuilder(app);
 const imageService = new ImageService();
 const routes = {
-  sayHi: builder
+  getAlbum: builder
     .querySchema(
       z.object({
-        name: z.string().min(2),
+        id: z.string(),
       }),
     )
     .get(async ({ data }) => {
+      const albumMap = await imageService.readAlbum(data.query.id);
       return success({
-        message: `Hi ${data.query.name}!`,
+        albumMap,
+      });
+    }),
+  getPartOfImage: builder
+    .querySchema(
+      z.object({
+        albumId: z.string(),
+        id: z.string(),
+        type: z.string(),
+        name: z.string(),
+      }),
+    )
+    .get(async ({ data }) => {
+      const file = await imageService.getFile(
+        data.query.albumId,
+        data.query.id,
+        data.query.type,
+        data.query.name,
+      );
+      return success({
+        file,
       });
     }),
   addAlbum: builder
@@ -34,7 +55,18 @@ const routes = {
       }),
     )
     .post(async ({ data }) => {
-      imageService.createAlbum(data.body);
+      await imageService.createAlbum(data.body);
+      return success({});
+    }),
+  addMetaData: builder
+    .bodySchema(
+      z.object({
+        albumID: z.string(),
+        metaData: z.string(),
+      }),
+    )
+    .post(async ({ data }) => {
+      await imageService.addMetaData(data.body.albumID, data.body.metaData);
       return success({});
     }),
 };

@@ -27,8 +27,7 @@ export function _arrayBufferToBase64(buffer: ArrayBuffer) {
   }
   return window.btoa(binary);
 }
-function _base64ToArrayBuffer(base64: string) {
-  console.log(base64);
+export function _base64ToArrayBuffer(base64: string) {
   const binaryString = atob(base64);
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {

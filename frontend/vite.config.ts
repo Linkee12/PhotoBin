@@ -1,5 +1,5 @@
 import "dotenv/config";
-
+import tsconfigPaths from "vite-tsconfig-paths";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
@@ -16,7 +16,14 @@ export default defineConfig(() => {
         },
       ],
     },
-    plugins: [react(), viteCompression(), svgr({})],
+    plugins: [
+      react({
+        babel: { babelrc: true },
+      }),
+      viteCompression(),
+      svgr({}),
+      tsconfigPaths(),
+    ],
     server: {
       host: "0.0.0.0",
       port: 3000,
