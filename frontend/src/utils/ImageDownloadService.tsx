@@ -1,10 +1,14 @@
 import { client } from "../cuple";
-import { _base64ToArrayBuffer, importKey } from "./key";
+import { base64ToArrayBuffer, base64toUint8Array } from "./base64";
+import { importKey } from "./key";
 
 export class ImageDownloadService {
-  async getTumbnail(albumID: string, id: string) {
+  async getTumbnail(albumID: string, id: string, thumbnailIv: string, key: string) {
     const cryptedTumbnail = await this._getPartsOfImage(albumID, id, "thumbnail", "0");
-    console.log(cryptedTumbnail);
+    if (!cryptedTumbnail) return;
+    const img = await this._decryptImage(cryptedTumbnail, key, thumbnailIv);
+    const blob = new Blob([img]);
+    return URL.createObjectURL(blob);
   }
 
   private async _getPartsOfImage(
@@ -13,19 +17,19 @@ export class ImageDownloadService {
     type: string,
     name: string,
   ) {
-    const asd = await client.getPartOfImage.get({
+    const response = await client.getPartOfImage.get({
       query: { albumId: albumId, id: id, type: type, name: name },
     });
-    console.log(asd);
+    if (response.result === "success") return response.file;
   }
 
-  private async _decryptImage(base64: string, key: string, iv: BufferSource) {
-    const cryptedImg = _base64ToArrayBuffer(base64);
-    const decryptedBuffer = await window.crypto.subtle.decrypt(
+  private async _decryptImage(base64: string, key: string, base64Iv: string) {
+    const iv = base64toUint8Array(base64Iv);
+    const cryptedImg = base64ToArrayBuffer(base64);
+    return await window.crypto.subtle.decrypt(
       { name: "AES-GCM", iv },
       await importKey(key),
       cryptedImg,
     );
-    console.log(decryptedBuffer);
   }
 }

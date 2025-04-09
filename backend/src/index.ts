@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import { createBuilder, success, initRpc } from "@cuple/server";
 import { z } from "zod";
-import { ImageService } from "./services/ImageService";
+import { AlbumService } from "./services/AlbumService";
 
 dotenv.config();
 
@@ -10,19 +10,17 @@ const app = express();
 const port = 3001;
 app.use(express.json({ limit: "2mb" }));
 const builder = createBuilder(app);
-const imageService = new ImageService();
+const albumService = new AlbumService();
 const routes = {
-  getAlbum: builder
+  getAlbumMetadata: builder
     .querySchema(
       z.object({
         id: z.string(),
       }),
     )
     .get(async ({ data }) => {
-      const albumMap = await imageService.readAlbum(data.query.id);
-      return success({
-        albumMap,
-      });
+      const metadata = await albumService.getMetaData(data.query.id);
+      return success({ metadata });
     }),
   getPartOfImage: builder
     .querySchema(
@@ -34,15 +32,13 @@ const routes = {
       }),
     )
     .get(async ({ data }) => {
-      const file = await imageService.getFile(
+      const file = await albumService.getFile(
         data.query.albumId,
         data.query.id,
         data.query.type,
         data.query.name,
       );
-      return success({
-        file,
-      });
+      return success({ file });
     }),
   addAlbum: builder
     .bodySchema(
@@ -55,18 +51,18 @@ const routes = {
       }),
     )
     .post(async ({ data }) => {
-      await imageService.createAlbum(data.body);
+      await albumService.createAlbum(data.body);
       return success({});
     }),
-  addMetaData: builder
+  addMetadata: builder
     .bodySchema(
       z.object({
         albumID: z.string(),
-        metaData: z.string(),
+        metadata: z.string(),
       }),
     )
     .post(async ({ data }) => {
-      await imageService.addMetaData(data.body.albumID, data.body.metaData);
+      await albumService.addMetaData(data.body.albumID, data.body.metadata);
       return success({});
     }),
 };

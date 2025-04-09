@@ -11,25 +11,20 @@ import { UploadService } from "../../utils/UploadService";
 import { useParams } from "react-router";
 import Toolbar from "./components/Toolbar";
 import { client } from "../../cuple";
+import { uint8ArrayToBase64 } from "../../utils/base64";
 import { ImageDownloadService } from "../../utils/ImageDownloadService";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
 const imageDownloadService = new ImageDownloadService();
-type AlbumsData = {
-  imageId: string;
-  original: string[];
-  reduced: string[];
-  thumbnail: string[];
-};
-type MetaData = {
+type Metadata = {
   albumId: string;
   albumName: string;
   files: {
     fileId: string;
-    originalIv: Uint8Array;
-    reducedIv: Uint8Array;
-    thumbnailIv: Uint8Array;
+    originalIv: string;
+    reducedIv: string;
+    thumbnailIv: string;
   }[];
 };
 
@@ -39,12 +34,12 @@ export default function Album() {
   const { albumId } = useParams();
   const [selectedImages, setSelectedImages] = useState<number[]>([]);
   const [showUploader, setShowUploader] = useState(true);
-  const [albumsData, setAlbumsData] = useState<AlbumsData[]>([]);
+  const [metadata, setMetadata] = useState<Metadata>();
   const key = decodeURIComponent(window.location.hash.slice(1));
 
   useEffect(() => {
     if (!albumId) return;
-    client.getAlbum
+    client.getAlbumMetadata
       .get({
         query: {
           id: albumId,
@@ -53,23 +48,25 @@ export default function Album() {
       .then((e) => {
         // eslint-disable-next-line promise/always-return
         if (e.result === "success") {
-          setAlbumsData(e.albumMap);
+          setMetadata(e.metadata);
         }
       })
-      .catch((error) => console.error(error));
+      .catch(() => console.log("The album is not exist"));
   }, []);
 
   useEffect(() => {
-    if (albumsData.length > 0) {
-      for (const imageData of albumsData) {
-        if (!albumId) continue;
-        imageDownloadService
-          .getTumbnail(albumId, imageData.imageId)
-          .then((thumb) => console.log(thumb));
-      }
-    }
-  }, [albumsData]);
+    if (metadata !== undefined && albumId !== undefined) {
+      const promises = metadata.files.map((file) =>
+        imageDownloadService.getTumbnail(albumId, file.fileId, file.thumbnailIv, key),
+      );
 
+      // eslint-disable-next-line promise/always-return
+      Promise.all(promises).then((results) => {
+        const valid = results.filter((res) => res !== undefined);
+        setThumbnails(valid);
+      });
+    }
+  }, [metadata]);
   function updateProgress(percentage: number) {
     const height = 480 * (percentage / 100);
     const y = 480 - height;
@@ -85,7 +82,7 @@ export default function Album() {
 
   async function upload(files: File[]) {
     if (albumId === undefined || key === undefined) throw new Error("Error in URL");
-    const metaData: MetaData = { albumId: albumId, albumName: title, files: [] };
+    const metaData: Metadata = { albumId: albumId, albumName: title, files: [] };
     const arrLength = files.length;
     for (let i = 0; i < arrLength; ++i) {
       const UUID = crypto.randomUUID();
@@ -93,9 +90,9 @@ export default function Album() {
       if (uploadData !== undefined) {
         metaData.files.push({
           fileId: UUID,
-          originalIv: uploadData.originalIv,
-          reducedIv: uploadData.reducedIv,
-          thumbnailIv: uploadData.thumbnailIv,
+          originalIv: uint8ArrayToBase64(uploadData.originalIv),
+          reducedIv: uint8ArrayToBase64(uploadData.reducedIv),
+          thumbnailIv: uint8ArrayToBase64(uploadData.thumbnailIv),
         });
         setThumbnails((prevThumbs) => [...prevThumbs, uploadData.thumbnail]);
         updateProgress((i / arrLength) * 100);

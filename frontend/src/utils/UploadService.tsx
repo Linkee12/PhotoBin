@@ -1,6 +1,7 @@
 import { client } from "../cuple";
+import { arrayBufferToBase64 } from "./base64";
 import { ImageResizeService } from "./ImageResizeService";
-import { _arrayBufferToBase64, importKey } from "./key";
+import { importKey } from "./key";
 
 const SIZE = { width: 300, height: 200 };
 const QUALITY = 0.3;
@@ -65,8 +66,8 @@ export class UploadService {
       };
     }
   }
-  async uploadMetadata(albumID: string, metaData: string) {
-    const response = await client.addMetaData.post({ body: { albumID, metaData } });
+  async uploadMetadata(albumID: string, metadata: string) {
+    const response = await client.addMetadata.post({ body: { albumID, metadata } });
     if (response.result !== "success") return { isSuccess: false };
   }
 
@@ -92,7 +93,7 @@ export class UploadService {
   }
   private async _sendFile(files: ArrayBuffer[], id: string, uuid: string, name: string) {
     for (let i = 0; i < files.length; i++) {
-      const objUrl = _arrayBufferToBase64(files[i]);
+      const objUrl = arrayBufferToBase64(files[i]);
       const responses = await client.addAlbum.post({
         body: {
           albumID: id,
