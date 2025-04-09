@@ -30,9 +30,9 @@ type Metadata = {
 
 export default function Album() {
   const [title, setTitle] = useState("");
-  const [thumbnails, setThumbnails] = useState<string[]>([]);
+  const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
   const { albumId } = useParams();
-  const [selectedImages, setSelectedImages] = useState<number[]>([]);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showUploader, setShowUploader] = useState(true);
   const [metadata, setMetadata] = useState<Metadata>();
   const key = decodeURIComponent(window.location.hash.slice(1));
@@ -48,6 +48,7 @@ export default function Album() {
       .then((e) => {
         // eslint-disable-next-line promise/always-return
         if (e.result === "success") {
+          setTitle(e.metadata.albumName);
           setMetadata(e.metadata);
         }
       })
@@ -67,6 +68,7 @@ export default function Album() {
       });
     }
   }, [metadata]);
+
   function updateProgress(percentage: number) {
     const height = 480 * (percentage / 100);
     const y = 480 - height;
@@ -94,7 +96,10 @@ export default function Album() {
           reducedIv: uint8ArrayToBase64(uploadData.reducedIv),
           thumbnailIv: uint8ArrayToBase64(uploadData.thumbnailIv),
         });
-        setThumbnails((prevThumbs) => [...prevThumbs, uploadData.thumbnail]);
+        setThumbnails((prevThumbs) => [
+          ...prevThumbs,
+          { thumbnail: uploadData.thumbnail, id: uploadData.fileId },
+        ]);
         updateProgress((i / arrLength) * 100);
       }
     }
@@ -131,17 +136,17 @@ export default function Album() {
             <div
               key={key}
               onClick={() =>
-                selectedImages?.includes(key)
-                  ? setSelectedImages(selectedImages.filter((e) => key != e))
-                  : setSelectedImages([...selectedImages, key])
+                selectedImages?.includes(image.id)
+                  ? setSelectedImages(selectedImages.filter((e) => image.id != e))
+                  : setSelectedImages([...selectedImages, image.id])
               }
             >
               <SelectedImage>
-                <CheckIcon isVisible={selectedImages.includes(key)} />
+                <CheckIcon isVisible={selectedImages.includes(image.id)} />
                 <Image
-                  src={image}
+                  src={image.thumbnail}
                   key={key}
-                  isSelected={selectedImages.includes(key)}
+                  isSelected={selectedImages.includes(image.id)}
                 ></Image>
               </SelectedImage>
             </div>
@@ -168,7 +173,12 @@ export default function Album() {
           }}
         ></input>
       </Content>
-      <Toolbar selectedImages={selectedImages.length} />
+      <Toolbar
+        albumId={albumId}
+        selectedImages={selectedImages}
+        setSelectedImages={setSelectedImages}
+        setThumbnails={setThumbnails}
+      />
     </Container>
   );
 }

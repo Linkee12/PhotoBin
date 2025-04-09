@@ -65,6 +65,12 @@ const routes = {
       await albumService.addMetaData(data.body.albumID, data.body.metadata);
       return success({});
     }),
+  deleteImage: builder
+    .bodySchema(z.object({ albumId: z.string(), id: z.string() }))
+    .delete(async ({ data }) => {
+      albumService.deleteImage(data.body.albumId, data.body.id);
+      return success({});
+    }),
 };
 
 initRpc(app, {

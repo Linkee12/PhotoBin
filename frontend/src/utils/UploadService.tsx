@@ -9,9 +9,9 @@ type UploadReturn = Promise<
   | {
       thumbnail: string;
       fileId: string;
-      originalIv: Uint8Array<ArrayBuffer>;
-      thumbnailIv: Uint8Array<ArrayBuffer>;
-      reducedIv: Uint8Array<ArrayBuffer>;
+      originalIv: Uint8Array;
+      thumbnailIv: Uint8Array;
+      reducedIv: Uint8Array;
     }
   | undefined
 >;

@@ -8,7 +8,7 @@ export class ImageDownloadService {
     if (!cryptedTumbnail) return;
     const img = await this._decryptImage(cryptedTumbnail, key, thumbnailIv);
     const blob = new Blob([img]);
-    return URL.createObjectURL(blob);
+    return { thumbnail: URL.createObjectURL(blob), id: id };
   }
 
   private async _getPartsOfImage(
