@@ -11,7 +11,8 @@ type UploadReturn = Promise<
       fileId: string;
       originalIv: Uint8Array;
       thumbnailIv: Uint8Array;
-      reducedIv: Uint8Array;
+      reducedIv: Uint8Array;     
+     chunks:{reduced:number,original:number}
     }
   | undefined
 >;
@@ -63,6 +64,7 @@ export class UploadService {
         originalIv: cryptedOriginImage.iv,
         thumbnailIv: cryptedThumbnail.iv,
         reducedIv: cryptedReducedImage.iv,
+        chunks:{reduced:slicedReducedeImg.length,original:slicedOriginImg.length}
       };
     }
   }
@@ -91,6 +93,7 @@ export class UploadService {
     }
     return partsOfImg;
   }
+
   private async _sendFile(files: ArrayBuffer[], id: string, uuid: string, name: string) {
     for (let i = 0; i < files.length; i++) {
       const objUrl = arrayBufferToBase64(files[i]);

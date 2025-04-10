@@ -5,6 +5,7 @@ import Upload from "@assets/images/upload.svg?react";
 import Edit from "@assets/images/icons/edit.svg?react";
 import Link from "@assets/images/icons/link.svg?react";
 import Check from "@assets/images/icons/check.svg?react";
+import Zoom from "@assets/images/icons/zoom.svg?react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ImageResizeService } from "../../utils/ImageResizeService";
 import { UploadService } from "../../utils/UploadService";
@@ -25,6 +26,7 @@ type Metadata = {
     originalIv: string;
     reducedIv: string;
     thumbnailIv: string;
+    chunks:{reduced:number,original:number}
   }[];
 };
 
@@ -58,9 +60,8 @@ export default function Album() {
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
       const promises = metadata.files.map((file) =>
-        imageDownloadService.getTumbnail(albumId, file.fileId, file.thumbnailIv, key),
+        imageDownloadService.getTumbnail(metadata, file.fileId, file.thumbnailIv, key),
       );
-
       // eslint-disable-next-line promise/always-return
       Promise.all(promises).then((results) => {
         const valid = results.filter((res) => res !== undefined);
@@ -95,6 +96,7 @@ export default function Album() {
           originalIv: uint8ArrayToBase64(uploadData.originalIv),
           reducedIv: uint8ArrayToBase64(uploadData.reducedIv),
           thumbnailIv: uint8ArrayToBase64(uploadData.thumbnailIv),
+          chunks:{reduced:uploadData.chunks.reduced,original:uploadData.chunks.original}
         });
         setThumbnails((prevThumbs) => [
           ...prevThumbs,
@@ -147,7 +149,9 @@ export default function Album() {
                   src={image.thumbnail}
                   key={key}
                   isSelected={selectedImages.includes(image.id)}
-                ></Image>
+                >
+                </Image>
+                <ZoomIcon onClick={()=>console.log("asd")}/>
               </SelectedImage>
             </div>
           ))}
@@ -377,4 +381,12 @@ const CheckIcon = styled(Check, {
       },
     },
   },
+});
+const ZoomIcon = styled(Zoom, {
+  position: "absolute",
+  width:"30px",
+  height:"30px",
+  bottom: "5px",
+  right: "5px",
+  cursor:"pointer",
 });
