@@ -14,6 +14,7 @@ import Toolbar from "./components/Toolbar";
 import { client } from "../../cuple";
 import { uint8ArrayToBase64 } from "../../utils/base64";
 import { ImageDownloadService } from "../../utils/ImageDownloadService";
+import { T } from "react-router/dist/development/fog-of-war-CvttGpNz";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
@@ -26,13 +27,14 @@ type Metadata = {
     originalIv: string;
     reducedIv: string;
     thumbnailIv: string;
-    chunks:{reduced:number,original:number}
+    chunks: { reduced: number, original: number, thumbnail: number }
   }[];
 };
 
 export default function Album() {
   const [title, setTitle] = useState("");
   const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
+  const [originImg, setOriginImg] = useState<string>("")
   const { albumId } = useParams();
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showUploader, setShowUploader] = useState(true);
@@ -56,17 +58,14 @@ export default function Album() {
       })
       .catch(() => console.log("The album is not exist"));
   }, []);
-
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
-      const promises = metadata.files.map((file) =>
-        imageDownloadService.getTumbnail(metadata, file.fileId, file.thumbnailIv, key),
-      );
-      // eslint-disable-next-line promise/always-return
-      Promise.all(promises).then((results) => {
-        const valid = results.filter((res) => res !== undefined);
-        setThumbnails(valid);
-      });
+      getThumbnail(metadata).then((thumb) => {
+        console.log("lefut")
+        if (thumb !== undefined) {
+          setThumbnails([...thumbnails, thumb])
+        }
+      })
     }
   }, [metadata]);
 
@@ -79,9 +78,34 @@ export default function Album() {
       fillCloud.setAttribute("y", y.toString());
     }
   }
+
   const ref = useRef<HTMLInputElement>(null);
 
   const thumbs = useMemo(() => thumbnails, [thumbnails]);
+
+  async function getThumbnail(metadata: Metadata) {
+    for (const file of metadata.files) {
+      const result = await imageDownloadService.getImg(metadata, file.fileId, file.thumbnailIv, key, "thumbnail")
+
+      console.log(result)
+      if (result === undefined) return
+
+      const thumb = { thumbnail: result.img, id: result.id }
+      return thumb
+
+    }
+
+  }
+
+  async function getOriginImg(metadata: Metadata, id: string) {
+    const fileData = metadata?.files.find(file => file.fileId === id)
+    if (fileData === undefined) return
+    const reduce = await imageDownloadService.getImg(metadata, id, fileData.reducedIv, key, "reduced",)
+    console.log(reduce)
+    if (reduce !== undefined) {
+      setOriginImg(reduce.img)
+    }
+  }
 
   async function upload(files: File[]) {
     if (albumId === undefined || key === undefined) throw new Error("Error in URL");
@@ -96,7 +120,7 @@ export default function Album() {
           originalIv: uint8ArrayToBase64(uploadData.originalIv),
           reducedIv: uint8ArrayToBase64(uploadData.reducedIv),
           thumbnailIv: uint8ArrayToBase64(uploadData.thumbnailIv),
-          chunks:{reduced:uploadData.chunks.reduced,original:uploadData.chunks.original}
+          chunks: { reduced: uploadData.chunks.reduced, original: uploadData.chunks.original, thumbnail: 1 }
         });
         setThumbnails((prevThumbs) => [
           ...prevThumbs,
@@ -106,12 +130,13 @@ export default function Album() {
       }
     }
     await uploadService.uploadMetadata(albumId, JSON.stringify(metaData));
+    setMetadata(metaData)
     updateProgress(100);
     setShowUploader(false);
   }
-
   return (
     <Container>
+      {originImg.length > 0 ? <FullScreenImg src={originImg} key={"1"} /> : <></>}
       <HeaderBG bgColor={showUploader}>
         <Header bgColor={showUploader}>
           <TextContainer>
@@ -151,7 +176,7 @@ export default function Album() {
                   isSelected={selectedImages.includes(image.id)}
                 >
                 </Image>
-                <ZoomIcon onClick={()=>console.log("asd")}/>
+                <ZoomIcon onClick={async () => { if (metadata !== undefined) { await getOriginImg(metadata, image.id) } }} />
               </SelectedImage>
             </div>
           ))}
@@ -384,9 +409,19 @@ const CheckIcon = styled(Check, {
 });
 const ZoomIcon = styled(Zoom, {
   position: "absolute",
-  width:"30px",
-  height:"30px",
+  width: "30px",
+  height: "30px",
   bottom: "5px",
   right: "5px",
-  cursor:"pointer",
+  cursor: "pointer",
+});
+const FullScreenImg = styled("img", {
+  top: "15%",
+  left: "15%",
+  display: "block",
+  position: "absolute",
+  width: "70%",
+  height: "70%",
+  backgroundColor: "#000",
+  zIndex: "9",
 });

@@ -56,6 +56,7 @@ export default function Toolbar(props: {
     </ToolBar>
   );
 }
+
 const ToolbarIcons = styled("svg", {
   height: "1.5rem",
   width: "2rem",

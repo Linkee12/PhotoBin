@@ -1,3 +1,4 @@
+import { arrayBuffer } from "stream/consumers";
 import { client } from "../cuple";
 import { base64ToArrayBuffer, base64toUint8Array } from "./base64";
 import { importKey } from "./key";
@@ -10,34 +11,31 @@ type Metadata = {
     originalIv: string;
     reducedIv: string;
     thumbnailIv: string;
-    chunks: { reduced: number, original: number }
+    chunks: { reduced: number, original: number, thumbnail: number }
   }[];
 };
 
 export class ImageDownloadService {
-  async getTumbnail(metadata: Metadata, id: string, key: string, thumbnailIv: string) {
-    const cryptedTumbnail = await this._getPartsOfImage(metadata.albumId, id, "thumbnail", "0");
-    if (!cryptedTumbnail) return;
-    const img = await this._decryptImage(cryptedTumbnail, key, thumbnailIv);
-    const blob = new Blob([img]);
-    return { thumbnail: URL.createObjectURL(blob), id: id };
-  }
+
   async getImg(metadata: Metadata,
     id: string,
     iv: string,
     key: string,
-    type: "original" | "reduced") {
+    type: "original" | "reduced" | "thumbnail") {
     const file = metadata.files.find((f) => f.fileId === id)
     if (file === undefined) return
-    let parts: string[] = []
-    for (let i = 0; i < file?.chunks[type]; i++) {
-      const cryptedPart = await this._getPartsOfImage(metadata.albumId, id, type, i.toString());
-      if (cryptedPart !== undefined) {
-        parts = [...parts, cryptedPart]
+
+    let parts: ArrayBuffer[] = []
+    for (let i = 0; i < file.chunks[type]; i++) {
+
+      console.log("response")
+      const base64Part = await this._getPartsOfImage(metadata.albumId, id, type, i.toString());
+      if (base64Part !== undefined) {
+        const cryptedArraxBufferPart = base64ToArrayBuffer(base64Part)
+        parts = [...parts, cryptedArraxBufferPart]
       }
     }
     const combinedImg = this._combineChunks(parts)
-    if (!parts) return;
     const img = await this._decryptImage(combinedImg, key, iv);
     const blob = new Blob([img]);
     return { img: URL.createObjectURL(blob), id: id };
@@ -49,27 +47,31 @@ export class ImageDownloadService {
     type: string,
     name: string,
   ) {
+
     const response = await client.getPartOfImage.get({
       query: { albumId: albumId, id: id, type: type, name: name },
     });
     if (response.result === "success") return response.file;
   }
 
-  private async _decryptImage(base64: string, key: string, base64Iv: string) {
+  private async _decryptImage(cryptedImg: ArrayBuffer, key: string, base64Iv: string) {
     const iv = base64toUint8Array(base64Iv);
-    const cryptedImg = base64ToArrayBuffer(base64);
     return await window.crypto.subtle.decrypt(
       { name: "AES-GCM", iv },
       await importKey(key),
       cryptedImg,
     );
   }
-  private _combineChunks(chunks: string[]): string {
-    let combined = ""
-    for (const part of chunks) {
-      combined = combined + part
+  private _combineChunks(chunks: ArrayBuffer[]): ArrayBuffer {
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(new Uint8Array(chunk), offset);
+      offset += chunk.byteLength;
     }
 
-    return combined;
+    return combined.buffer;
   }
 }

@@ -72,6 +72,6 @@ type Metadata = {
     originalIv: string;
     reducedIv: string;
     thumbnailIv: string;
-    chunks: { reduced: number; original: number };
+    chunks: { reduced: number; original: number; thumbnail: number };
   }[];
 };
