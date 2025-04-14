@@ -1,11 +1,5 @@
 /* eslint-disable promise/catch-or-return */
 import { styled } from "../../stitches.config";
-import header from "@assets/images/header.svg?no-inline";
-import Upload from "@assets/images/upload.svg?react";
-import Edit from "@assets/images/icons/edit.svg?react";
-import Link from "@assets/images/icons/link.svg?react";
-import Check from "@assets/images/icons/check.svg?react";
-import Zoom from "@assets/images/icons/zoom.svg?react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ImageResizeService } from "../../utils/ImageResizeService";
 import { UploadService } from "../../utils/UploadService";
@@ -14,7 +8,9 @@ import Toolbar from "./components/Toolbar";
 import { client } from "../../cuple";
 import { uint8ArrayToBase64 } from "../../utils/base64";
 import { ImageDownloadService } from "../../utils/ImageDownloadService";
-import { T } from "react-router/dist/development/fog-of-war-CvttGpNz";
+import { Header } from "./components/Header";
+import { AlbumItem } from "./components/AlbumItem";
+import { Cloud } from "@assets/images/cloud";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
@@ -27,21 +23,59 @@ type Metadata = {
     originalIv: string;
     reducedIv: string;
     thumbnailIv: string;
-    chunks: { reduced: number, original: number, thumbnail: number }
+    chunks: { reduced: number; original: number; thumbnail: number };
   }[];
 };
 
 export default function Album() {
   const [title, setTitle] = useState("");
   const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
-  const [originImg, setOriginImg] = useState<string>("")
+  const [originImg, setOriginImg] = useState<string>("");
   const { albumId } = useParams();
+  const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
-  const [showUploader, setShowUploader] = useState(true);
   const [metadata, setMetadata] = useState<Metadata>();
   const key = decodeURIComponent(window.location.hash.slice(1));
+  const showUploader = metadata ? metadata.files.length === 0 : true;
+  console.log(showUploader);
 
   useEffect(() => {
+    getMetadata();
+  }, []);
+
+  useEffect(() => {
+    if (metadata !== undefined && albumId !== undefined) {
+      const oldThumbnailIds = new Set(thumbnails.map((thumb) => thumb.id));
+      const newThumbnails = metadata.files.filter(
+        (file) => !oldThumbnailIds.has(file.fileId),
+      );
+      getThumbnails(newThumbnails).then((thumb) => {
+        // eslint-disable-next-line promise/always-return
+        if (thumb !== undefined) {
+          if (thumbnails.find((element) => element.id === thumb.id)) return;
+          setThumbnails([...thumbnails, thumb]);
+        }
+      });
+    }
+  }, [metadata]);
+
+  async function deleteImages() {
+    if (albumId === undefined) return;
+    for (const image of selectedImages) {
+      const responses = await client.deleteImage.delete({
+        body: {
+          albumId: albumId,
+          id: image,
+        },
+      });
+      if (responses.result === "success") {
+        setThumbnails((prev) => prev.filter((img) => img.id !== image));
+      }
+    }
+    getMetadata();
+  }
+
+  function getMetadata() {
     if (!albumId) return;
     client.getAlbumMetadata
       .get({
@@ -49,61 +83,55 @@ export default function Album() {
           id: albumId,
         },
       })
-      .then((e) => {
+      .then((res) => {
         // eslint-disable-next-line promise/always-return
-        if (e.result === "success") {
-          setTitle(e.metadata.albumName);
-          setMetadata(e.metadata);
+        if (res.result === "success") {
+          if (res.metadata !== null) {
+            setTitle(res.metadata.albumName);
+            setMetadata(res.metadata);
+          }
         }
       })
       .catch(() => console.log("The album is not exist"));
-  }, []);
-  useEffect(() => {
-    if (metadata !== undefined && albumId !== undefined) {
-      getThumbnail(metadata).then((thumb) => {
-        console.log("lefut")
-        if (thumb !== undefined) {
-          setThumbnails([...thumbnails, thumb])
-        }
-      })
-    }
-  }, [metadata]);
+  }
 
+  function onDeleteSelected() {
+    deleteImages().catch((reason) => {
+      console.error(reason);
+    });
+  }
+
+  function onUncheckSelected() {
+    setSelectedImages([]);
+  }
   function updateProgress(percentage: number) {
     const height = 480 * (percentage / 100);
-    const y = 480 - height;
-    const fillCloud = document.getElementById("fillCloud");
-    if (fillCloud !== null) {
-      fillCloud.setAttribute("height", height.toString());
-      fillCloud.setAttribute("y", y.toString());
-    }
+    setMaskHeight(height);
   }
 
   const ref = useRef<HTMLInputElement>(null);
 
   const thumbs = useMemo(() => thumbnails, [thumbnails]);
 
-  async function getThumbnail(metadata: Metadata) {
-    for (const file of metadata.files) {
-      const result = await imageDownloadService.getImg(metadata, file.fileId, file.thumbnailIv, key, "thumbnail")
+  async function getThumbnails(thumbnails: Metadata["files"]) {
+    if (albumId === undefined) return;
+    for (const file of thumbnails) {
+      const result = await imageDownloadService.getImg(albumId, file, key, "thumbnail");
 
-      console.log(result)
-      if (result === undefined) return
+      if (result === undefined) return;
 
-      const thumb = { thumbnail: result.img, id: result.id }
-      return thumb
-
+      const thumb = { thumbnail: result.img, id: result.id };
+      return thumb;
     }
-
   }
 
-  async function getOriginImg(metadata: Metadata, id: string) {
-    const fileData = metadata?.files.find(file => file.fileId === id)
-    if (fileData === undefined) return
-    const reduce = await imageDownloadService.getImg(metadata, id, fileData.reducedIv, key, "reduced",)
-    console.log(reduce)
+  async function getOriginImg(id: string) {
+    if (albumId === undefined) return;
+    const file = metadata?.files.find((file) => file.fileId === id);
+    if (file === undefined) return;
+    const reduce = await imageDownloadService.getImg(albumId, file, key, "reduced");
     if (reduce !== undefined) {
-      setOriginImg(reduce.img)
+      setOriginImg(reduce.img);
     }
   }
 
@@ -120,7 +148,11 @@ export default function Album() {
           originalIv: uint8ArrayToBase64(uploadData.originalIv),
           reducedIv: uint8ArrayToBase64(uploadData.reducedIv),
           thumbnailIv: uint8ArrayToBase64(uploadData.thumbnailIv),
-          chunks: { reduced: uploadData.chunks.reduced, original: uploadData.chunks.original, thumbnail: 1 }
+          chunks: {
+            reduced: uploadData.chunks.reduced,
+            original: uploadData.chunks.original,
+            thumbnail: 1,
+          },
         });
         setThumbnails((prevThumbs) => [
           ...prevThumbs,
@@ -130,63 +162,33 @@ export default function Album() {
       }
     }
     await uploadService.uploadMetadata(albumId, JSON.stringify(metaData));
-    setMetadata(metaData)
+    setMetadata(metaData);
     updateProgress(100);
-    setShowUploader(false);
   }
   return (
     <Container>
       {originImg.length > 0 ? <FullScreenImg src={originImg} key={"1"} /> : <></>}
-      <HeaderBG bgColor={showUploader}>
-        <Header bgColor={showUploader}>
-          <TextContainer>
-            <Title
-              value={title}
-              placeholder="Title"
-              onChange={(e) => setTitle(e.target.value)}
-              autoCapitalize="sentences"
-            />
-          </TextContainer>
-          <Tools>
-            <Button onClick={() => console.log("asd")}>
-              <Icons as={Edit} />
-            </Button>
-            <Button onClick={() => console.log("asd")}>
-              <Icons as={Link} />
-            </Button>
-          </Tools>
-        </Header>
-      </HeaderBG>
+      <Header isEmptyAlbum={showUploader} title={title} onChangeTitle={setTitle} />
       <Content bgColor={showUploader}>
         {thumbnails != undefined &&
-          Array.from(thumbs).map((image, key) => (
-            <div
-              key={key}
-              onClick={() =>
-                selectedImages?.includes(image.id)
-                  ? setSelectedImages(selectedImages.filter((e) => image.id != e))
-                  : setSelectedImages([...selectedImages, image.id])
+          Array.from(thumbs).map((image) => (
+            <AlbumItem
+              key={image.id}
+              imageSrc={image.thumbnail}
+              isSelected={selectedImages.includes(image.id)}
+              onSelect={() => setSelectedImages([...selectedImages, image.id])}
+              onDeselect={() =>
+                setSelectedImages(selectedImages.filter((id) => id !== image.id))
               }
-            >
-              <SelectedImage>
-                <CheckIcon isVisible={selectedImages.includes(image.id)} />
-                <Image
-                  src={image.thumbnail}
-                  key={key}
-                  isSelected={selectedImages.includes(image.id)}
-                >
-                </Image>
-                <ZoomIcon onClick={async () => { if (metadata !== undefined) { await getOriginImg(metadata, image.id) } }} />
-              </SelectedImage>
-            </div>
+              onOpen={() => getOriginImg(image.id)}
+            />
           ))}
-        <CloudContainer isVisible={showUploader}>
-          <StyledUpload
+        <CloudContainer isVisible={showUploader} 
             onClick={() => {
               if (!ref.current) return;
               ref.current.click();
-            }}
-          />
+            }}>
+          <StyledUpload height={maskHeight} />
           <Text>Drop your photos here to upload</Text>
         </CloudContainer>
         <input
@@ -203,10 +205,9 @@ export default function Album() {
         ></input>
       </Content>
       <Toolbar
-        albumId={albumId}
         selectedImages={selectedImages}
-        setSelectedImages={setSelectedImages}
-        setThumbnails={setThumbnails}
+        onDeleteSelected={onDeleteSelected}
+        onUncheckSelected={onUncheckSelected}
       />
     </Container>
   );
@@ -218,47 +219,6 @@ const Container = styled("div", {
   minHeight: "100vh",
   position: "relative",
   fontFamily: "Open Sans",
-});
-const HeaderBG = styled("div", {
-  width: "100%",
-  flex: 1,
-  display: "flex",
-  transition: "background-color 0.3s",
-  variants: {
-    bgColor: {
-      true: {
-        backgroundColor: "#181818",
-      },
-      false: {
-        backgroundColor: "#333333",
-      },
-    },
-  },
-});
-
-const Header = styled("div", {
-  width: "100%",
-  minHeight: "20vh",
-  display: "flex",
-  justifyContent: "space-between",
-  maskImage: `url(${header})`,
-  maskRepeat: "no-repeat",
-  maskSize: "100% 100%",
-  maskPosition: "center",
-  backgroundSize: "100% 100%",
-  padding: "2rem",
-  boxSizing: "border-box",
-  transition: "background-color 0.3s",
-  variants: {
-    bgColor: {
-      true: {
-        backgroundColor: "#333333",
-      },
-      false: {
-        backgroundColor: "#181818",
-      },
-    },
-  },
 });
 
 const Content = styled("div", {
@@ -300,16 +260,7 @@ const CloudContainer = styled("div", {
     },
   },
 });
-const Tools = styled("div", {
-  display: "flex",
-  flexDirection: "column",
-  gap: "3rem",
-});
-const TextContainer = styled("div", {
-  display: "flex",
-  flex: 1,
-  flexDirection: "column",
-});
+
 const Text = styled("div", {
   textAlign: "center",
   width: "12rem",
@@ -318,38 +269,9 @@ const Text = styled("div", {
   color: "#DBDCD9",
 });
 
-const Title = styled("textarea", {
-  fontFamily: "Open Sans",
-  border: "none",
-  background: "none",
-  overflow: "hidden",
-  resize: "none",
-  fontSize: "2rem",
-  color: "#fff",
-  width: "100%",
-  "&:focus": { outline: "none" },
-});
-
-const Button = styled("button", {
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  width: "2rem",
-  height: "2rem",
-  size: "2rem",
-  color: "#9A9A9A",
-  "&:hover": {
-    color: "#fff",
-  },
-  fontSize: "2rem",
-  background: "none",
-  border: "none",
-  padding: "0px",
-  margin: "0px",
-});
-
-const StyledUpload = styled(Upload, {
+const StyledUpload = styled(Cloud, {
   width: "12rem",
+  height:"12rem",
   color: "#333333",
   cursor: "pointer",
   transition: "color 300ms",
@@ -358,63 +280,6 @@ const StyledUpload = styled(Upload, {
   },
 });
 
-const Image = styled("img", {
-  display: "block",
-  borderRadius: "10px",
-  width: "var(--width, 300px)",
-  height: "var(--height, 200px)",
-  transition: "width 0.2s, height 0.2s",
-  variants: {
-    isSelected: {
-      true: { width: 280, height: 180 },
-      false: { width: 300, height: 200 },
-    },
-  },
-});
-
-const SelectedImage = styled("div", {
-  width: "300px",
-  height: "200px",
-  borderRadius: "10px",
-  backgroundColor: "#232323",
-  boxSizing: "border-box",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  position: "relative",
-});
-
-const Icons = styled("svg", {
-  width: "2rem",
-  height: "2rem",
-  "&:hover": {
-    color: "#fff",
-  },
-});
-
-const CheckIcon = styled(Check, {
-  position: "absolute",
-  top: "5px",
-  left: "5px",
-  variants: {
-    isVisible: {
-      true: {
-        visibility: "visible",
-      },
-      false: {
-        visibility: "hidden",
-      },
-    },
-  },
-});
-const ZoomIcon = styled(Zoom, {
-  position: "absolute",
-  width: "30px",
-  height: "30px",
-  bottom: "5px",
-  right: "5px",
-  cursor: "pointer",
-});
 const FullScreenImg = styled("img", {
   top: "15%",
   left: "15%",

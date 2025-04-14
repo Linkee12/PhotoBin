@@ -11,8 +11,8 @@ type UploadReturn = Promise<
       fileId: string;
       originalIv: Uint8Array;
       thumbnailIv: Uint8Array;
-      reducedIv: Uint8Array;     
-     chunks:{reduced:number,original:number}
+      reducedIv: Uint8Array;
+      chunks: { reduced: number; original: number };
     }
   | undefined
 >;
@@ -64,7 +64,7 @@ export class UploadService {
         originalIv: cryptedOriginImage.iv,
         thumbnailIv: cryptedThumbnail.iv,
         reducedIv: cryptedReducedImage.iv,
-        chunks:{reduced:slicedReducedeImg.length,original:slicedOriginImg.length}
+        chunks: { reduced: slicedReducedeImg.length, original: slicedOriginImg.length },
       };
     }
   }

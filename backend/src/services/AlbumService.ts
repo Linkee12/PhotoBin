@@ -15,11 +15,15 @@ export class AlbumService {
       file.fileName,
     );
   }
-  async getMetaData(albumId: string): Promise<Metadata> {
+  async getMetaData(albumId: string): Promise<Metadata | null> {
     // eslint-disable-next-line sonarjs/no-duplicate-string
     const filePath = path.join("./albums/", albumId, "metadata.json");
-    const raw = await fs.readFile(filePath, { encoding: "utf8" });
-    return await JSON.parse(raw);
+    try {
+      const raw = await fs.readFile(filePath, { encoding: "utf8" });
+      return await JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
   }
   async getFile(albumId: string, fileId: string, type: string, name: string) {
     const filePath = path.join("./albums/", albumId, fileId, type, name);

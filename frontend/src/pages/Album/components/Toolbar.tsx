@@ -3,42 +3,16 @@ import Cloud from "@assets/images/icons/cloud.svg?react";
 import SimpleCloud from "@assets/images/icons/cloud2.svg?react";
 import Trash from "@assets/images/icons/trash.svg?react";
 import UnCheckAll from "@assets/images/icons/unCheckAll.svg?react";
-import { client } from "../../../cuple";
-
 export default function Toolbar(props: {
-  albumId: string | undefined;
   selectedImages: string[];
-  setSelectedImages: React.Dispatch<React.SetStateAction<string[]>>;
-  setThumbnails: React.Dispatch<
-    React.SetStateAction<
-      {
-        thumbnail: string;
-        id: string;
-      }[]
-    >
-  >;
+  onDeleteSelected: () => void;
+  onUncheckSelected: () => void;
 }) {
-  async function deleteImages(albumId: string, selectedImages: string[]) {
-    for (const image of selectedImages) {
-      const responses = await client.deleteImage.delete({
-        body: {
-          albumId: albumId,
-          id: image,
-        },
-      });
-      if (responses.result === "success") {
-        console.log("succes");
-        props.setThumbnails((prev) => prev.filter((img) => img.id !== image));
-      }
-    }
-  }
   return (
     <ToolBar isVisible={props.selectedImages.length > 0}>
       <Button
         onClick={() => {
-          if (props.albumId !== undefined) {
-            deleteImages(props.albumId, props.selectedImages);
-          }
+          props.onDeleteSelected();
         }}
       >
         <ToolbarIcons as={Trash} />
@@ -51,7 +25,7 @@ export default function Toolbar(props: {
       </Button>
       {props.selectedImages.length} item(s) selected
       <Button>
-        <ToolbarIcons as={UnCheckAll} onClick={() => props.setSelectedImages([])} />
+        <ToolbarIcons as={UnCheckAll} onClick={() => props.onUncheckSelected()} />
       </Button>
     </ToolBar>
   );
