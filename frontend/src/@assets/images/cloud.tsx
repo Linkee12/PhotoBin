@@ -1,5 +1,5 @@
-type CloudProps={height:number}
-export const Cloud = (props:CloudProps) => (
+type CloudProps = { height: number };
+export const Cloud = (props: CloudProps) => (
   <svg
     viewBox="0 0 33.512779 24.319017"
     id="svg1"
@@ -9,7 +9,14 @@ export const Cloud = (props:CloudProps) => (
     <defs id="defs1">
       <mask id="progressMask">
         <rect x={0} y={0} width={640} height={480} fill="black" />
-        <rect id="fillCloud" x={0} y={480 - props.height} width={640} height={props.height} fill="white" />
+        <rect
+          id="fillCloud"
+          x={0}
+          y={480 - props.height}
+          width={640}
+          height={props.height}
+          fill="white"
+        />
       </mask>
     </defs>
     <g id="layer1" transform="translate(-22.496719,-84.806527)">

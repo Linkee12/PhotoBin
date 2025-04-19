@@ -23,7 +23,6 @@ export class ImageDownloadService {
   ) {
     let parts: ArrayBuffer[] = [];
     for (let i = 0; i < file.chunks[type]; i++) {
-      console.log("response");
       const base64Part = await this._getPartsOfImage(
         albumId,
         file.fileId,

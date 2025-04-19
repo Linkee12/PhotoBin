@@ -11,6 +11,7 @@ import { ImageDownloadService } from "../../utils/ImageDownloadService";
 import { Header } from "./components/Header";
 import { AlbumItem } from "./components/AlbumItem";
 import { Cloud } from "@assets/images/cloud";
+import { OriginalImg } from "./components/OriginalImg";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
@@ -30,14 +31,17 @@ type Metadata = {
 export default function Album() {
   const [title, setTitle] = useState("");
   const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
-  const [originImg, setOriginImg] = useState<string>("");
+  const [originImg, setOriginImg] = useState<{
+    img: string;
+    id: string;
+  }>();
   const { albumId } = useParams();
   const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [metadata, setMetadata] = useState<Metadata>();
+  const [showOrigin, setShowOrigin] = useState(true);
   const key = decodeURIComponent(window.location.hash.slice(1));
   const showUploader = metadata ? metadata.files.length === 0 : true;
-  console.log(showUploader);
 
   useEffect(() => {
     getMetadata();
@@ -52,8 +56,7 @@ export default function Album() {
       getThumbnails(newThumbnails).then((thumb) => {
         // eslint-disable-next-line promise/always-return
         if (thumb !== undefined) {
-          if (thumbnails.find((element) => element.id === thumb.id)) return;
-          setThumbnails([...thumbnails, thumb]);
+          setThumbnails([...thumbnails, ...thumb]);
         }
       });
     }
@@ -72,6 +75,20 @@ export default function Album() {
         setThumbnails((prev) => prev.filter((img) => img.id !== image));
       }
     }
+    getMetadata();
+  }
+  async function deleteImage(id: string) {
+    if (albumId === undefined) return;
+    const responses = await client.deleteImage.delete({
+      body: {
+        albumId: albumId,
+        id: id,
+      },
+    });
+    if (responses.result === "success") {
+      setThumbnails((prev) => prev.filter((img) => img.id !== id));
+    }
+
     getMetadata();
   }
 
@@ -115,14 +132,18 @@ export default function Album() {
 
   async function getThumbnails(thumbnails: Metadata["files"]) {
     if (albumId === undefined) return;
+    let thumbArr: {
+      thumbnail: string;
+      id: string;
+    }[] = [];
     for (const file of thumbnails) {
       const result = await imageDownloadService.getImg(albumId, file, key, "thumbnail");
-
       if (result === undefined) return;
 
       const thumb = { thumbnail: result.img, id: result.id };
-      return thumb;
+      thumbArr = [...thumbArr, thumb];
     }
+    return thumbArr;
   }
 
   async function getOriginImg(id: string) {
@@ -131,7 +152,12 @@ export default function Album() {
     if (file === undefined) return;
     const reduce = await imageDownloadService.getImg(albumId, file, key, "reduced");
     if (reduce !== undefined) {
-      setOriginImg(reduce.img);
+      setOriginImg(reduce);
+      setShowOrigin(true);
+    }
+    const origin = await imageDownloadService.getImg(albumId, file, key, "original");
+    if (origin !== undefined) {
+      setOriginImg(origin);
     }
   }
 
@@ -163,11 +189,19 @@ export default function Album() {
     }
     await uploadService.uploadMetadata(albumId, JSON.stringify(metaData));
     setMetadata(metaData);
-    updateProgress(100);
   }
   return (
     <Container>
-      {originImg.length > 0 ? <FullScreenImg src={originImg} key={"1"} /> : <></>}
+      {originImg ? (
+        <OriginalImg
+          url={originImg?.img}
+          visible={showOrigin}
+          show={setShowOrigin}
+          onDelete={() => deleteImage(originImg.id)}
+        />
+      ) : (
+        <></>
+      )}
       <Header isEmptyAlbum={showUploader} title={title} onChangeTitle={setTitle} />
       <Content bgColor={showUploader}>
         {thumbnails != undefined &&
@@ -180,14 +214,18 @@ export default function Album() {
               onDeselect={() =>
                 setSelectedImages(selectedImages.filter((id) => id !== image.id))
               }
-              onOpen={() => getOriginImg(image.id)}
+              onOpen={() => {
+                getOriginImg(image.id);
+              }}
             />
           ))}
-        <CloudContainer isVisible={showUploader} 
-            onClick={() => {
-              if (!ref.current) return;
-              ref.current.click();
-            }}>
+        <CloudContainer
+          isVisible={showUploader}
+          onClick={() => {
+            if (!ref.current) return;
+            ref.current.click();
+          }}
+        >
           <StyledUpload height={maskHeight} />
           <Text>Drop your photos here to upload</Text>
         </CloudContainer>
@@ -271,22 +309,11 @@ const Text = styled("div", {
 
 const StyledUpload = styled(Cloud, {
   width: "12rem",
-  height:"12rem",
+  height: "12rem",
   color: "#333333",
   cursor: "pointer",
   transition: "color 300ms",
   "&:hover": {
     color: "#444444",
   },
-});
-
-const FullScreenImg = styled("img", {
-  top: "15%",
-  left: "15%",
-  display: "block",
-  position: "absolute",
-  width: "70%",
-  height: "70%",
-  backgroundColor: "#000",
-  zIndex: "9",
 });
