@@ -2,22 +2,60 @@ import { styled } from "../../../stitches.config";
 import SimpleCloud from "@assets/images/icons/cloud2.svg?react";
 import Trash from "@assets/images/icons/trash.svg?react";
 import Exit from "@assets/images/icons/exit.svg?react";
+import { ImageDownloadService } from "../../../utils/ImageDownloadService";
+import { useEffect, useState } from "react";
+import { useAlbumContext } from "../hooks/useAlbumContext";
 
-type OriginalImgProps = {
-  url: string;
+const imageDownloadService = new ImageDownloadService();
+
+type ViewOriginalModalProps = {
+  fileId: string;
   visible: boolean;
   onDelete: () => void;
-  show: (visible: boolean) => void;
+  onShowChange: (visible: boolean) => void;
 };
-export function OriginalImg(props: OriginalImgProps) {
+export function ViewOriginalModal(props: ViewOriginalModalProps) {
+  const { metadata, key } = useAlbumContext();
+  const [url, setUrl] = useState(
+    "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
+  );
+
+  async function updateOriginalImageDataUrl(fileId: string) {
+    if (!metadata) return;
+    if (metadata.albumId === undefined) return;
+    const file = metadata?.files.find((file) => file.fileId === fileId);
+    if (file === undefined) return;
+    const reduce = await imageDownloadService.getImg(
+      metadata.albumId,
+      file,
+      key,
+      "reduced",
+    );
+    if (reduce !== undefined) {
+      setUrl(reduce.img);
+    }
+    const origin = await imageDownloadService.getImg(
+      metadata.albumId,
+      file,
+      key,
+      "original",
+    );
+    if (origin !== undefined) {
+      setUrl(origin.img);
+    }
+  }
+
+  useEffect(() => {
+    updateOriginalImageDataUrl(props.fileId).catch((e) => console.error(e));
+  }, [props.fileId]);
+
   return (
     <Container isVisible={props.visible}>
       <ButtonBar>
         <ButtonGroup>
-          {" "}
           <Button
             onClick={() => {
-              props.show(!props.visible);
+              props.onShowChange(!props.visible);
               props.onDelete();
             }}
           >
@@ -27,11 +65,11 @@ export function OriginalImg(props: OriginalImgProps) {
             <Icons as={SimpleCloud} />
           </Button>
         </ButtonGroup>
-        <Button onClick={() => props.show(!props.visible)}>
+        <Button onClick={() => props.onShowChange(!props.visible)}>
           <Icons as={Exit} />
         </Button>
       </ButtonBar>
-      <FullScreenImg src={props.url} key={"1"} />
+      <FullScreenImg src={url} key={"1"} />
     </Container>
   );
 }

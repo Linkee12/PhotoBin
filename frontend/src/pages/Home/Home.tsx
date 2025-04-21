@@ -41,9 +41,9 @@ export default function Home() {
             onClick={() => {
               genKey()
                 .then((key) => {
-                  const albumID = encodeURIComponent(crypto.randomUUID());
+                  const albumId = encodeURIComponent(crypto.randomUUID());
                   const albumKey = encodeURIComponent(key);
-                  navigate(`/bin/${albumID}#${albumKey}`);
+                  navigate(`/bin/${albumId}#${albumKey}`);
                 })
                 .catch((e) => {
                   console.error(e);

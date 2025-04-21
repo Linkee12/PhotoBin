@@ -1,30 +1,27 @@
 import { client } from "../cuple";
-import { arrayBufferToBase64 } from "./base64";
+import { Metadata } from "../pages/Album/hooks/useAlbumContext";
+import { arrayBufferToBase64, uint8ArrayToBase64 } from "./base64";
 import { ImageResizeService } from "./ImageResizeService";
 import { importKey } from "./key";
 
 const SIZE = { width: 300, height: 200 };
 const QUALITY = 0.3;
-type UploadReturn = Promise<
+type UploadReturn =
   | {
       thumbnail: string;
       fileId: string;
-      originalIv: Uint8Array;
-      thumbnailIv: Uint8Array;
-      reducedIv: Uint8Array;
-      chunks: { reduced: number; original: number };
     }
-  | undefined
->;
+  | undefined;
 
 export class UploadService {
   constructor(private _imageResizeService: ImageResizeService) {}
 
   async upload(
     file: File,
-    UUID: string,
     props: { key: string; albumId: string },
-  ): UploadReturn {
+  ): Promise<UploadReturn> {
+    const uuid = crypto.randomUUID();
+
     const thumbnail = await this._imageResizeService.resize(file, {
       targetSize: SIZE,
     });
@@ -42,35 +39,48 @@ export class UploadService {
     const originRes = await this._sendFile(
       slicedOriginImg,
       props.albumId,
-      UUID,
+      uuid,
       "original",
     );
     const reducedRes = await this._sendFile(
       slicedReducedeImg,
       props.albumId,
-      UUID,
+      uuid,
       "reduced",
     );
     const thumbRes = await this._sendFile(
       [cryptedThumbnail.cryptedImg],
       props.albumId,
-      UUID,
+      uuid,
       "thumbnail",
     );
     if (originRes.isSuccess || reducedRes.isSuccess || thumbRes.isSuccess) {
+      const fileMetadata = {
+        thumbnail: thumbnail.url,
+        fileId: uuid,
+        originalIv: uint8ArrayToBase64(cryptedOriginImage.iv),
+        thumbnailIv: uint8ArrayToBase64(cryptedThumbnail.iv),
+        reducedIv: uint8ArrayToBase64(cryptedReducedImage.iv),
+        chunks: {
+          reduced: slicedReducedeImg.length,
+          original: slicedOriginImg.length,
+          thumbnail: 1,
+        },
+      };
+      await this._finalize(props.albumId, fileMetadata);
       return {
         thumbnail: thumbnail.url,
-        fileId: UUID,
-        originalIv: cryptedOriginImage.iv,
-        thumbnailIv: cryptedThumbnail.iv,
-        reducedIv: cryptedReducedImage.iv,
-        chunks: { reduced: slicedReducedeImg.length, original: slicedOriginImg.length },
+        fileId: uuid,
       };
     }
   }
-  async uploadMetadata(albumID: string, metadata: string) {
-    const response = await client.addMetadata.post({ body: { albumID, metadata } });
-    if (response.result !== "success") return { isSuccess: false };
+  async _finalize(albumId: string, fileMetadata: Metadata["files"][0]) {
+    client.finalizeFile.post({
+      body: {
+        albumId,
+        fileMetadata,
+      },
+    });
   }
 
   private async _encryptImage(file: File | Blob, key: string) {
@@ -94,16 +104,21 @@ export class UploadService {
     return partsOfImg;
   }
 
-  private async _sendFile(files: ArrayBuffer[], id: string, uuid: string, name: string) {
+  private async _sendFile(
+    files: ArrayBuffer[],
+    albumId: string,
+    fileId: string,
+    fileType: string,
+  ) {
     for (let i = 0; i < files.length; i++) {
       const objUrl = arrayBufferToBase64(files[i]);
-      const responses = await client.addAlbum.post({
+      const responses = await client.uploadFilePart.post({
         body: {
-          albumID: id,
-          uuid: uuid,
-          fileName: i.toString(),
-          name: name,
-          file: objUrl,
+          albumId: albumId,
+          fileId: fileId,
+          partName: i.toString(),
+          fileType: fileType,
+          encryptedFile: objUrl,
         },
       });
       if (responses.result !== "success") return { isSuccess: false };

@@ -1,43 +1,46 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { Metadata, MetadataService } from "./MetadataService";
+
 export class AlbumService {
-  async createAlbum(file: {
-    name: string;
-    albumID: string;
-    uuid: string;
-    file: string;
-    fileName: string;
-  }) {
-    await this._createDirectory(file.albumID + "/" + file.uuid + "/" + file.name);
-    await this._saveFile(
-      file.albumID + "/" + file.uuid + "/" + file.name,
-      file.file,
-      file.fileName,
-    );
+  constructor(private _metadataService: MetadataService) {}
+  getMetaData(albumId: string) {
+    return this._metadataService.get(albumId);
   }
-  async getMetaData(albumId: string): Promise<Metadata | null> {
-    // eslint-disable-next-line sonarjs/no-duplicate-string
-    const filePath = path.join("./albums/", albumId, "metadata.json");
-    try {
-      const raw = await fs.readFile(filePath, { encoding: "utf8" });
-      return await JSON.parse(raw);
-    } catch (error) {
-      return null;
-    }
+  rename(albumId: string, newTitle: string) {
+    this._metadataService.renameAlbum(albumId, newTitle);
+  }
+  finalizeFile(albumId: string, fileMetadata: Metadata["files"][0]) {
+    this._metadataService.addFile(albumId, fileMetadata);
+  }
+  async uploadFilePart(params: {
+    fileType: string;
+    albumId: string;
+    fileId: string;
+    partName: string;
+    encryptedFile: string;
+  }) {
+    const dir = params.albumId + "/" + params.fileId + "/" + params.fileType;
+    await this._createDirectory(dir);
+    const path = "./albums/" + dir + "/" + params.partName;
+    await fs.writeFile(path, params.encryptedFile);
   }
   async getFile(albumId: string, fileId: string, type: string, name: string) {
     const filePath = path.join("./albums/", albumId, fileId, type, name);
     return await fs.readFile(filePath, { encoding: "utf8" });
   }
-  async addMetaData(albumId: string, metaData: string) {
-    await this._saveFile(albumId, metaData, "metadata.json");
+
+  async deleteImages(albumId: string, imageIds: string[]) {
+    for (const imageId of imageIds) {
+      await this._deleteImage(albumId, imageId);
+    }
   }
-  async deleteImage(albumId: string, imageId: string) {
+  private async _deleteImage(albumId: string, imageId: string) {
     await fs.rm(path.join("./albums/", albumId, imageId), {
       recursive: true,
       force: true,
     });
-    await this.editMetaData(albumId, imageId);
+    this._metadataService.removeFile(albumId, imageId);
   }
   private async _createDirectory(folder: string) {
     try {
@@ -47,35 +50,4 @@ export class AlbumService {
       console.error(err);
     }
   }
-
-  private async _saveFile(route: string, file: string, fileName: string) {
-    const path = "./albums/" + route + "/" + fileName;
-    await fs.writeFile(path, file);
-  }
-  private async editMetaData(albumId: string, imageId: string) {
-    const filePath = path.join("./albums/", albumId, "metadata.json");
-    const raw = await fs.readFile(filePath, { encoding: "utf8" });
-    const metadata: Metadata = JSON.parse(raw);
-
-    const updatedFiles = metadata.files.filter((file) => !imageId.includes(file.fileId));
-
-    const newMetadata: Metadata = {
-      ...metadata,
-      files: updatedFiles,
-    };
-
-    this.addMetaData(albumId, JSON.stringify(newMetadata));
-  }
 }
-
-type Metadata = {
-  albumId: string;
-  albumName: string;
-  files: {
-    fileId: string;
-    originalIv: string;
-    reducedIv: string;
-    thumbnailIv: string;
-    chunks: { reduced: number; original: number; thumbnail: number };
-  }[];
-};

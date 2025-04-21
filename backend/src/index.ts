@@ -3,14 +3,17 @@ import dotenv from "dotenv";
 import { createBuilder, success, initRpc } from "@cuple/server";
 import { z } from "zod";
 import { AlbumService } from "./services/AlbumService";
-
+import { fileMetadataSchema } from "./utils/zod";
+import { MetadataService } from "./services/MetadataService";
+import fs from "fs";
 dotenv.config();
 
 const app = express();
 const port = 3001;
 app.use(express.json({ limit: "2mb" }));
 const builder = createBuilder(app);
-const albumService = new AlbumService();
+const metadataService = new MetadataService(fs);
+const albumService = new AlbumService(metadataService);
 const routes = {
   getAlbumMetadata: builder
     .querySchema(
@@ -40,35 +43,37 @@ const routes = {
       );
       return success({ file });
     }),
-  addAlbum: builder
+  uploadFilePart: builder
     .bodySchema(
       z.object({
-        albumID: z.string(),
-        uuid: z.string(),
-        fileName: z.string(),
-        name: z.string(),
-        file: z.string(),
+        fileType: z.string(),
+        albumId: z.string(),
+        fileId: z.string(),
+        partName: z.string(),
+        encryptedFile: z.string(),
       }),
     )
     .post(async ({ data }) => {
-      await albumService.createAlbum(data.body);
+      await albumService.uploadFilePart(data.body);
       return success({});
     }),
-  addMetadata: builder
+  finalizeFile: builder
     .bodySchema(
       z.object({
-        albumID: z.string(),
-        metadata: z.string(),
+        albumId: z.string(),
+        fileMetadata: fileMetadataSchema,
       }),
     )
     .post(async ({ data }) => {
-      await albumService.addMetaData(data.body.albumID, data.body.metadata);
-      return success({});
+      albumService.finalizeFile(data.body.albumId, data.body.fileMetadata);
+      return success({
+        message: "File has been uploaded successfully!",
+      });
     }),
-  deleteImage: builder
-    .bodySchema(z.object({ albumId: z.string(), id: z.string() }))
+  deleteImages: builder
+    .bodySchema(z.object({ albumId: z.string(), ids: z.array(z.string()) }))
     .delete(async ({ data }) => {
-      albumService.deleteImage(data.body.albumId, data.body.id);
+      albumService.deleteImages(data.body.albumId, data.body.ids);
       return success({});
     }),
 };

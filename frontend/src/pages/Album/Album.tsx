@@ -6,46 +6,27 @@ import { UploadService } from "../../utils/UploadService";
 import { useParams } from "react-router";
 import Toolbar from "./components/Toolbar";
 import { client } from "../../cuple";
-import { uint8ArrayToBase64 } from "../../utils/base64";
 import { ImageDownloadService } from "../../utils/ImageDownloadService";
 import { Header } from "./components/Header";
 import { AlbumItem } from "./components/AlbumItem";
 import { Cloud } from "@assets/images/cloud";
-import { OriginalImg } from "./components/OriginalImg";
+import { ViewOriginalModal } from "./components/ViewOriginalModal";
+import { Metadata, useAlbumContext } from "./hooks/useAlbumContext";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
 const imageDownloadService = new ImageDownloadService();
-type Metadata = {
-  albumId: string;
-  albumName: string;
-  files: {
-    fileId: string;
-    originalIv: string;
-    reducedIv: string;
-    thumbnailIv: string;
-    chunks: { reduced: number; original: number; thumbnail: number };
-  }[];
-};
 
 export default function Album() {
+  const { metadata, key, refreshMetadata } = useAlbumContext();
+  const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
+  const { albumId } = useParams();
   const [title, setTitle] = useState("");
   const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
-  const [originImg, setOriginImg] = useState<{
-    img: string;
-    id: string;
-  }>();
-  const { albumId } = useParams();
   const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
-  const [metadata, setMetadata] = useState<Metadata>();
   const [showOrigin, setShowOrigin] = useState(true);
-  const key = decodeURIComponent(window.location.hash.slice(1));
   const showUploader = metadata ? metadata.files.length === 0 : true;
-
-  useEffect(() => {
-    getMetadata();
-  }, []);
 
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
@@ -56,60 +37,38 @@ export default function Album() {
       getThumbnails(newThumbnails).then((thumb) => {
         // eslint-disable-next-line promise/always-return
         if (thumb !== undefined) {
-          setThumbnails([...thumbnails, ...thumb]);
+          setThumbnails((thumbnails) => [...thumbnails, ...thumb]);
         }
       });
     }
-  }, [metadata]);
+  }, [metadata, thumbnails]);
 
   async function deleteImages() {
     if (albumId === undefined) return;
-    for (const image of selectedImages) {
-      const responses = await client.deleteImage.delete({
-        body: {
-          albumId: albumId,
-          id: image,
-        },
-      });
-      if (responses.result === "success") {
-        setThumbnails((prev) => prev.filter((img) => img.id !== image));
-      }
+    const responses = await client.deleteImages.delete({
+      body: {
+        albumId: albumId,
+        ids: selectedImages,
+      },
+    });
+    if (responses.result === "success") {
+      setThumbnails((prev) => prev.filter((img) => !selectedImages.includes(img.id)));
     }
-    getMetadata();
+    refreshMetadata();
   }
   async function deleteImage(id: string) {
     if (albumId === undefined) return;
-    const responses = await client.deleteImage.delete({
+    const responses = await client.deleteImages.delete({
       body: {
         albumId: albumId,
-        id: id,
+        ids: [id],
       },
     });
     if (responses.result === "success") {
       setThumbnails((prev) => prev.filter((img) => img.id !== id));
     }
 
-    getMetadata();
-  }
-
-  function getMetadata() {
-    if (!albumId) return;
-    client.getAlbumMetadata
-      .get({
-        query: {
-          id: albumId,
-        },
-      })
-      .then((res) => {
-        // eslint-disable-next-line promise/always-return
-        if (res.result === "success") {
-          if (res.metadata !== null) {
-            setTitle(res.metadata.albumName);
-            setMetadata(res.metadata);
-          }
-        }
-      })
-      .catch(() => console.log("The album is not exist"));
+    refreshMetadata();
   }
 
   function onDeleteSelected() {
@@ -121,7 +80,7 @@ export default function Album() {
   function onUncheckSelected() {
     setSelectedImages([]);
   }
-  function updateProgress(percentage: number) {
+  function setProgress(percentage: number) {
     const height = 480 * (percentage / 100);
     setMaskHeight(height);
   }
@@ -146,61 +105,26 @@ export default function Album() {
     return thumbArr;
   }
 
-  async function getOriginImg(id: string) {
-    if (albumId === undefined) return;
-    const file = metadata?.files.find((file) => file.fileId === id);
-    if (file === undefined) return;
-    const reduce = await imageDownloadService.getImg(albumId, file, key, "reduced");
-    if (reduce !== undefined) {
-      setOriginImg(reduce);
-      setShowOrigin(true);
-    }
-    const origin = await imageDownloadService.getImg(albumId, file, key, "original");
-    if (origin !== undefined) {
-      setOriginImg(origin);
+  async function uploadImages(files: File[]) {
+    if (!metadata) return;
+    const results = upload({ files, key, metadata });
+
+    for await (const result of results) {
+      setProgress(result.progress);
+      setThumbnails((thumbnails) => [...thumbnails, result.thumbnail]);
+      refreshMetadata();
     }
   }
 
-  async function upload(files: File[]) {
-    if (albumId === undefined || key === undefined) throw new Error("Error in URL");
-    const metaData: Metadata = { albumId: albumId, albumName: title, files: [] };
-    const arrLength = files.length;
-    for (let i = 0; i < arrLength; ++i) {
-      const UUID = crypto.randomUUID();
-      const uploadData = await uploadService.upload(files[i], UUID, { albumId, key });
-      if (uploadData !== undefined) {
-        metaData.files.push({
-          fileId: UUID,
-          originalIv: uint8ArrayToBase64(uploadData.originalIv),
-          reducedIv: uint8ArrayToBase64(uploadData.reducedIv),
-          thumbnailIv: uint8ArrayToBase64(uploadData.thumbnailIv),
-          chunks: {
-            reduced: uploadData.chunks.reduced,
-            original: uploadData.chunks.original,
-            thumbnail: 1,
-          },
-        });
-        setThumbnails((prevThumbs) => [
-          ...prevThumbs,
-          { thumbnail: uploadData.thumbnail, id: uploadData.fileId },
-        ]);
-        updateProgress((i / arrLength) * 100);
-      }
-    }
-    await uploadService.uploadMetadata(albumId, JSON.stringify(metaData));
-    setMetadata(metaData);
-  }
   return (
     <Container>
-      {originImg ? (
-        <OriginalImg
-          url={originImg?.img}
+      {fullscreenImage && (
+        <ViewOriginalModal
+          fileId={fullscreenImage.fileId}
           visible={showOrigin}
-          show={setShowOrigin}
-          onDelete={() => deleteImage(originImg.id)}
+          onShowChange={setShowOrigin}
+          onDelete={() => deleteImage(fullscreenImage.fileId)}
         />
-      ) : (
-        <></>
       )}
       <Header isEmptyAlbum={showUploader} title={title} onChangeTitle={setTitle} />
       <Content bgColor={showUploader}>
@@ -215,7 +139,7 @@ export default function Album() {
                 setSelectedImages(selectedImages.filter((id) => id !== image.id))
               }
               onOpen={() => {
-                getOriginImg(image.id);
+                setFullscreenImage({ fileId: image.id });
               }}
             />
           ))}
@@ -237,7 +161,7 @@ export default function Album() {
           onChange={(e) => {
             if (e.target.files != null) {
               const fileArr = Array.from(e.target.files);
-              upload(fileArr).catch((e) => console.error(e));
+              uploadImages(fileArr).catch((e) => console.error(e));
             }
           }}
         ></input>
@@ -249,6 +173,28 @@ export default function Album() {
       />
     </Container>
   );
+}
+
+async function* upload(params: {
+  files: File[];
+  key: string;
+  metadata: { albumId: string };
+}) {
+  const arrLength = params.files.length;
+  for (let i = 0; i < arrLength; ++i) {
+    const uploadData = await uploadService.upload(params.files[i], {
+      albumId: params.metadata.albumId,
+      key: params.key,
+    });
+    if (uploadData === undefined) {
+      throw new Error("Upload error");
+    }
+
+    yield {
+      progress: (i / arrLength) * 100,
+      thumbnail: { thumbnail: uploadData.thumbnail, id: uploadData.fileId },
+    };
+  }
 }
 
 const Container = styled("div", {
