@@ -2,6 +2,8 @@ import { styled } from "../../../stitches.config";
 import SimpleCloud from "@assets/images/icons/cloud2.svg?react";
 import Trash from "@assets/images/icons/trash.svg?react";
 import Exit from "@assets/images/icons/exit.svg?react";
+import Next from "@assets/images/icons/next.svg?react";
+import Prev from "@assets/images/icons/prev.svg?react";
 import { ImageDownloadService } from "../../../utils/ImageDownloadService";
 import { useEffect, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
@@ -11,6 +13,7 @@ const imageDownloadService = new ImageDownloadService();
 type ViewOriginalModalProps = {
   fileId: string;
   visible: boolean;
+  onNext: (direction: number) => void;
   onDelete: () => void;
   onShowChange: (visible: boolean) => void;
 };
@@ -69,7 +72,13 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           <Icons as={Exit} />
         </Button>
       </ButtonBar>
+      <NextButton style={{ left: "0px" }} onClick={() => props.onNext(-1)}>
+        <Icons as={Prev} />
+      </NextButton>
       <FullScreenImg src={url} key={"1"} />
+      <NextButton style={{ right: "0px" }} onClick={() => props.onNext(1)}>
+        <Icons as={Next} />
+      </NextButton>
     </Container>
   );
 }
@@ -81,7 +90,7 @@ const Container = styled("div", {
   width: "100%",
   height: "100%",
   backgroundColor: "#000",
-  zIndex: "9",
+  zIndex: 9,
   variants: {
     isVisible: {
       true: {
@@ -138,4 +147,21 @@ const ButtonBar = styled("div", {
 });
 const ButtonGroup = styled("div", {
   display: "flex",
+});
+const NextButton = styled("button", {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  width: "20%",
+  height: "80%",
+  position: "absolute",
+  opacity: "0",
+  bottom: "0px",
+  zIndex: 11,
+  border: "none",
+  background: "none",
+  "&:hover": {
+    opacity: "1",
+  },
+  transition: "opacity 0.5s",
 });

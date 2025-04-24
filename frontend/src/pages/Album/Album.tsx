@@ -25,7 +25,7 @@ export default function Album() {
   const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
   const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
-  const [showOrigin, setShowOrigin] = useState(true);
+  const [showOrigin, setShowOrigin] = useState(false);
   const [showUploader, setShowUploader] = useState(true);
 
   useEffect(() => {
@@ -41,6 +41,12 @@ export default function Album() {
         }
       });
     }
+
+    if (metadata?.files.length === thumbnails.length && metadata.files.length > 0) {
+      setShowUploader(false);
+    } else {
+      setShowUploader(true);
+    }
   }, [metadata]);
 
   async function deleteImages() {
@@ -53,6 +59,10 @@ export default function Album() {
     });
     if (responses.result === "success") {
       setThumbnails((prev) => prev.filter((img) => !selectedImages.includes(img.id)));
+      setSelectedImages((prev) =>
+        prev.filter((imgId) => !selectedImages.includes(imgId)),
+      );
+      if (thumbnails.length === 0) setShowUploader(true);
     }
     refreshMetadata();
   }
@@ -66,6 +76,8 @@ export default function Album() {
     });
     if (responses.result === "success") {
       setThumbnails((prev) => prev.filter((img) => img.id !== id));
+      setSelectedImages((prev) => prev.filter((imgId) => imgId !== id));
+      if (thumbnails.length === 0) setShowUploader(true);
     }
 
     refreshMetadata();
@@ -117,6 +129,21 @@ export default function Album() {
     setShowUploader(false);
   }
 
+  function nextOriginImgId(direction: number) {
+    const currentIdx = thumbnails.findIndex(
+      (thumbnail) => thumbnail.id === fullscreenImage?.fileId,
+    );
+    let nextIdx;
+    if (currentIdx + direction > thumbnails.length - 1) {
+      nextIdx = 0;
+    } else if (currentIdx + direction < 0) {
+      nextIdx = thumbnails.length - 1;
+    } else {
+      nextIdx = currentIdx + direction;
+    }
+    setFullscreenImage({ fileId: thumbnails[nextIdx].id });
+  }
+
   return (
     <Container>
       {fullscreenImage && (
@@ -124,6 +151,7 @@ export default function Album() {
           fileId={fullscreenImage.fileId}
           visible={showOrigin}
           onShowChange={setShowOrigin}
+          onNext={(direction) => nextOriginImgId(direction)}
           onDelete={() => deleteImage(fullscreenImage.fileId)}
         />
       )}
@@ -141,6 +169,7 @@ export default function Album() {
               }
               onOpen={() => {
                 setFullscreenImage({ fileId: image.id });
+                setShowOrigin(true);
               }}
             />
           ))}
@@ -214,7 +243,6 @@ const Content = styled("div", {
   maxWidth: "100%",
   flex: 1,
   flexWrap: "wrap",
-  alignItems: "center",
   justifyContent: "center",
   transition: "background-color 0.3s",
   variants: {

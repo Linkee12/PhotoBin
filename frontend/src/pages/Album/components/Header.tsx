@@ -75,6 +75,8 @@ const TextContainer = styled("div", {
 });
 const HeaderBG = styled("div", {
   width: "100%",
+  maxHeight: "25vh",
+  minHeight: "25vh",
   flex: 1,
   display: "flex",
   transition: "background-color 0.3s",
@@ -92,7 +94,6 @@ const HeaderBG = styled("div", {
 
 const Container = styled("div", {
   width: "100%",
-  height: "20vh",
   display: "flex",
   justifyContent: "space-between",
   maskImage: `url(${header})`,
