@@ -92,7 +92,7 @@ const HeaderBG = styled("div", {
 
 const Container = styled("div", {
   width: "100%",
-  minHeight: "20vh",
+  height: "20vh",
   display: "flex",
   justifyContent: "space-between",
   maskImage: `url(${header})`,
@@ -106,7 +106,7 @@ const Container = styled("div", {
   variants: {
     isEmptyAlbum: {
       true: {
-        backgroundColor: "#333333",
+        backgroundColor: "rgba(51, 51, 51)",
       },
       false: {
         backgroundColor: "#181818",

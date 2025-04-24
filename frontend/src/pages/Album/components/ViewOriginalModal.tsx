@@ -75,15 +75,13 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
 }
 
 const Container = styled("div", {
-  top: "15%",
-  left: "15%",
   display: "flex",
   position: "absolute",
   justifyContent: "center",
-  width: "70%",
+  width: "100%",
+  height: "100%",
   backgroundColor: "#000",
   zIndex: "9",
-  border: "2px solid #444444",
   variants: {
     isVisible: {
       true: {
@@ -98,9 +96,12 @@ const Container = styled("div", {
 const FullScreenImg = styled("img", {
   display: "block",
   position: "absolute",
+  top: 0,
+  left: 0,
   width: "100%",
+  height: "100%",
+  objectFit: "contain",
   backgroundColor: "#000",
-  zIndex: "1",
 });
 const Button = styled("button", {
   cursor: "pointer",

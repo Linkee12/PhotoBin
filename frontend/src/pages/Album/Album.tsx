@@ -26,7 +26,7 @@ export default function Album() {
   const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showOrigin, setShowOrigin] = useState(true);
-  const showUploader = metadata ? metadata.files.length === 0 : true;
+  const [showUploader, setShowUploader] = useState(true);
 
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
@@ -41,7 +41,7 @@ export default function Album() {
         }
       });
     }
-  }, [metadata, thumbnails]);
+  }, [metadata]);
 
   async function deleteImages() {
     if (albumId === undefined) return;
@@ -114,6 +114,7 @@ export default function Album() {
       setThumbnails((thumbnails) => [...thumbnails, result.thumbnail]);
       refreshMetadata();
     }
+    setShowUploader(false);
   }
 
   return (
@@ -199,20 +200,20 @@ async function* upload(params: {
 
 const Container = styled("div", {
   width: "100%",
-  height: "auto",
   minHeight: "100vh",
   position: "relative",
   fontFamily: "Open Sans",
+  display: "flex",
+  flexDirection: "column",
 });
 
 const Content = styled("div", {
   display: "flex",
-  flexWrap: "wrap",
-  position: "relative",
-  minHeight: "80vh",
   gap: "10px",
   paddingTop: "2rem",
   maxWidth: "100%",
+  flex: 1,
+  flexWrap: "wrap",
   alignItems: "center",
   justifyContent: "center",
   transition: "background-color 0.3s",
@@ -231,7 +232,7 @@ const CloudContainer = styled("div", {
   flexDirection: "column",
   alignItems: "center",
   position: "absolute",
-  top: "15vh",
+  top: "30vh",
   transition: "display 0.3s",
   variants: {
     isVisible: {
