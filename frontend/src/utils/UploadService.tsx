@@ -21,7 +21,7 @@ export class UploadService {
     props: { key: string; albumId: string },
   ): Promise<UploadReturn> {
     const uuid = crypto.randomUUID();
-
+    console.log(file.name);
     const thumbnail = await this._imageResizeService.resize(file, {
       targetSize: SIZE,
     });
@@ -56,6 +56,7 @@ export class UploadService {
     );
     if (originRes.isSuccess || reducedRes.isSuccess || thumbRes.isSuccess) {
       const fileMetadata = {
+        fileName: file.name,
         thumbnail: thumbnail.url,
         fileId: uuid,
         originalIv: uint8ArrayToBase64(cryptedOriginImage.iv),

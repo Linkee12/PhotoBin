@@ -4,6 +4,7 @@ export type Metadata = {
   albumId: string;
   albumName: string;
   files: {
+    fileName: string;
     fileId: string;
     originalIv: string;
     reducedIv: string;

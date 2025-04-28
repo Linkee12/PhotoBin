@@ -22,7 +22,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const [url, setUrl] = useState(
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
-
+  const [fileName, setFileName] = useState("");
   useEffect(() => {
     const body = document.body;
     if (props.visible) {
@@ -48,6 +48,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     );
     if (reduce !== undefined) {
       setUrl(reduce.img);
+      setFileName(file.fileName);
     }
     const origin = await imageDownloadService.getImg(
       metadata.albumId,
@@ -76,7 +77,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           >
             <Icons as={Trash} />
           </Button>
-          <Button as="a" href={url} download="GeneratedFile">
+          <Button as="a" style={{ padding: "0px" }} href={url} download={fileName}>
             <Icons as={SimpleCloud} />
           </Button>
         </ButtonGroup>
