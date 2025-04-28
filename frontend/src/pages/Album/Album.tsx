@@ -26,8 +26,8 @@ export default function Album() {
   const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showOrigin, setShowOrigin] = useState(false);
-  const [showUploader, setShowUploader] = useState(true);
-
+  const [isUploading, setIsUploading] = useState(false);
+  const showUploader = thumbnails.length === 0 || isUploading;
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
       const oldThumbnailIds = new Set(thumbnails.map((thumb) => thumb.id));
@@ -40,12 +40,6 @@ export default function Album() {
           setThumbnails((thumbnails) => [...thumbnails, ...thumb]);
         }
       });
-    }
-
-    if (metadata?.files.length === thumbnails.length && metadata.files.length > 0) {
-      setShowUploader(false);
-    } else {
-      setShowUploader(true);
     }
   }, [metadata]);
 
@@ -62,7 +56,6 @@ export default function Album() {
       setSelectedImages((prev) =>
         prev.filter((imgId) => !selectedImages.includes(imgId)),
       );
-      if (thumbnails.length === 0) setShowUploader(true);
     }
     refreshMetadata();
   }
@@ -77,7 +70,6 @@ export default function Album() {
     if (responses.result === "success") {
       setThumbnails((prev) => prev.filter((img) => img.id !== id));
       setSelectedImages((prev) => prev.filter((imgId) => imgId !== id));
-      if (thumbnails.length === 0) setShowUploader(true);
     }
 
     refreshMetadata();
@@ -119,6 +111,7 @@ export default function Album() {
 
   async function uploadImages(files: File[]) {
     if (!metadata) return;
+    setIsUploading(true);
     const results = upload({ files, key, metadata });
 
     for await (const result of results) {
@@ -126,7 +119,7 @@ export default function Album() {
       setThumbnails((thumbnails) => [...thumbnails, result.thumbnail]);
       refreshMetadata();
     }
-    setShowUploader(false);
+    setIsUploading(false);
   }
 
   function nextOriginImgId(direction: number) {

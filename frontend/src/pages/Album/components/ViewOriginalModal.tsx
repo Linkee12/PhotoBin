@@ -76,7 +76,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           >
             <Icons as={Trash} />
           </Button>
-          <Button>
+          <Button as="a" href={url} download="GeneratedFile">
             <Icons as={SimpleCloud} />
           </Button>
         </ButtonGroup>
