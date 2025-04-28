@@ -23,6 +23,18 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
 
+  useEffect(() => {
+    const body = document.body;
+    if (props.visible) {
+      body.style.height = "100vh";
+      body.style.overflow = "hidden";
+    }
+    return () => {
+      body.style.height = "auto";
+      body.style.overflow = "unset";
+    };
+  }, [props.visible]);
+
   async function updateOriginalImageDataUrl(fileId: string) {
     if (!metadata) return;
     if (metadata.albumId === undefined) return;
@@ -85,10 +97,11 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
 
 const Container = styled("div", {
   display: "flex",
-  position: "absolute",
+  position: "fixed",
+  top: "0",
   justifyContent: "center",
   width: "100%",
-  height: "100%",
+  height: "100vh",
   backgroundColor: "#000",
   zIndex: 9,
   variants: {
@@ -108,7 +121,7 @@ const FullScreenImg = styled("img", {
   top: 0,
   left: 0,
   width: "100%",
-  height: "100%",
+  height: "100vh",
   objectFit: "contain",
   backgroundColor: "#000",
 });
