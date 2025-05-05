@@ -18,7 +18,7 @@ export class UploadService {
 
   async upload(
     file: File,
-    props: { key: string; albumId: string; albumTitle: string },
+    props: { key: string; albumId: string },
   ): Promise<UploadReturn> {
     const uuid = crypto.randomUUID();
 
@@ -28,11 +28,10 @@ export class UploadService {
     const reduce = await this._imageResizeService.resize(file, {
       quality: QUALITY,
     });
-
     const cryptedThumbnail = await this._encryptImage(await thumbnail.blob, props.key);
     const cryptedOriginImage = await this._encryptImage(file, props.key);
     const cryptedReducedImage = await this._encryptImage(await reduce.blob, props.key);
-    const cryptedFileName = await this._encrypString(await file.name, props.key);
+    const cryptedFileName = await this._encrypString(file.name, props.key);
 
     const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
     const slicedReducedeImg = this._getChunks(cryptedReducedImage.cryptedImg);
@@ -98,7 +97,7 @@ export class UploadService {
     );
     return { cryptedImg, iv };
   }
-  private async _encrypString(text: string, key: string) {
+  async _encrypString(text: string, key: string) {
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encoder = new TextEncoder();
     const encodedText = encoder.encode(text);
@@ -108,6 +107,12 @@ export class UploadService {
       encodedText,
     );
     return { encryptedText, iv };
+  }
+  async addAlbumName(albumId: string, albumName: { value: string; iv: string }) {
+    const res = await client.editAlbumName.post({
+      body: { albumId, albumName },
+    });
+    if (res.result !== "success") return { isSuccess: false };
   }
   private _getChunks(img: ArrayBuffer) {
     const SIZE = 1000000; //byte

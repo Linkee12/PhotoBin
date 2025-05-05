@@ -5,7 +5,7 @@ import { client } from "../../../cuple";
 
 export type Metadata = {
   albumId: string;
-  albumName: string;
+  albumName: { value: string; iv: string };
   files: {
     fileName: {
       value: string;

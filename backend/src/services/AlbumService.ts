@@ -7,7 +7,7 @@ export class AlbumService {
   getMetaData(albumId: string) {
     return this._metadataService.get(albumId);
   }
-  rename(albumId: string, newTitle: string) {
+  rename(albumId: string, newTitle: { value: string; iv: string }) {
     this._metadataService.renameAlbum(albumId, newTitle);
   }
   finalizeFile(albumId: string, fileMetadata: Metadata["files"][0]) {

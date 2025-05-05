@@ -12,6 +12,7 @@ import { AlbumItem } from "./components/AlbumItem";
 import { Cloud } from "@assets/images/cloud";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { Metadata, useAlbumContext } from "./hooks/useAlbumContext";
+import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
@@ -28,12 +29,17 @@ export default function Album() {
   const [showOrigin, setShowOrigin] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const showUploader = thumbnails.length === 0 || isUploading;
+
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
       const oldThumbnailIds = new Set(thumbnails.map((thumb) => thumb.id));
       const newThumbnails = metadata.files.filter(
         (file) => !oldThumbnailIds.has(file.fileId),
       );
+
+      imageDownloadService
+        .getAlbumName(metadata, key)
+        .then((albumName) => setTitle(albumName));
       getThumbnails(newThumbnails).then((thumb) => {
         // eslint-disable-next-line promise/always-return
         if (thumb !== undefined) {
@@ -205,11 +211,15 @@ async function* upload(params: {
   albumTitle: string;
 }) {
   const arrLength = params.files.length;
+  const encryptedTitle = await uploadService._encrypString(params.albumTitle, params.key);
+  const base64Title = {
+    iv: uint8ArrayToBase64(encryptedTitle.iv),
+    value: arrayBufferToBase64(encryptedTitle.encryptedText),
+  };
   for (let i = 0; i < arrLength; ++i) {
     const uploadData = await uploadService.upload(params.files[i], {
       albumId: params.metadata.albumId,
       key: params.key,
-      albumTitle: params.albumTitle,
     });
     if (uploadData === undefined) {
       throw new Error("Upload error");
@@ -220,6 +230,8 @@ async function* upload(params: {
       thumbnail: { thumbnail: uploadData.thumbnail, id: uploadData.fileId },
     };
   }
+  const addName = await uploadService.addAlbumName(params.metadata.albumId, base64Title);
+  console.log(addName);
 }
 
 const Container = styled("div", {

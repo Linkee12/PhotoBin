@@ -1,12 +1,12 @@
 import { client } from "../cuple";
-import { useAlbumContext } from "../pages/Album/hooks/useAlbumContext";
 import { base64ToArrayBuffer, base64toUint8Array } from "./base64";
 import { importKey } from "./key";
 
 type Metadata = {
   albumId: string;
-  albumName: string;
+  albumName: { value: string; iv: string };
   files: {
+    fileName: { value: string; iv: string };
     fileId: string;
     originalIv: string;
     reducedIv: string;
@@ -39,17 +39,16 @@ export class ImageDownloadService {
     const combinedImg = this._combineChunks(parts);
     const img = await this._decryptImage(combinedImg, key, iv);
     const blob = new Blob([img]);
-    const { metadata } = useAlbumContext();
-    const fileMetadata = metadata?.files.find((elem) => elem.fileId === file.fileId);
-    let name = "";
-    if (fileMetadata) {
-      name = await this._decryptText(
-        fileMetadata?.fileName.value,
-        key,
-        fileMetadata?.fileName.iv,
-      );
-    }
-    return { img: URL.createObjectURL(blob), id: file.fileId, fileName: name };
+    const fileName = await this._decryptText(file.fileName.value, key, file.fileName.iv);
+    return { img: URL.createObjectURL(blob), id: file.fileId, fileName: fileName };
+  }
+  async getAlbumName(metadata: Metadata, key: string) {
+    const decryptedName = this._decryptText(
+      metadata.albumName.value,
+      key,
+      metadata.albumName.iv,
+    );
+    return decryptedName;
   }
   private async _getPartsOfImage(
     albumId: string,

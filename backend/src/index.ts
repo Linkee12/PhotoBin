@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 import { createBuilder, success, initRpc } from "@cuple/server";
 import { z } from "zod";
 import { AlbumService } from "./services/AlbumService";
-import { fileMetadataSchema } from "./utils/zod";
+import { fileMetadataSchema, metadataSchema } from "./utils/zod";
 import { MetadataService } from "./services/MetadataService";
 import fs from "fs";
 dotenv.config();
@@ -22,7 +22,7 @@ const routes = {
       }),
     )
     .get(async ({ data }) => {
-      const metadata = await albumService.getMetaData(data.query.id);
+      const metadata = albumService.getMetaData(data.query.id);
       return success({ metadata });
     }),
   getPartOfImage: builder
@@ -56,6 +56,19 @@ const routes = {
     .post(async ({ data }) => {
       await albumService.uploadFilePart(data.body);
       return success({});
+    }),
+  editAlbumName: builder
+    .bodySchema(
+      z.object({
+        albumId: z.string(),
+        albumName: metadataSchema.shape.albumName,
+      }),
+    )
+    .post(async ({ data }) => {
+      albumService.rename(data.body.albumId, data.body.albumName);
+      return success({
+        message: "File name been uploaded successfully!",
+      });
     }),
   finalizeFile: builder
     .bodySchema(

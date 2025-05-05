@@ -2,7 +2,7 @@ import type fs from "fs";
 
 export type Metadata = {
   albumId: string;
-  albumName: string;
+  albumName: { value: string; iv: string };
   files: {
     fileName: {
       value: string;
@@ -18,7 +18,7 @@ export type Metadata = {
 
 const DEFAULT_METADATA = (albumId: string): Metadata => ({
   albumId,
-  albumName: "",
+  albumName: { value: "", iv: "" },
   files: [],
 });
 
@@ -49,7 +49,7 @@ export class MetadataService {
     current.files = current.files.filter((file) => file.fileId !== fileId);
     this.save(albumId, current);
   }
-  renameAlbum(albumId: string, newTitle: string) {
+  renameAlbum(albumId: string, newTitle: { value: string; iv: string }) {
     const current = this.get(albumId);
     current.albumName = newTitle;
     this.save(albumId, current);

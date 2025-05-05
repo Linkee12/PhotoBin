@@ -18,6 +18,9 @@ export const fileMetadataSchema = z.object({
 
 export const metadataSchema = z.object({
   albumId: z.string(),
-  albumName: z.string(),
+  albumName: z.object({
+    value: z.string(),
+    iv: z.string(),
+  }),
   files: z.array(fileMetadataSchema),
 });
