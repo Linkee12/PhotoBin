@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 export const fileMetadataSchema = z.object({
-  fileName: z.string(),
+  fileName: z.object({
+    value: z.string(),
+    iv: z.string(),
+  }),
   fileId: z.string(),
   originalIv: z.string(),
   reducedIv: z.string(),

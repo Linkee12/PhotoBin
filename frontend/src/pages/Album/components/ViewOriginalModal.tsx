@@ -48,7 +48,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     );
     if (reduce !== undefined) {
       setUrl(reduce.img);
-      setFileName(file.fileName);
+      setFileName("");
     }
     const origin = await imageDownloadService.getImg(
       metadata.albumId,

@@ -1,4 +1,5 @@
 import { client } from "../cuple";
+import { useAlbumContext } from "../pages/Album/hooks/useAlbumContext";
 import { base64ToArrayBuffer, base64toUint8Array } from "./base64";
 import { importKey } from "./key";
 
@@ -38,9 +39,18 @@ export class ImageDownloadService {
     const combinedImg = this._combineChunks(parts);
     const img = await this._decryptImage(combinedImg, key, iv);
     const blob = new Blob([img]);
-    return { img: URL.createObjectURL(blob), id: file.fileId };
+    const { metadata } = useAlbumContext();
+    const fileMetadata = metadata?.files.find((elem) => elem.fileId === file.fileId);
+    let name = "";
+    if (fileMetadata) {
+      name = await this._decryptText(
+        fileMetadata?.fileName.value,
+        key,
+        fileMetadata?.fileName.iv,
+      );
+    }
+    return { img: URL.createObjectURL(blob), id: file.fileId, fileName: name };
   }
-
   private async _getPartsOfImage(
     albumId: string,
     id: string,
@@ -61,6 +71,18 @@ export class ImageDownloadService {
       cryptedImg,
     );
   }
+  private async _decryptText(text: string, key: string, base64Iv: string) {
+    const buffer = base64ToArrayBuffer(text);
+    const iv = base64toUint8Array(base64Iv);
+    const decoder = new TextDecoder();
+    const arraybuffer = await window.crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      await importKey(key),
+      buffer,
+    );
+    return decoder.decode(arraybuffer);
+  }
+
   private _combineChunks(chunks: ArrayBuffer[]): ArrayBuffer {
     const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
 

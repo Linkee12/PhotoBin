@@ -18,10 +18,10 @@ export class UploadService {
 
   async upload(
     file: File,
-    props: { key: string; albumId: string },
+    props: { key: string; albumId: string; albumTitle: string },
   ): Promise<UploadReturn> {
     const uuid = crypto.randomUUID();
-    console.log(file.name);
+
     const thumbnail = await this._imageResizeService.resize(file, {
       targetSize: SIZE,
     });
@@ -32,6 +32,7 @@ export class UploadService {
     const cryptedThumbnail = await this._encryptImage(await thumbnail.blob, props.key);
     const cryptedOriginImage = await this._encryptImage(file, props.key);
     const cryptedReducedImage = await this._encryptImage(await reduce.blob, props.key);
+    const cryptedFileName = await this._encrypString(await file.name, props.key);
 
     const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
     const slicedReducedeImg = this._getChunks(cryptedReducedImage.cryptedImg);
@@ -56,7 +57,10 @@ export class UploadService {
     );
     if (originRes.isSuccess || reducedRes.isSuccess || thumbRes.isSuccess) {
       const fileMetadata = {
-        fileName: file.name,
+        fileName: {
+          iv: uint8ArrayToBase64(cryptedFileName.iv),
+          value: arrayBufferToBase64(cryptedFileName.encryptedText),
+        },
         thumbnail: thumbnail.url,
         fileId: uuid,
         originalIv: uint8ArrayToBase64(cryptedOriginImage.iv),
@@ -93,6 +97,17 @@ export class UploadService {
       buffer,
     );
     return { cryptedImg, iv };
+  }
+  private async _encrypString(text: string, key: string) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoder = new TextEncoder();
+    const encodedText = encoder.encode(text);
+    const encryptedText = await window.crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      await importKey(key),
+      encodedText,
+    );
+    return { encryptedText, iv };
   }
   private _getChunks(img: ArrayBuffer) {
     const SIZE = 1000000; //byte

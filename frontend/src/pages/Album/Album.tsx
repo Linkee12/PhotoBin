@@ -112,7 +112,7 @@ export default function Album() {
   async function uploadImages(files: File[]) {
     if (!metadata) return;
     setIsUploading(true);
-    const results = upload({ files, key, metadata });
+    const results = upload({ files, key, metadata, albumTitle: title });
 
     for await (const result of results) {
       setProgress(result.progress);
@@ -202,12 +202,14 @@ async function* upload(params: {
   files: File[];
   key: string;
   metadata: { albumId: string };
+  albumTitle: string;
 }) {
   const arrLength = params.files.length;
   for (let i = 0; i < arrLength; ++i) {
     const uploadData = await uploadService.upload(params.files[i], {
       albumId: params.metadata.albumId,
       key: params.key,
+      albumTitle: params.albumTitle,
     });
     if (uploadData === undefined) {
       throw new Error("Upload error");
