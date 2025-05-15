@@ -13,6 +13,7 @@ import { Cloud } from "@assets/images/cloud";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { Metadata, useAlbumContext } from "./hooks/useAlbumContext";
 import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
+import { DragNdrop } from "./components/DragNdrop";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
@@ -156,6 +157,14 @@ export default function Album() {
       )}
       <Header isEmptyAlbum={showUploader} title={title} onChangeTitle={setTitle} />
       <Content bgColor={showUploader}>
+        <DragNdrop
+          onDroppedFiles={(files) => {
+            if (files != null) {
+              const fileArr = Array.from(files);
+              uploadImages(fileArr).catch((e) => console.error(e));
+            }
+          }}
+        />
         {thumbnails != undefined &&
           Array.from(thumbs).map((image) => (
             <AlbumItem
