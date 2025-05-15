@@ -2,6 +2,7 @@ import header from "@assets/images/header.svg?no-inline";
 import Edit from "@assets/images/icons/edit.svg?react";
 import Link from "@assets/images/icons/link.svg?react";
 import { styled } from "../../../stitches.config";
+import { useState } from "react";
 
 type HeaderProps = {
   isEmptyAlbum: boolean;
@@ -10,6 +11,7 @@ type HeaderProps = {
 };
 
 export function Header(props: HeaderProps) {
+  const [isEdit, setIsEdit] = useState(false);
   return (
     <HeaderBG isEmptyAlbum={props.isEmptyAlbum}>
       <Container isEmptyAlbum={props.isEmptyAlbum}>
@@ -19,11 +21,13 @@ export function Header(props: HeaderProps) {
             placeholder="Title"
             onChange={(e) => props.onChangeTitle(e.target.value)}
             autoCapitalize="sentences"
+            onFocus={() => setIsEdit(true)}
           />
         </TextContainer>
         <Tools>
-          <Button onClick={() => console.log("asd")}>
+          <Button isEdit={isEdit} onClick={() => console.log("asd")}>
             <Icons as={Edit} />
+            <EditText isEdit={isEdit}>Save</EditText>
           </Button>
           <Button onClick={() => console.log("asd")}>
             <Icons as={Link} />
@@ -49,7 +53,7 @@ const Button = styled("button", {
   cursor: "pointer",
   display: "flex",
   alignItems: "center",
-  width: "2rem",
+  justifyContent: "space-around",
   height: "2rem",
   size: "2rem",
   color: "#9A9A9A",
@@ -61,11 +65,29 @@ const Button = styled("button", {
   border: "none",
   padding: "0px",
   margin: "0px",
+  variants: {
+    isEdit: {
+      true: {
+        backgroundColor: "#181818",
+        borderRadius: "1.5rem",
+        padding: "8px",
+        width: "8rem",
+        height: "3rem",
+      },
+      false: {
+        backgroundColor: "#333333",
+        width: "2rem",
+      },
+    },
+  },
+  transitionProperty: "width,height",
+  transitionDuration: "0.5s",
 });
 
 const Tools = styled("div", {
   display: "flex",
   flexDirection: "column",
+  alignItems: "end",
   gap: "3rem",
 });
 const TextContainer = styled("div", {
@@ -119,7 +141,21 @@ const Container = styled("div", {
 const Icons = styled("svg", {
   width: "2rem",
   height: "2rem",
-  "&:hover": {
-    color: "#fff",
+  [`${Button}:hover &`]: {
+    fill: "#fff",
   },
+});
+
+const EditText = styled("h5", {
+  variants: {
+    isEdit: {
+      true: {
+        fontSize: "2rem",
+      },
+      false: {
+        fontSize: "1px",
+      },
+    },
+  },
+  transition: "font-size 0.5s",
 });
