@@ -65,7 +65,7 @@ const routes = {
       }),
     )
     .post(async ({ data }) => {
-      albumService.rename(data.body.albumId, data.body.albumName);
+      await albumService.rename(data.body.albumId, data.body.albumName);
       return success({
         message: "File name been uploaded successfully!",
       });

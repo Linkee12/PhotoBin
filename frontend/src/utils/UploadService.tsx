@@ -78,7 +78,17 @@ export class UploadService {
       };
     }
   }
-  async _finalize(albumId: string, fileMetadata: Metadata["files"][0]) {
+
+  async saveName(albumId: string, name: string, key: string) {
+    const cryptedName = await this._encrypString(name, key);
+    const iv = uint8ArrayToBase64(cryptedName.iv);
+    const value = arrayBufferToBase64(cryptedName.encryptedText);
+    client.editAlbumName.post({
+      body: { albumId, albumName: { iv, value } },
+    });
+  }
+
+  private async _finalize(albumId: string, fileMetadata: Metadata["files"][0]) {
     client.finalizeFile.post({
       body: {
         albumId,

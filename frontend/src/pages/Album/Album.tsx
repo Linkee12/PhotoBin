@@ -23,7 +23,7 @@ export default function Album() {
   const { metadata, key, refreshMetadata } = useAlbumContext();
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const { albumId } = useParams();
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState("Title");
   const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
   const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -144,6 +144,12 @@ export default function Album() {
     setFullscreenImage({ fileId: thumbnails[nextIdx].id });
   }
 
+  function saveAlbumName() {
+    if (metadata !== undefined) {
+      uploadService.saveName(metadata.albumId, title, key);
+    }
+  }
+
   return (
     <Container>
       {fullscreenImage && (
@@ -155,7 +161,12 @@ export default function Album() {
           onDelete={() => deleteImage(fullscreenImage.fileId)}
         />
       )}
-      <Header isEmptyAlbum={showUploader} title={title} onChangeTitle={setTitle} />
+      <Header
+        isEmptyAlbum={showUploader}
+        title={title}
+        onChangeTitle={setTitle}
+        onSaveName={saveAlbumName}
+      />
       <Content bgColor={showUploader}>
         <DragNdrop
           onDroppedFiles={(files) => {

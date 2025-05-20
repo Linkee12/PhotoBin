@@ -49,7 +49,7 @@ export class MetadataService {
     current.files = current.files.filter((file) => file.fileId !== fileId);
     this.save(albumId, current);
   }
-  renameAlbum(albumId: string, newTitle: { value: string; iv: string }) {
+  async renameAlbum(albumId: string, newTitle: { value: string; iv: string }) {
     const current = this.get(albumId);
     current.albumName = newTitle;
     this.save(albumId, current);

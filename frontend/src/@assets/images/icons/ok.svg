@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg width="800px" height="800px" viewBox="0 0 24 24"
+     xmlns="http://www.w3.org/2000/svg"
+     style="cursor: pointer;">
+  <style>
+    .circle {
+      fill: none;
+      stroke: white;
+      stroke-opacity: 0.5;
+      stroke-width: 2;
+      transition: stroke-opacity 0.3s;
+    }
+
+    svg:hover .circle {
+      stroke-opacity: 1;
+    }
+    svg:hover .checkmark {
+      stroke-opacity: 1;
+    }
+
+    .checkmark {
+      fill: none;
+      stroke: white;
+      stroke-opacity: 0.5;
+      stroke-width: 2;
+      transition: stroke-opacity 0.3s;
+    }
+  </style>
+
+  <path class="circle"
+        d="M21 12C21 16.9706 16.9706 21 12 21
+           C7.02944 21 3 16.9706 3 12
+           C3 7.02944 7.02944 3 12 3
+           C16.9706 3 21 7.02944 21 12Z" />
+
+  <path class="checkmark"
+        d="M9 12L10.6828 13.6828C10.858 13.858 11.142 13.858 11.3172 13.6828L15 10" />
+</svg>

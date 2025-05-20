@@ -7,7 +7,10 @@ export class AlbumService {
   getMetaData(albumId: string) {
     return this._metadataService.get(albumId);
   }
-  rename(albumId: string, newTitle: { value: string; iv: string }) {
+  async rename(albumId: string, newTitle: { value: string; iv: string }) {
+    const path = "./albums/" + albumId;
+    const isExist = await this._checkDirectoryExists(path);
+    if (!isExist) this._createDirectory(albumId);
     this._metadataService.renameAlbum(albumId, newTitle);
   }
   finalizeFile(albumId: string, fileMetadata: Metadata["files"][0]) {
@@ -35,6 +38,15 @@ export class AlbumService {
       await this._deleteImage(albumId, imageId);
     }
   }
+
+  private async _createDirectory(folder: string) {
+    try {
+      const folderName = "./albums/" + folder;
+      await fs.mkdir(folderName, { recursive: true });
+    } catch (err) {
+      console.error(err);
+    }
+  }
   private async _deleteImage(albumId: string, imageId: string) {
     await fs.rm(path.join("./albums/", albumId, imageId), {
       recursive: true,
@@ -42,12 +54,13 @@ export class AlbumService {
     });
     this._metadataService.removeFile(albumId, imageId);
   }
-  private async _createDirectory(folder: string) {
+  private async _checkDirectoryExists(path: string) {
     try {
-      const folderName = "./albums/" + folder;
-      await fs.mkdir(folderName, { recursive: true });
+      const stat = await fs.stat(path);
+      return stat.isDirectory();
     } catch (err) {
-      console.error(err);
+      return false;
+      throw err;
     }
   }
 }

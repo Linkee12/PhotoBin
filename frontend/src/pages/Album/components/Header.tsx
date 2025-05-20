@@ -1,6 +1,7 @@
 import header from "@assets/images/header.svg?no-inline";
 import Edit from "@assets/images/icons/edit.svg?react";
 import Link from "@assets/images/icons/link.svg?react";
+import Ok from "@assets/images/icons/ok.svg?react";
 import { styled } from "../../../stitches.config";
 import { useState } from "react";
 
@@ -8,6 +9,7 @@ type HeaderProps = {
   isEmptyAlbum: boolean;
   title: string;
   onChangeTitle: (title: string) => void;
+  onSaveName: () => void;
 };
 
 export function Header(props: HeaderProps) {
@@ -16,18 +18,24 @@ export function Header(props: HeaderProps) {
     <HeaderBG isEmptyAlbum={props.isEmptyAlbum}>
       <Container isEmptyAlbum={props.isEmptyAlbum}>
         <TextContainer>
-          <Title
-            value={props.title}
-            placeholder="Title"
-            onChange={(e) => props.onChangeTitle(e.target.value)}
-            autoCapitalize="sentences"
-            onFocus={() => setIsEdit(true)}
-          />
+          {isEdit ? (
+            <Title
+              value={props.title}
+              onChange={(e) => props.onChangeTitle(e.target.value)}
+              autoCapitalize="sentences"
+              onFocus={() => setIsEdit(true)}
+              onBlur={() => {
+                setIsEdit(false);
+                props.onSaveName();
+              }}
+            />
+          ) : (
+            <Text onClick={() => setIsEdit(true)}>{props.title}</Text>
+          )}
         </TextContainer>
         <Tools>
-          <Button isEdit={isEdit} onClick={() => console.log("asd")}>
-            <Icons as={Edit} />
-            <EditText isEdit={isEdit}>Save</EditText>
+          <Button onClick={() => setIsEdit(true)}>
+            <Icons as={isEdit ? Ok : Edit} />
           </Button>
           <Button onClick={() => console.log("asd")}>
             <Icons as={Link} />
@@ -40,6 +48,7 @@ export function Header(props: HeaderProps) {
 const Title = styled("textarea", {
   fontFamily: "Open Sans",
   border: "none",
+  borderBottom: "1px solid",
   background: "none",
   overflow: "hidden",
   resize: "none",
@@ -47,6 +56,7 @@ const Title = styled("textarea", {
   color: "#fff",
   width: "100%",
   "&:focus": { outline: "none" },
+  height: "3rem",
 });
 
 const Button = styled("button", {
@@ -65,23 +75,6 @@ const Button = styled("button", {
   border: "none",
   padding: "0px",
   margin: "0px",
-  variants: {
-    isEdit: {
-      true: {
-        backgroundColor: "#181818",
-        borderRadius: "1.5rem",
-        padding: "8px",
-        width: "8rem",
-        height: "3rem",
-      },
-      false: {
-        backgroundColor: "#333333",
-        width: "2rem",
-      },
-    },
-  },
-  transitionProperty: "width,height",
-  transitionDuration: "0.5s",
 });
 
 const Tools = styled("div", {
@@ -92,8 +85,8 @@ const Tools = styled("div", {
 });
 const TextContainer = styled("div", {
   display: "flex",
-  flex: 1,
-  flexDirection: "column",
+  width: "98%",
+  height: "2rem",
 });
 const HeaderBG = styled("div", {
   width: "100%",
@@ -146,16 +139,7 @@ const Icons = styled("svg", {
   },
 });
 
-const EditText = styled("h5", {
-  variants: {
-    isEdit: {
-      true: {
-        fontSize: "2rem",
-      },
-      false: {
-        fontSize: "1px",
-      },
-    },
-  },
-  transition: "font-size 0.5s",
+const Text = styled("div", {
+  fontSize: "2rem",
+  height: "2rem",
 });
