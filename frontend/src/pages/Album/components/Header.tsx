@@ -3,7 +3,7 @@ import Edit from "@assets/images/icons/edit.svg?react";
 import Link from "@assets/images/icons/link.svg?react";
 import Ok from "@assets/images/icons/ok.svg?react";
 import { styled } from "../../../stitches.config";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type HeaderProps = {
   isEmptyAlbum: boolean;
@@ -14,6 +14,15 @@ type HeaderProps = {
 
 export function Header(props: HeaderProps) {
   const [isEdit, setIsEdit] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const inputRef = useRef<any>(null);
+  useEffect(() => {
+    if (isEdit && inputRef.current) {
+      const input = inputRef.current;
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+  }, [isEdit]);
   return (
     <HeaderBG isEmptyAlbum={props.isEmptyAlbum}>
       <Container isEmptyAlbum={props.isEmptyAlbum}>
@@ -21,9 +30,16 @@ export function Header(props: HeaderProps) {
           {isEdit ? (
             <Title
               value={props.title}
+              ref={inputRef}
               onChange={(e) => props.onChangeTitle(e.target.value)}
               autoCapitalize="sentences"
               onFocus={() => setIsEdit(true)}
+              onKeyDown={(event) => {
+                if (event.code === "Enter") {
+                  setIsEdit(false);
+                  props.onSaveName();
+                }
+              }}
               onBlur={() => {
                 setIsEdit(false);
                 props.onSaveName();
@@ -34,7 +50,11 @@ export function Header(props: HeaderProps) {
           )}
         </TextContainer>
         <Tools>
-          <Button onClick={() => setIsEdit(true)}>
+          <Button
+            onClick={() => {
+              setIsEdit(true);
+            }}
+          >
             <Icons as={isEdit ? Ok : Edit} />
           </Button>
           <Button onClick={() => console.log("asd")}>
