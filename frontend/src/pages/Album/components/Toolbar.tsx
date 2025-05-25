@@ -7,6 +7,7 @@ export default function Toolbar(props: {
   selectedImages: string[];
   onDeleteSelected: () => void;
   onUncheckSelected: () => void;
+  onDownloadSelected: () => void;
 }) {
   return (
     <ToolBar isVisible={props.selectedImages.length > 0}>
@@ -18,7 +19,7 @@ export default function Toolbar(props: {
         <ToolbarIcons as={Trash} />
       </Button>
       <Button>
-        <ToolbarIcons as={SimpleCloud} />
+        <ToolbarIcons as={SimpleCloud} onClick={() => props.onDownloadSelected()} />
       </Button>
       <Button>
         <ToolbarIcons as={Cloud} />

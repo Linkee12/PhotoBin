@@ -14,6 +14,7 @@ import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { Metadata, useAlbumContext } from "./hooks/useAlbumContext";
 import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
 import { DragNdrop } from "./components/DragNdrop";
+import { Zip, ZipPassThrough } from "fflate";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
@@ -86,6 +87,80 @@ export default function Album() {
     deleteImages().catch((reason) => {
       console.error(reason);
     });
+  }
+
+  async function onDownloadSelected() {
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle("album.zip", { create: true });
+      const writable = await fileHandle.createWritable();
+
+      let zipFinished = false;
+      const zip = new Zip(async (err, chunk, final) => {
+        if (err) {
+          console.error("ZIP error:", err);
+          return;
+        }
+
+        if (chunk) {
+          await writable.write(chunk);
+        }
+
+        if (final) {
+          console.log("ZIP successfully completed.");
+          await writable.close();
+          zipFinished = true;
+        }
+      });
+
+      for (const imgID of selectedImages) {
+        if (!albumId || !metadata) continue;
+
+        const file = metadata.files.find((f) => f.fileId === imgID);
+        if (!file) continue;
+
+        const origin = await imageDownloadService.getImg(albumId, file, key, "original");
+        if (!origin) continue;
+
+        const blob = origin.blob;
+        const buffer = await blob.arrayBuffer();
+        const uint8 = new Uint8Array(buffer);
+
+        const passThrough = new ZipPassThrough(origin.fileName);
+
+        zip.add(passThrough);
+
+        const chunkSize = 64 * 1024;
+        let offset = 0;
+
+        while (offset < uint8.length) {
+          const end = Math.min(offset + chunkSize, uint8.length);
+          const chunk = uint8.slice(offset, end);
+          const isLastChunk = end === uint8.length;
+
+          passThrough.push(chunk, isLastChunk);
+          offset = end;
+          if (!isLastChunk) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
+          }
+        }
+      }
+
+      zip.end();
+
+      while (!zipFinished) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      const file = await fileHandle.getFile();
+      const url = URL.createObjectURL(file);
+      console.log("ZIP file created:", url);
+
+      return url;
+    } catch (e) {
+      console.error("Error creating ZIP:", e);
+      throw e;
+    }
   }
 
   function onUncheckSelected() {
@@ -219,6 +294,7 @@ export default function Album() {
         selectedImages={selectedImages}
         onDeleteSelected={onDeleteSelected}
         onUncheckSelected={onUncheckSelected}
+        onDownloadSelected={onDownloadSelected}
       />
     </Container>
   );

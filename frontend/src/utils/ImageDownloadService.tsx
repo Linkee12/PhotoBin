@@ -40,7 +40,7 @@ export class ImageDownloadService {
     const img = await this._decryptImage(combinedImg, key, iv);
     const blob = new Blob([img]);
     const fileName = await this._decryptText(file.fileName.value, key, file.fileName.iv);
-    return { img: URL.createObjectURL(blob), id: file.fileId, fileName: fileName };
+    return { img: URL.createObjectURL(blob), id: file.fileId, fileName: fileName, blob };
   }
   async getAlbumName(metadata: Metadata, key: string) {
     const decryptedName = this._decryptText(

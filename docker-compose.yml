@@ -21,5 +21,19 @@ services:
     networks:
       - mynet
 
+  caddy:
+    image: caddy:latest
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8080:80"
+      - "8443:443"
+      - "8443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy_data:/data
+    networks:
+      - mynet
+
 networks:
   mynet:
