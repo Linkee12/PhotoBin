@@ -42,6 +42,7 @@ export class ImageDownloadService {
     const fileName = await this._decryptText(file.fileName.value, key, file.fileName.iv);
     return { img: URL.createObjectURL(blob), id: file.fileId, fileName: fileName, blob };
   }
+
   async getAlbumName(metadata: Metadata, key: string) {
     const decryptedName = this._decryptText(
       metadata.albumName.value,
@@ -50,6 +51,7 @@ export class ImageDownloadService {
     );
     return decryptedName;
   }
+
   private async _getPartsOfImage(
     albumId: string,
     id: string,
@@ -70,6 +72,7 @@ export class ImageDownloadService {
       cryptedImg,
     );
   }
+
   private async _decryptText(text: string, key: string, base64Iv: string) {
     const buffer = base64ToArrayBuffer(text);
     const iv = base64toUint8Array(base64Iv);
@@ -94,6 +97,7 @@ export class ImageDownloadService {
 
     return combined.buffer;
   }
+
   private _getIv(
     file: Metadata["files"][number],
     type: "original" | "reduced" | "thumbnail",

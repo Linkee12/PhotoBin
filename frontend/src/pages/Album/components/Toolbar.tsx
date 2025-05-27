@@ -47,7 +47,7 @@ const ToolBar = styled("div", {
   boxSizing: "border-box",
   justifyContent: "space-around",
   alignItems: "center",
-  position: "absolute",
+  position: "fixed",
   bottom: "10px",
   left: "50%",
   transform: "translateX(-50%)",

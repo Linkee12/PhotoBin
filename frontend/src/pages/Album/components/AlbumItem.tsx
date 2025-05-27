@@ -47,7 +47,6 @@ const Preview = styled("div", {
   boxSizing: "border-box",
   display: "flex",
   justifyContent: "center",
-  alignItems: "center",
   position: "relative",
 });
 

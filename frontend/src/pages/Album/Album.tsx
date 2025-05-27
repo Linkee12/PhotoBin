@@ -92,7 +92,7 @@ export default function Album() {
   async function onDownloadSelected() {
     try {
       const root = await navigator.storage.getDirectory();
-      const fileHandle = await root.getFileHandle("album.zip", { create: true });
+      const fileHandle = await root.getFileHandle(title, { create: true });
       const writable = await fileHandle.createWritable();
 
       let zipFinished = false;
@@ -113,6 +113,7 @@ export default function Album() {
         }
       });
 
+      let count = 0;
       for (const imgID of selectedImages) {
         if (!albumId || !metadata) continue;
 
@@ -144,6 +145,10 @@ export default function Album() {
             await new Promise((resolve) => setTimeout(resolve, 1));
           }
         }
+        ++count;
+        console.log(
+          "Progress...:" + Math.floor((count / selectedImages.length) * 100) + "%",
+        );
       }
 
       zip.end();
@@ -154,7 +159,12 @@ export default function Album() {
 
       const file = await fileHandle.getFile();
       const url = URL.createObjectURL(file);
-      console.log("ZIP file created:", url);
+      const a = document.createElement("a");
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       return url;
     } catch (e) {
@@ -326,8 +336,7 @@ async function* upload(params: {
       thumbnail: { thumbnail: uploadData.thumbnail, id: uploadData.fileId },
     };
   }
-  const addName = await uploadService.addAlbumName(params.metadata.albumId, base64Title);
-  console.log(addName);
+  await uploadService.addAlbumName(params.metadata.albumId, base64Title);
 }
 
 const Container = styled("div", {
@@ -345,6 +354,7 @@ const Content = styled("div", {
   paddingTop: "2rem",
   maxWidth: "100%",
   flex: 1,
+  alignContent: "flex-start",
   flexWrap: "wrap",
   justifyContent: "center",
   transition: "background-color 0.3s",
