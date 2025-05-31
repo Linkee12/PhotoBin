@@ -1,8 +1,8 @@
-import { client } from "../cuple";
-import { Metadata } from "../pages/Album/hooks/useAlbumContext";
-import { arrayBufferToBase64, uint8ArrayToBase64 } from "./base64";
+import { client } from "../../../cuple";
+import { Metadata } from "../hooks/useAlbumContext";
+import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../../utils/base64";
 import { ImageResizeService } from "./ImageResizeService";
-import { importKey } from "./key";
+import { importKey } from "../../../utils/key";
 
 const SIZE = { width: 300, height: 200 };
 const QUALITY = 0.3;

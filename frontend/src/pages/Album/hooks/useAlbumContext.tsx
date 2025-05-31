@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { client } from "../../../cuple";
+import { CryptoService } from "../services/CryptoService";
 
 export type Metadata = {
   albumId: string;
@@ -18,16 +19,21 @@ export type Metadata = {
     chunks: { reduced: number; original: number; thumbnail: number };
   }[];
 };
+export type DecodedValues = {
+  albumName: string;
+};
 
 export type AlbumContextType = {
   key: string;
   metadata: Metadata | undefined;
+  decodedValues: DecodedValues;
   refreshMetadata: () => void;
 };
 
 const AlbumContext = createContext<AlbumContextType>({
   key: "",
   metadata: undefined,
+  decodedValues: { albumName: "" },
   refreshMetadata: () => undefined,
 });
 
@@ -37,29 +43,36 @@ export function useAlbumContext() {
 }
 
 export function AlbumContextProvider(props: { children: React.ReactNode }) {
+  const cryptoService = new CryptoService();
   const { albumId } = useParams();
   const key = decodeURIComponent(window.location.hash.slice(1));
   const [metadata, setMetadata] = useState<Metadata>();
+  const [name, setName] = useState("");
 
-  const refreshMetadata = () => {
+  const refreshMetadataAsync = async () => {
     if (!albumId || !key) return;
-    client.getAlbumMetadata
-      .get({
-        query: {
-          id: albumId,
-        },
-      })
-      .then((response) => {
-        if (response.result === "success") {
-          setMetadata(response.metadata);
-        }
-      })
-      .catch((e) => {
-        console.error(e);
-        setMetadata(() => {
-          throw e;
-        });
+    const response = await client.getAlbumMetadata.get({
+      query: {
+        id: albumId,
+      },
+    });
+    if (response.result === "success") {
+      const name = await cryptoService._decryptText(
+        response.metadata.albumName.value,
+        key,
+        response.metadata.albumName.iv,
+      );
+      setMetadata(response.metadata);
+      setName(name);
+    }
+  };
+  const refreshMetadata = () => {
+    refreshMetadataAsync().catch((error) => {
+      console.error(error);
+      setMetadata(() => {
+        throw error;
       });
+    });
   };
 
   useEffect(() => {
@@ -67,7 +80,9 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AlbumContext.Provider value={{ refreshMetadata, key, metadata }}>
+    <AlbumContext.Provider
+      value={{ refreshMetadata, key, metadata, decodedValues: { albumName: name } }}
+    >
       {props.children}
     </AlbumContext.Provider>
   );

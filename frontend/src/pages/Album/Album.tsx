@@ -1,12 +1,12 @@
 /* eslint-disable promise/catch-or-return */
 import { styled } from "../../stitches.config";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ImageResizeService } from "../../utils/ImageResizeService";
-import { UploadService } from "../../utils/UploadService";
+import { ImageResizeService } from "./services/ImageResizeService";
+import { UploadService } from "./services/UploadService";
 import { useParams } from "react-router";
 import Toolbar from "./components/Toolbar";
 import { client } from "../../cuple";
-import { ImageDownloadService } from "../../utils/ImageDownloadService";
+import { ImageQueryService } from "./services/ImageQueryService";
 import { Header } from "./components/Header";
 import { AlbumItem } from "./components/AlbumItem";
 import { Cloud } from "@assets/images/cloud";
@@ -14,14 +14,17 @@ import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { Metadata, useAlbumContext } from "./hooks/useAlbumContext";
 import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
 import { DragNdrop } from "./components/DragNdrop";
-import { Zip, ZipPassThrough } from "fflate";
+import { CryptoService } from "./services/CryptoService";
+import { DownloadService } from "./services/DownloadService";
 
 const imageResizeService = new ImageResizeService();
 const uploadService = new UploadService(imageResizeService);
-const imageDownloadService = new ImageDownloadService();
+const imageQueryService = new ImageQueryService(new CryptoService());
+const downloadService = new DownloadService(imageQueryService);
 
 export default function Album() {
-  const { metadata, key, refreshMetadata } = useAlbumContext();
+  const albumContext = useAlbumContext();
+  const { metadata, key, refreshMetadata, decodedValues } = albumContext;
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const { albumId } = useParams();
   const [title, setTitle] = useState("Title");
@@ -38,10 +41,6 @@ export default function Album() {
       const newThumbnails = metadata.files.filter(
         (file) => !oldThumbnailIds.has(file.fileId),
       );
-
-      imageDownloadService
-        .getAlbumName(metadata, key)
-        .then((albumName) => setTitle(albumName));
       getThumbnails(newThumbnails).then((thumb) => {
         // eslint-disable-next-line promise/always-return
         if (thumb !== undefined) {
@@ -50,6 +49,11 @@ export default function Album() {
       });
     }
   }, [metadata]);
+
+  useEffect(() => {
+    const name = decodedValues?.albumName;
+    setTitle(name ? name : "");
+  }, [decodedValues]);
 
   async function deleteImages() {
     if (albumId === undefined) return;
@@ -90,87 +94,7 @@ export default function Album() {
   }
 
   async function onDownloadSelected() {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const fileHandle = await root.getFileHandle(title, { create: true });
-      const writable = await fileHandle.createWritable();
-
-      let zipFinished = false;
-      const zip = new Zip(async (err, chunk, final) => {
-        if (err) {
-          console.error("ZIP error:", err);
-          return;
-        }
-
-        if (chunk) {
-          await writable.write(chunk);
-        }
-
-        if (final) {
-          console.log("ZIP successfully completed.");
-          await writable.close();
-          zipFinished = true;
-        }
-      });
-
-      let count = 0;
-      for (const imgID of selectedImages) {
-        if (!albumId || !metadata) continue;
-
-        const file = metadata.files.find((f) => f.fileId === imgID);
-        if (!file) continue;
-
-        const origin = await imageDownloadService.getImg(albumId, file, key, "original");
-        if (!origin) continue;
-
-        const blob = origin.blob;
-        const buffer = await blob.arrayBuffer();
-        const uint8 = new Uint8Array(buffer);
-
-        const passThrough = new ZipPassThrough(origin.fileName);
-
-        zip.add(passThrough);
-
-        const chunkSize = 64 * 1024;
-        let offset = 0;
-
-        while (offset < uint8.length) {
-          const end = Math.min(offset + chunkSize, uint8.length);
-          const chunk = uint8.slice(offset, end);
-          const isLastChunk = end === uint8.length;
-
-          passThrough.push(chunk, isLastChunk);
-          offset = end;
-          if (!isLastChunk) {
-            await new Promise((resolve) => setTimeout(resolve, 1));
-          }
-        }
-        ++count;
-        console.log(
-          "Progress...:" + Math.floor((count / selectedImages.length) * 100) + "%",
-        );
-      }
-
-      zip.end();
-
-      while (!zipFinished) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-
-      const file = await fileHandle.getFile();
-      const url = URL.createObjectURL(file);
-      const a = document.createElement("a");
-      a.href = url;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      return url;
-    } catch (e) {
-      console.error("Error creating ZIP:", e);
-      throw e;
-    }
+    if (metadata) await downloadService.download({ albumContext, selectedImages });
   }
 
   function onUncheckSelected() {
@@ -192,7 +116,7 @@ export default function Album() {
       id: string;
     }[] = [];
     for (const file of thumbnails) {
-      const result = await imageDownloadService.getImg(albumId, file, key, "thumbnail");
+      const result = await imageQueryService.getImg(albumId, file, key, "thumbnail");
       if (result === undefined) return;
 
       const thumb = { thumbnail: result.img, id: result.id };

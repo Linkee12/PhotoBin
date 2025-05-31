@@ -1,6 +1,6 @@
-import { client } from "../cuple";
-import { base64ToArrayBuffer, base64toUint8Array } from "./base64";
-import { importKey } from "./key";
+import { client } from "../../../cuple";
+import { base64ToArrayBuffer } from "../../../utils/base64";
+import { CryptoService } from "./CryptoService";
 
 type Metadata = {
   albumId: string;
@@ -15,7 +15,9 @@ type Metadata = {
   }[];
 };
 
-export class ImageDownloadService {
+export class ImageQueryService {
+  constructor(private _cryptoService: CryptoService) {}
+
   async getImg(
     albumId: string,
     file: Metadata["files"][number],
@@ -37,19 +39,14 @@ export class ImageDownloadService {
     }
     const iv = this._getIv(file, type);
     const combinedImg = this._combineChunks(parts);
-    const img = await this._decryptImage(combinedImg, key, iv);
+    const img = await this._cryptoService._decryptImage(combinedImg, key, iv);
     const blob = new Blob([img]);
-    const fileName = await this._decryptText(file.fileName.value, key, file.fileName.iv);
-    return { img: URL.createObjectURL(blob), id: file.fileId, fileName: fileName, blob };
-  }
-
-  async getAlbumName(metadata: Metadata, key: string) {
-    const decryptedName = this._decryptText(
-      metadata.albumName.value,
+    const fileName = await this._cryptoService._decryptText(
+      file.fileName.value,
       key,
-      metadata.albumName.iv,
+      file.fileName.iv,
     );
-    return decryptedName;
+    return { img: URL.createObjectURL(blob), id: file.fileId, fileName: fileName, blob };
   }
 
   private async _getPartsOfImage(
@@ -62,27 +59,6 @@ export class ImageDownloadService {
       query: { albumId: albumId, id: id, type: type, name: name },
     });
     if (response.result === "success") return response.file;
-  }
-
-  private async _decryptImage(cryptedImg: ArrayBuffer, key: string, base64Iv: string) {
-    const iv = base64toUint8Array(base64Iv);
-    return await window.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      await importKey(key),
-      cryptedImg,
-    );
-  }
-
-  private async _decryptText(text: string, key: string, base64Iv: string) {
-    const buffer = base64ToArrayBuffer(text);
-    const iv = base64toUint8Array(base64Iv);
-    const decoder = new TextDecoder();
-    const arraybuffer = await window.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv },
-      await importKey(key),
-      buffer,
-    );
-    return decoder.decode(arraybuffer);
   }
 
   private _combineChunks(chunks: ArrayBuffer[]): ArrayBuffer {

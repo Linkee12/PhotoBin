@@ -4,11 +4,12 @@ import Trash from "@assets/images/icons/trash.svg?react";
 import Exit from "@assets/images/icons/exit.svg?react";
 import Next from "@assets/images/icons/next.svg?react";
 import Prev from "@assets/images/icons/prev.svg?react";
-import { ImageDownloadService } from "../../../utils/ImageDownloadService";
+import { ImageQueryService } from "../services/ImageQueryService";
 import { useEffect, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
+import { CryptoService } from "../services/CryptoService";
 
-const imageDownloadService = new ImageDownloadService();
+const imageDownloadService = new ImageQueryService(new CryptoService());
 
 type ViewOriginalModalProps = {
   fileId: string;
