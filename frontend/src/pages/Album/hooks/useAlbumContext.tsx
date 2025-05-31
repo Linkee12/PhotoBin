@@ -42,8 +42,9 @@ export function useAlbumContext() {
   return albumContext;
 }
 
+const cryptoService = new CryptoService();
+
 export function AlbumContextProvider(props: { children: React.ReactNode }) {
-  const cryptoService = new CryptoService();
   const { albumId } = useParams();
   const key = decodeURIComponent(window.location.hash.slice(1));
   const [metadata, setMetadata] = useState<Metadata>();
@@ -57,7 +58,7 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
       },
     });
     if (response.result === "success") {
-      const name = await cryptoService._decryptText(
+      const name = await cryptoService.decryptText(
         response.metadata.albumName.value,
         key,
         response.metadata.albumName.iv,
@@ -68,7 +69,7 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
   };
   const refreshMetadata = () => {
     refreshMetadataAsync().catch((error) => {
-      console.error(error);
+      console.error("asdsad", error);
       setMetadata(() => {
         throw error;
       });
@@ -78,7 +79,6 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
   useEffect(() => {
     refreshMetadata();
   }, []);
-
   return (
     <AlbumContext.Provider
       value={{ refreshMetadata, key, metadata, decodedValues: { albumName: name } }}

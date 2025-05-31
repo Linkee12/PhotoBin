@@ -2,7 +2,7 @@ import { client } from "../../../cuple";
 import { Metadata } from "../hooks/useAlbumContext";
 import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../../utils/base64";
 import { ImageResizeService } from "./ImageResizeService";
-import { importKey } from "../../../utils/key";
+import { CryptoService } from "./CryptoService";
 
 const SIZE = { width: 300, height: 200 };
 const QUALITY = 0.3;
@@ -14,7 +14,10 @@ type UploadReturn =
   | undefined;
 
 export class UploadService {
-  constructor(private _imageResizeService: ImageResizeService) {}
+  constructor(
+    private _imageResizeService: ImageResizeService,
+    private _cryptoService: CryptoService,
+  ) {}
 
   async upload(
     file: File,
@@ -28,10 +31,16 @@ export class UploadService {
     const reduce = await this._imageResizeService.resize(file, {
       quality: QUALITY,
     });
-    const cryptedThumbnail = await this._encryptImage(await thumbnail.blob, props.key);
-    const cryptedOriginImage = await this._encryptImage(file, props.key);
-    const cryptedReducedImage = await this._encryptImage(await reduce.blob, props.key);
-    const cryptedFileName = await this._encrypString(file.name, props.key);
+    const cryptedThumbnail = await this._cryptoService.encryptImage(
+      await thumbnail.blob,
+      props.key,
+    );
+    const cryptedOriginImage = await this._cryptoService.encryptImage(file, props.key);
+    const cryptedReducedImage = await this._cryptoService.encryptImage(
+      await reduce.blob,
+      props.key,
+    );
+    const cryptedFileName = await this._cryptoService.encrypString(file.name, props.key);
 
     const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
     const slicedReducedeImg = this._getChunks(cryptedReducedImage.cryptedImg);
@@ -80,7 +89,7 @@ export class UploadService {
   }
 
   async saveName(albumId: string, name: string, key: string) {
-    const cryptedName = await this._encrypString(name, key);
+    const cryptedName = await this._cryptoService.encrypString(name, key);
     const iv = uint8ArrayToBase64(cryptedName.iv);
     const value = arrayBufferToBase64(cryptedName.encryptedText);
     client.editAlbumName.post({
@@ -97,27 +106,6 @@ export class UploadService {
     });
   }
 
-  private async _encryptImage(file: File | Blob, key: string) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const buffer = await file.arrayBuffer();
-    const cryptedImg = await window.crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      await importKey(key),
-      buffer,
-    );
-    return { cryptedImg, iv };
-  }
-  async _encrypString(text: string, key: string) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encoder = new TextEncoder();
-    const encodedText = encoder.encode(text);
-    const encryptedText = await window.crypto.subtle.encrypt(
-      { name: "AES-GCM", iv },
-      await importKey(key),
-      encodedText,
-    );
-    return { encryptedText, iv };
-  }
   async addAlbumName(albumId: string, albumName: { value: string; iv: string }) {
     const res = await client.editAlbumName.post({
       body: { albumId, albumName },

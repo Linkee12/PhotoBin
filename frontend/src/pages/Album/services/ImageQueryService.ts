@@ -39,9 +39,9 @@ export class ImageQueryService {
     }
     const iv = this._getIv(file, type);
     const combinedImg = this._combineChunks(parts);
-    const img = await this._cryptoService._decryptImage(combinedImg, key, iv);
+    const img = await this._cryptoService.decryptImage(combinedImg, key, iv);
     const blob = new Blob([img]);
-    const fileName = await this._cryptoService._decryptText(
+    const fileName = await this._cryptoService.decryptText(
       file.fileName.value,
       key,
       file.fileName.iv,

@@ -14,12 +14,13 @@ import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { Metadata, useAlbumContext } from "./hooks/useAlbumContext";
 import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
 import { DragNdrop } from "./components/DragNdrop";
-import { CryptoService } from "./services/CryptoService";
 import { DownloadService } from "./services/DownloadService";
+import { CryptoService } from "./services/CryptoService";
 
 const imageResizeService = new ImageResizeService();
-const uploadService = new UploadService(imageResizeService);
-const imageQueryService = new ImageQueryService(new CryptoService());
+const cryptoService = new CryptoService();
+const uploadService = new UploadService(imageResizeService, cryptoService);
+const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
 
 export default function Album() {
@@ -27,7 +28,7 @@ export default function Album() {
   const { metadata, key, refreshMetadata, decodedValues } = albumContext;
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const { albumId } = useParams();
-  const [title, setTitle] = useState("Title");
+  const [title, setTitle] = useState("");
   const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
   const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
@@ -37,6 +38,7 @@ export default function Album() {
 
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
+      setTitle(decodedValues.albumName);
       const oldThumbnailIds = new Set(thumbnails.map((thumb) => thumb.id));
       const newThumbnails = metadata.files.filter(
         (file) => !oldThumbnailIds.has(file.fileId),
@@ -50,45 +52,23 @@ export default function Album() {
     }
   }, [metadata]);
 
-  useEffect(() => {
-    const name = decodedValues?.albumName;
-    setTitle(name ? name : "");
-  }, [decodedValues]);
-
-  async function deleteImages() {
+  async function deleteImages(ids: string[]) {
     if (albumId === undefined) return;
     const responses = await client.deleteImages.delete({
       body: {
         albumId: albumId,
-        ids: selectedImages,
+        ids: ids,
       },
     });
     if (responses.result === "success") {
-      setThumbnails((prev) => prev.filter((img) => !selectedImages.includes(img.id)));
-      setSelectedImages((prev) =>
-        prev.filter((imgId) => !selectedImages.includes(imgId)),
-      );
+      setThumbnails((prev) => prev.filter((img) => !ids.includes(img.id)));
+      setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
     }
-    refreshMetadata();
-  }
-  async function deleteImage(id: string) {
-    if (albumId === undefined) return;
-    const responses = await client.deleteImages.delete({
-      body: {
-        albumId: albumId,
-        ids: [id],
-      },
-    });
-    if (responses.result === "success") {
-      setThumbnails((prev) => prev.filter((img) => img.id !== id));
-      setSelectedImages((prev) => prev.filter((imgId) => imgId !== id));
-    }
-
     refreshMetadata();
   }
 
   function onDeleteSelected() {
-    deleteImages().catch((reason) => {
+    deleteImages(selectedImages).catch((reason) => {
       console.error(reason);
     });
   }
@@ -100,6 +80,7 @@ export default function Album() {
   function onUncheckSelected() {
     setSelectedImages([]);
   }
+
   function setProgress(percentage: number) {
     const height = 480 * (percentage / 100);
     setMaskHeight(height);
@@ -167,7 +148,7 @@ export default function Album() {
           visible={showOrigin}
           onShowChange={setShowOrigin}
           onNext={(direction) => nextOriginImgId(direction)}
-          onDelete={() => deleteImage(fullscreenImage.fileId)}
+          onDelete={() => deleteImages([fullscreenImage.fileId])}
         />
       )}
       <Header
@@ -241,7 +222,7 @@ async function* upload(params: {
   albumTitle: string;
 }) {
   const arrLength = params.files.length;
-  const encryptedTitle = await uploadService._encrypString(params.albumTitle, params.key);
+  const encryptedTitle = await cryptoService.encrypString(params.albumTitle, params.key);
   const base64Title = {
     iv: uint8ArrayToBase64(encryptedTitle.iv),
     value: arrayBufferToBase64(encryptedTitle.encryptedText),
