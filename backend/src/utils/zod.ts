@@ -5,6 +5,10 @@ export const fileMetadataSchema = z.object({
     value: z.string(),
     iv: z.string(),
   }),
+  date: z.object({
+    value: z.string(),
+    iv: z.string(),
+  }),
   fileId: z.string(),
   originalIv: z.string(),
   reducedIv: z.string(),

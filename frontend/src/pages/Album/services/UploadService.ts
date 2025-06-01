@@ -41,6 +41,10 @@ export class UploadService {
       props.key,
     );
     const cryptedFileName = await this._cryptoService.encrypString(file.name, props.key);
+    const cryptedDate = await this._cryptoService.encrypString(
+      file.lastModified.toString(),
+      props.key,
+    );
 
     const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
     const slicedReducedeImg = this._getChunks(cryptedReducedImage.cryptedImg);
@@ -68,6 +72,10 @@ export class UploadService {
         fileName: {
           iv: uint8ArrayToBase64(cryptedFileName.iv),
           value: arrayBufferToBase64(cryptedFileName.encryptedText),
+        },
+        date: {
+          iv: uint8ArrayToBase64(cryptedDate.iv),
+          value: arrayBufferToBase64(cryptedDate.encryptedText),
         },
         thumbnail: thumbnail.url,
         fileId: uuid,

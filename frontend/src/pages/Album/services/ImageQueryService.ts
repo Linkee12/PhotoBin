@@ -7,6 +7,7 @@ type Metadata = {
   albumName: { value: string; iv: string };
   files: {
     fileName: { value: string; iv: string };
+    date: { value: string; iv: string };
     fileId: string;
     originalIv: string;
     reducedIv: string;

@@ -12,6 +12,10 @@ export type Metadata = {
       value: string;
       iv: string;
     };
+    date: {
+      value: string;
+      iv: string;
+    };
     fileId: string;
     originalIv: string;
     reducedIv: string;

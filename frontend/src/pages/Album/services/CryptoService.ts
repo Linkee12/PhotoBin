@@ -12,7 +12,6 @@ export class CryptoService {
   }
 
   async decryptText(text: string, key: string, base64Iv: string) {
-    console.log(text, key, base64Iv);
     if (text.length === 0) return "";
     const buffer = base64ToArrayBuffer(text);
     const iv = base64toUint8Array(base64Iv);
