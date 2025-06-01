@@ -23,6 +23,7 @@ export function Header(props: HeaderProps) {
       input.setSelectionRange(input.value.length, input.value.length);
     }
   }, [isEdit]);
+  const isPlaceholder = props.title.length === 0;
   return (
     <HeaderBG isEmptyAlbum={props.isEmptyAlbum}>
       <Container isEmptyAlbum={props.isEmptyAlbum}>
@@ -46,7 +47,9 @@ export function Header(props: HeaderProps) {
               }}
             />
           ) : (
-            <Text onClick={() => setIsEdit(true)}>{props.title}</Text>
+            <Text isPlaceholder={isPlaceholder} onClick={() => setIsEdit(true)}>
+              {props.title || "Album title"}
+            </Text>
           )}
         </TextContainer>
         <Tools>
@@ -105,7 +108,7 @@ const Tools = styled("div", {
 });
 const TextContainer = styled("div", {
   display: "flex",
-  width: "98%",
+  flex: 1,
   height: "2rem",
 });
 const HeaderBG = styled("div", {
@@ -130,6 +133,7 @@ const HeaderBG = styled("div", {
 const Container = styled("div", {
   width: "100%",
   display: "flex",
+  gap: "2rem",
   justifyContent: "space-between",
   maskImage: `url(${header})`,
   maskRepeat: "no-repeat",
@@ -162,4 +166,15 @@ const Icons = styled("svg", {
 const Text = styled("div", {
   fontSize: "2rem",
   height: "2rem",
+  flex: 1,
+  variants: {
+    isPlaceholder: {
+      true: {
+        opacity: 0.5,
+      },
+      false: {
+        opacity: 1,
+      },
+    },
+  },
 });

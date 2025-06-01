@@ -69,7 +69,7 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
   };
   const refreshMetadata = () => {
     refreshMetadataAsync().catch((error) => {
-      console.error("asdsad", error);
+      console.error(error);
       setMetadata(() => {
         throw error;
       });
