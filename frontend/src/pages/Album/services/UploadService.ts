@@ -3,6 +3,7 @@ import { Metadata } from "../hooks/useAlbumContext";
 import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../../utils/base64";
 import { ImageResizeService } from "./ImageResizeService";
 import { CryptoService } from "./CryptoService";
+import { formatDate } from "../../../utils/formatDate";
 
 const SIZE = { width: 300, height: 200 };
 const QUALITY = 0.3;
@@ -10,6 +11,7 @@ type UploadReturn =
   | {
       thumbnail: string;
       fileId: string;
+      date: string;
     }
   | undefined;
 
@@ -24,7 +26,7 @@ export class UploadService {
     props: { key: string; albumId: string },
   ): Promise<UploadReturn> {
     const uuid = crypto.randomUUID();
-
+    const date = formatDate(file.lastModified);
     const thumbnail = await this._imageResizeService.resize(file, {
       targetSize: SIZE,
     });
@@ -42,7 +44,7 @@ export class UploadService {
     );
     const cryptedFileName = await this._cryptoService.encrypString(file.name, props.key);
     const cryptedDate = await this._cryptoService.encrypString(
-      file.lastModified.toString(),
+      date.toString(),
       props.key,
     );
 
@@ -92,6 +94,7 @@ export class UploadService {
       return {
         thumbnail: thumbnail.url,
         fileId: uuid,
+        date: date,
       };
     }
   }

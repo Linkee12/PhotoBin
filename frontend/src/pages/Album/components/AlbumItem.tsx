@@ -1,6 +1,6 @@
-import { styled } from "../../../stitches.config";
 import Check from "@assets/images/icons/check.svg?react";
 import Zoom from "@assets/images/icons/zoom.svg?react";
+import { styled } from "../../../stitches.config";
 
 type AlbumItemProps = {
   imageSrc: string;
@@ -25,12 +25,14 @@ export function AlbumItem(props: AlbumItemProps) {
     </div>
   );
 }
+
 const Image = styled("img", {
   display: "block",
   borderRadius: "10px",
   width: "var(--width, 300px)",
   height: "var(--height, 200px)",
   transition: "width 0.2s, height 0.2s",
+
   variants: {
     isSelected: {
       true: { width: 280, height: 180 },

@@ -8,7 +8,6 @@ import Toolbar from "./components/Toolbar";
 import { client } from "../../cuple";
 import { ImageQueryService } from "./services/ImageQueryService";
 import { Header } from "./components/Header";
-import { AlbumItem } from "./components/AlbumItem";
 import { Cloud } from "@assets/images/cloud";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { Metadata, useAlbumContext } from "./hooks/useAlbumContext";
@@ -16,6 +15,9 @@ import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
 import { DragNdrop } from "./components/DragNdrop";
 import { DownloadService } from "./services/DownloadService";
 import { CryptoService } from "./services/CryptoService";
+import { AlbumItemContainer } from "./components/AlbumItemContainer";
+import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
+import header from "@assets/images/albumItemsBg.svg?no-inline";
 
 const imageResizeService = new ImageResizeService();
 const cryptoService = new CryptoService();
@@ -23,13 +25,21 @@ const uploadService = new UploadService(imageResizeService, cryptoService);
 const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
 
+type Thumbnails = {
+  date: string;
+  thumbnails: {
+    thumbnail: string;
+    id: string;
+  }[];
+}[];
+
 export default function Album() {
   const albumContext = useAlbumContext();
   const { metadata, key, refreshMetadata, decodedValues } = albumContext;
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const { albumId } = useParams();
   const [title, setTitle] = useState("");
-  const [thumbnails, setThumbnails] = useState<{ thumbnail: string; id: string }[]>([]);
+  const [thumbnails, setThumbnails] = useState<Thumbnails>([]);
   const [maskHeight, setMaskHeight] = useState(0);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showOrigin, setShowOrigin] = useState(false);
@@ -39,14 +49,20 @@ export default function Album() {
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
       setTitle(decodedValues.albumName);
-      const oldThumbnailIds = new Set(thumbnails.map((thumb) => thumb.id));
+      const oldThumbnailIds = new Set();
+      thumbnails.forEach((thumb) =>
+        thumb.thumbnails.forEach((t) => oldThumbnailIds.add(t.id)),
+      );
       const newThumbnails = metadata.files.filter(
         (file) => !oldThumbnailIds.has(file.fileId),
       );
+      console.log("new" + newThumbnails);
       getThumbnails(newThumbnails).then((thumb) => {
         // eslint-disable-next-line promise/always-return
         if (thumb !== undefined) {
-          setThumbnails((thumbnails) => [...thumbnails, ...thumb]);
+          const thumbs = groupThumbnailsByDate(thumb);
+          console.log(thumbs);
+          setThumbnails((prev) => [...prev, ...thumbs]);
         }
       });
     }
@@ -61,7 +77,12 @@ export default function Album() {
       },
     });
     if (responses.result === "success") {
-      setThumbnails((prev) => prev.filter((img) => !ids.includes(img.id)));
+      setThumbnails((prev) =>
+        prev.filter((img) => {
+          // eslint-disable-next-line sonarjs/no-nested-functions
+          img.thumbnails.map((element) => !ids.includes(element.id));
+        }),
+      );
       setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
     }
     refreshMetadata();
@@ -95,12 +116,12 @@ export default function Album() {
     let thumbArr: {
       thumbnail: string;
       id: string;
+      date: string;
     }[] = [];
     for (const file of thumbnails) {
       const result = await imageQueryService.getImg(albumId, file, key, "thumbnail");
       if (result === undefined) return;
-
-      const thumb = { thumbnail: result.img, id: result.id };
+      const thumb = { thumbnail: result.img, id: result.id, date: result.date };
       thumbArr = [...thumbArr, thumb];
     }
     return thumbArr;
@@ -113,25 +134,41 @@ export default function Album() {
 
     for await (const result of results) {
       setProgress(result.progress);
-      setThumbnails((thumbnails) => [...thumbnails, result.thumbnail]);
+      setThumbnails((thumbnails) => {
+        const date = result.thumbnail.date;
+        let group = thumbnails.find((g) => g.date === date);
+
+        if (!group) {
+          group = { date, thumbnails: [] };
+          thumbnails.push(group);
+        }
+
+        group.thumbnails.push({
+          id: result.thumbnail.id,
+          thumbnail: result.thumbnail.thumbnail,
+        });
+        return thumbnails;
+      });
+
       refreshMetadata();
     }
     setIsUploading(false);
   }
 
   function nextOriginImgId(direction: number) {
-    const currentIdx = thumbnails.findIndex(
-      (thumbnail) => thumbnail.id === fullscreenImage?.fileId,
-    );
+    const ids: string[] = [];
+    thumbnails.forEach((group) => group.thumbnails.forEach((i) => ids.push(i.id)));
+    const currentIdx = ids.findIndex((id) => id === fullscreenImage?.fileId);
+
     let nextIdx;
-    if (currentIdx + direction > thumbnails.length - 1) {
+    if (currentIdx + direction > ids.length - 1) {
       nextIdx = 0;
     } else if (currentIdx + direction < 0) {
-      nextIdx = thumbnails.length - 1;
+      nextIdx = ids.length - 1;
     } else {
       nextIdx = currentIdx + direction;
     }
-    setFullscreenImage({ fileId: thumbnails[nextIdx].id });
+    setFullscreenImage({ fileId: ids[nextIdx] });
   }
 
   function saveAlbumName() {
@@ -141,7 +178,7 @@ export default function Album() {
   }
 
   return (
-    <Container>
+    <Container isEmptyAlbum={thumbnails.length === 0}>
       {fullscreenImage && (
         <ViewOriginalModal
           fileId={fullscreenImage.fileId}
@@ -157,7 +194,11 @@ export default function Album() {
         onChangeTitle={setTitle}
         onSaveName={saveAlbumName}
       />
+
       <Content bgColor={showUploader}>
+        <ContentHeaderBg show={showUploader}>
+          <ContentHeader />
+        </ContentHeaderBg>
         <DragNdrop
           onDroppedFiles={(files) => {
             if (files != null) {
@@ -167,17 +208,24 @@ export default function Album() {
           }}
         />
         {thumbnails != undefined &&
-          Array.from(thumbs).map((image) => (
-            <AlbumItem
-              key={image.id}
-              imageSrc={image.thumbnail}
-              isSelected={selectedImages.includes(image.id)}
-              onSelect={() => setSelectedImages([...selectedImages, image.id])}
-              onDeselect={() =>
-                setSelectedImages(selectedImages.filter((id) => id !== image.id))
-              }
-              onOpen={() => {
-                setFullscreenImage({ fileId: image.id });
+          thumbs.map((group, i) => (
+            <AlbumItemContainer
+              key={i}
+              group={group}
+              index={i}
+              isUploading={isUploading}
+              selectedImages={selectedImages}
+              isSelected={(id) => selectedImages.includes(id)}
+              onSelect={(id: string[]) => setSelectedImages([...selectedImages, ...id])}
+              onDeSelect={(id: string[]) => {
+                if (id) {
+                  setSelectedImages(
+                    selectedImages.filter((imgId) => !id.includes(imgId)),
+                  );
+                }
+              }}
+              onOpen={(id) => {
+                setFullscreenImage({ fileId: id });
                 setShowOrigin(true);
               }}
             />
@@ -238,7 +286,11 @@ async function* upload(params: {
 
     yield {
       progress: (i / arrLength) * 100,
-      thumbnail: { thumbnail: uploadData.thumbnail, id: uploadData.fileId },
+      thumbnail: {
+        thumbnail: uploadData.thumbnail,
+        id: uploadData.fileId,
+        date: uploadData.date,
+      },
     };
   }
   await uploadService.addAlbumName(params.metadata.albumId, base64Title);
@@ -251,17 +303,26 @@ const Container = styled("div", {
   fontFamily: "Open Sans",
   display: "flex",
   flexDirection: "column",
+  variants: {
+    isEmptyAlbum: {
+      true: {
+        backgroundColor: "rgba(51, 51, 51)",
+      },
+      false: {
+        backgroundColor: "#181818",
+      },
+    },
+  },
 });
 
 const Content = styled("div", {
   display: "flex",
-  gap: "10px",
-  paddingTop: "2rem",
   maxWidth: "100%",
+  flexDirection: "column",
+  alignItems: "center",
   flex: 1,
   alignContent: "flex-start",
   flexWrap: "wrap",
-  justifyContent: "center",
   transition: "background-color 0.3s",
   variants: {
     bgColor: {
@@ -269,8 +330,43 @@ const Content = styled("div", {
         backgroundColor: "#181818",
       },
       false: {
-        backgroundColor: "#333333",
+        backgroundColor: "rgba(51, 51, 51)",
       },
+    },
+  },
+});
+
+const ContentHeader = styled("div", {
+  display: "flex",
+  width: "100%",
+  maxHeight: "5rem",
+  flex: 1,
+  maskImage: `url(${header})`,
+  maskRepeat: "no-repeat",
+  maskSize: "100% 100%",
+  maskPosition: "center",
+  backgroundColor: "#181818",
+  variants: {
+    bg: {
+      true: {
+        backgroundColor: "#181818",
+      },
+      false: {},
+    },
+  },
+});
+const ContentHeaderBg = styled("div", {
+  display: "flex",
+  width: "100%",
+  maxHeight: "5rem",
+  flex: 1,
+  backgroundColor: "#333333",
+  variants: {
+    show: {
+      true: {
+        display: "flex",
+      },
+      false: { display: "none" },
     },
   },
 });

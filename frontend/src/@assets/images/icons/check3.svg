@@ -2,9 +2,9 @@
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
-   width="7.0098996mm"
-   height="7.0099082mm"
-   viewBox="0 0 7.0098996 7.0099082"
+   width="5.0047641mm"
+   height="5.0047641mm"
+   viewBox="0 0 5.0047641 5.0047641"
    version="1.1"
    fill="currentcolor"
    id="svg1"
@@ -15,33 +15,10 @@
     <filter
        style="color-interpolation-filters:sRGB"
        id="filter44"
-       x="-0.20032259"
-       y="-0.20032259"
-       width="1.4006452"
-       height="1.4006452">
-      <feFlood
-         result="flood"
-         in="SourceGraphic"
-         flood-opacity="1.000000"
-         flood-color="rgb(0,0,0)"
-         id="feFlood43" />
-      <feGaussianBlur
-         result="blur"
-         in="SourceGraphic"
-         stdDeviation="41.400002"
-         id="feGaussianBlur43" />
-      <feOffset
-         result="offset"
-         in="blur"
-         dx="0.000000"
-         dy="0.000000"
-         id="feOffset43" />
-      <feComposite
-         result="comp1"
-         operator="in"
-         in="flood"
-         in2="offset"
-         id="feComposite43" />
+       x="0"
+       y="0"
+       width="1"
+       height="1">
       <feComposite
          result="comp2"
          operator="over"
@@ -52,7 +29,7 @@
   </defs>
   <g
      id="layer1"
-     transform="translate(-103.59059,-130.57809)">
+     transform="translate(-104.59315,-131.58066)">
     <g
        id="use1-49"
        style="fill:#f9f9f9;stroke:none;filter:url(#filter44)"

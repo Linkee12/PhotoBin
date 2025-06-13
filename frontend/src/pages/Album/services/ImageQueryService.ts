@@ -41,13 +41,24 @@ export class ImageQueryService {
     const iv = this._getIv(file, type);
     const combinedImg = this._combineChunks(parts);
     const img = await this._cryptoService.decryptImage(combinedImg, key, iv);
+    const date = await this._cryptoService.decryptText(
+      file.date.value,
+      key,
+      file.date.iv,
+    );
     const blob = new Blob([img]);
     const fileName = await this._cryptoService.decryptText(
       file.fileName.value,
       key,
       file.fileName.iv,
     );
-    return { img: URL.createObjectURL(blob), id: file.fileId, fileName: fileName, blob };
+    return {
+      img: URL.createObjectURL(blob),
+      id: file.fileId,
+      fileName: fileName,
+      blob,
+      date,
+    };
   }
 
   private async _getPartsOfImage(

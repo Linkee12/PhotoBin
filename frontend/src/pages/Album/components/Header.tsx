@@ -1,4 +1,3 @@
-import header from "@assets/images/header.svg?no-inline";
 import Edit from "@assets/images/icons/edit.svg?react";
 import Link from "@assets/images/icons/link.svg?react";
 import Ok from "@assets/images/icons/ok.svg?react";
@@ -25,47 +24,45 @@ export function Header(props: HeaderProps) {
   }, [isEdit]);
   const isPlaceholder = props.title.length === 0;
   return (
-    <HeaderBG isEmptyAlbum={props.isEmptyAlbum}>
-      <Container isEmptyAlbum={props.isEmptyAlbum}>
-        <TextContainer>
-          {isEdit ? (
-            <Title
-              value={props.title}
-              ref={inputRef}
-              onChange={(e) => props.onChangeTitle(e.target.value)}
-              autoCapitalize="sentences"
-              onFocus={() => setIsEdit(true)}
-              onKeyDown={(event) => {
-                if (event.code === "Enter") {
-                  setIsEdit(false);
-                  props.onSaveName();
-                }
-              }}
-              onBlur={() => {
+    <Container isEmptyAlbum={props.isEmptyAlbum}>
+      <TextContainer>
+        {isEdit ? (
+          <Title
+            value={props.title}
+            ref={inputRef}
+            onChange={(e) => props.onChangeTitle(e.target.value)}
+            autoCapitalize="sentences"
+            onFocus={() => setIsEdit(true)}
+            onKeyDown={(event) => {
+              if (event.code === "Enter") {
                 setIsEdit(false);
                 props.onSaveName();
-              }}
-            />
-          ) : (
-            <Text isPlaceholder={isPlaceholder} onClick={() => setIsEdit(true)}>
-              {props.title || "Album title"}
-            </Text>
-          )}
-        </TextContainer>
-        <Tools>
-          <Button
-            onClick={() => {
-              setIsEdit(true);
+              }
             }}
-          >
-            <Icons as={isEdit ? Ok : Edit} />
-          </Button>
-          <Button onClick={() => console.log("asd")}>
-            <Icons as={Link} />
-          </Button>
-        </Tools>
-      </Container>
-    </HeaderBG>
+            onBlur={() => {
+              setIsEdit(false);
+              props.onSaveName();
+            }}
+          />
+        ) : (
+          <Text isPlaceholder={isPlaceholder} onClick={() => setIsEdit(true)}>
+            {props.title || "Album title"}
+          </Text>
+        )}
+      </TextContainer>
+      <Tools>
+        <Button
+          onClick={() => {
+            setIsEdit(true);
+          }}
+        >
+          <Icons as={isEdit ? Ok : Edit} />
+        </Button>
+        <Button onClick={() => console.log("asd")}>
+          <Icons as={Link} />
+        </Button>
+      </Tools>
+    </Container>
   );
 }
 const Title = styled("textarea", {
@@ -75,7 +72,7 @@ const Title = styled("textarea", {
   background: "none",
   overflow: "hidden",
   resize: "none",
-  fontSize: "2rem",
+  fontSize: "1.71rem",
   color: "#fff",
   width: "100%",
   "&:focus": { outline: "none" },
@@ -111,34 +108,12 @@ const TextContainer = styled("div", {
   flex: 1,
   height: "2rem",
 });
-const HeaderBG = styled("div", {
-  width: "100%",
-  maxHeight: "25vh",
-  minHeight: "25vh",
-  flex: 1,
-  display: "flex",
-  transition: "background-color 0.3s",
-  variants: {
-    isEmptyAlbum: {
-      true: {
-        backgroundColor: "#181818",
-      },
-      false: {
-        backgroundColor: "#333333",
-      },
-    },
-  },
-});
 
 const Container = styled("div", {
   width: "100%",
   display: "flex",
   gap: "2rem",
   justifyContent: "space-between",
-  maskImage: `url(${header})`,
-  maskRepeat: "no-repeat",
-  maskSize: "100% 100%",
-  maskPosition: "center",
   backgroundSize: "100% 100%",
   padding: "2rem",
   boxSizing: "border-box",
