@@ -1,8 +1,8 @@
-import { createStitches } from "@stitches/react";
 import { AlbumItem } from "./AlbumItem";
 import header from "@assets/images/albumItemsBg.svg?no-inline";
 import Check2 from "@assets/images/icons/check2.svg?react";
 import Check3 from "@assets/images/icons/check3.svg?react";
+import { styled } from "../../../stitches.config";
 
 type AlbumItemContainerProps = {
   group: { date: string; thumbnails: { thumbnail: string; id: string }[] };
@@ -21,10 +21,13 @@ export function AlbumItemContainer(props: AlbumItemContainerProps) {
   );
 
   return (
-    <AlbumBgContainer bg={props.index === 0 ? "first" : props.index % 2 === 1}>
-      <AlbumBg bg={props.index % 2 === 0}>
-        <HeaderContainer bg={props.index === 0 ? "first" : props.index % 2 === 1}>
-          <Header bg={props.index % 2 === 1}>
+    <AlbumBgContainer bg={props.index % 2 === 0} isUploading={props.isUploading}>
+      <AlbumBg bg={props.index % 2 === 0} isUploading={props.isUploading}>
+        <HeaderContainer
+          bg={props.index === 0 ? "first" : props.index % 2 === 0}
+          isUploading={props.isUploading}
+        >
+          <Header bg={props.index % 2 === 0} isUploading={props.isUploading}>
             <ShowDate>{props.group.date}</ShowDate>
             <SelectAll
               onClick={() => {
@@ -57,12 +60,46 @@ export function AlbumItemContainer(props: AlbumItemContainerProps) {
     </AlbumBgContainer>
   );
 }
-export const { styled, css } = createStitches({
-  media: {
-    portrait: "(orientation: portrait)",
-    landscape: "(orientation: landscape)",
+const BG = [
+  {
+    bg: "true",
+    isUploading: "false",
+    css: {
+      backgroundColor: "#333333",
+    },
   },
-});
+  {
+    bg: "false",
+    isUploading: "false",
+    css: {
+      backgroundColor: "#666666",
+    },
+  },
+  {
+    bg: "true",
+    isUploading: "true",
+    css: {
+      backgroundColor: "#181818",
+    },
+  },
+  {
+    bg: "false",
+    isUploading: "true",
+    css: {
+      backgroundColor: "#333333",
+    },
+  },
+];
+const BGVARIANTS = {
+  bg: {
+    true: {},
+    false: {},
+  },
+  isUploading: {
+    true: {},
+    false: {},
+  },
+};
 const ShowDate = styled("div", {
   fontSize: "1.42rem",
   color: "#fff",
@@ -79,59 +116,40 @@ const AlbumBgContainer = styled("div", {
   display: "flex",
   width: "100%",
   flex: 1,
-  variants: {
-    bg: {
-      true: {
-        backgroundColor: "#333333",
-      },
-      false: {
-        backgroundColor: "#666666",
-      },
-      first: {
-        backgroundColor: "#181818",
-      },
-    },
-  },
+  variants: BGVARIANTS,
+  compoundVariants: BG,
 });
 const Images = styled("div", {
   display: "flex",
   gap: "10px",
   maxWidth: "100%",
   flex: 1,
+  margin: "1rem 1.28rem 1.28rem 1.28rem",
   justifyContent: "center",
   "@portrait": {
-    alignItems: "center",
     justifyContent: "center",
   },
   "@landscape": {
-    alignContent: "flex-start",
+    justifyContent: "flex-start",
   },
   flexWrap: "wrap",
 });
+
 const AlbumBg = styled("div", {
   width: "100%",
   display: "flex",
-  padding: "0rem 0rem 1.28rem 1.28rem",
-  gap: "2rem",
   justifyContent: "space-between",
   boxSizing: "border-box",
   transition: "background-color 0.3s",
   flexDirection: "column",
-  variants: {
-    bg: {
-      true: {
-        backgroundColor: "#333333",
-      },
-      false: {
-        backgroundColor: "#666666",
-      },
-    },
-  },
+  variants: BGVARIANTS,
+  compoundVariants: BG,
 });
 const Header = styled("div", {
   width: "100%",
   display: "flex",
   height: "3.3rem",
+  paddingLeft: "1.28rem",
   alignItems: "center",
   maskImage: `url(${header})`,
   maskRepeat: "no-repeat",
@@ -139,19 +157,9 @@ const Header = styled("div", {
   maskPosition: "center",
   backgroundSize: "100% 100%",
   transition: "background-color 0.3s",
-  variants: {
-    bg: {
-      true: {
-        backgroundColor: "#666666",
-      },
-      false: {
-        backgroundColor: "#333333",
-      },
-      first: {
-        backgroundColor: "#181818",
-      },
-    },
-  },
+  variants: BGVARIANTS,
+
+  compoundVariants: BG,
 });
 const HeaderContainer = styled("div", {
   width: "100%",
@@ -163,17 +171,53 @@ const HeaderContainer = styled("div", {
   transition: "background-color 0.3s",
   variants: {
     bg: {
-      true: {
-        backgroundColor: "#333333",
-      },
-      false: {
+      true: {},
+      false: {},
+      first: {},
+    },
+    isUploading: {
+      true: {},
+      false: {},
+    },
+  },
+
+  compoundVariants: [
+    {
+      bg: "true",
+      isUploading: "false",
+      css: {
         backgroundColor: "#666666",
       },
-      first: {
+    },
+    {
+      bg: "false",
+      isUploading: "false",
+      css: {
+        backgroundColor: "#333333",
+      },
+    },
+    {
+      bg: "first",
+      isUploading: "false",
+      css: {
         backgroundColor: "#181818",
       },
     },
-  },
+    {
+      bg: "true",
+      isUploading: "true",
+      css: {
+        backgroundColor: "#333333",
+      },
+    },
+    {
+      bg: "false",
+      isUploading: "true",
+      css: {
+        backgroundColor: "#181818",
+      },
+    },
+  ],
 });
 
 const CheckIcon = styled("div", {

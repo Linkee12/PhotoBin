@@ -32,18 +32,41 @@ const Image = styled("img", {
   width: "var(--width, 300px)",
   height: "var(--height, 200px)",
   transition: "width 0.2s, height 0.2s",
-
   variants: {
     isSelected: {
-      true: { width: 280, height: 180 },
-      false: { width: 300, height: 200 },
+      true: {
+        "@portrait": {
+          width: "calc(100% - 20px)",
+          height: "calc(100% - 20px)",
+        },
+        "@landscape": {
+          width: 280,
+          height: 180,
+        },
+      },
+      false: {
+        "@portrait": {
+          width: "100%",
+          height: "100%",
+        },
+        "@landscape": {
+          width: 300,
+          height: 200,
+        },
+      },
     },
   },
 });
 
 const Preview = styled("div", {
-  width: "300px",
-  height: "200px",
+  "@portrait": {
+    width: "90vw",
+    height: "100%",
+  },
+  "@landscape": {
+    width: "300px",
+    height: "200px",
+  },
   borderRadius: "10px",
   backgroundColor: "#232323",
   boxSizing: "border-box",
