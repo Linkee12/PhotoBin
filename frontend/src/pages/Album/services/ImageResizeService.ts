@@ -9,6 +9,40 @@ export class ImageResizeService {
 
     return new ResizedImage(canvas, options.quality ?? 0.9);
   }
+  async getVideoThumbnail(
+    file: File,
+    options: { quality?: number; targetSize?: { width: number; height: number } } = {},
+  ): Promise<ResizedImage> {
+    const imageObj = await this._loadImage(file);
+    const canvas = await this._getCanvasFromVideo(file, options.targetSize ?? imageObj);
+    URL.revokeObjectURL(imageObj.src);
+
+    return new ResizedImage(canvas, options.quality ?? 0.9);
+  }
+
+  private _getCanvasFromVideo(
+    file: File,
+    target: { width: number; height: number },
+  ): Promise<HTMLCanvasElement> {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.src = URL.createObjectURL(file);
+      video.crossOrigin = "anonymous";
+      video.muted = true;
+      video.currentTime = 0.3;
+
+      video.addEventListener("loadeddata", () => {
+        const { ctx, canvas } = this._initCanvas(target);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        resolve(canvas);
+      });
+
+      video.addEventListener("error", (e) => {
+        reject(new Error("Error: " + e));
+      });
+    });
+  }
+
   private _getCanvasFromImage(
     imageObj: HTMLImageElement,
     target: { width: number; height: number },

@@ -7,13 +7,23 @@ import { formatDate } from "../../../utils/formatDate";
 
 const SIZE = { width: 300, height: 200 };
 const QUALITY = 0.3;
+const VIDEOTYPES = ["video/mp4", "video/webm", "video/ogg"];
+const IMAGETYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+];
+
 type UploadReturn =
   | {
       thumbnail: string;
       fileId: string;
       date: string;
     }
-  | undefined;
+  | undefined
+  | null;
 
 export class UploadService {
   constructor(
@@ -25,77 +35,88 @@ export class UploadService {
     file: File,
     props: { key: string; albumId: string },
   ): Promise<UploadReturn> {
-    const uuid = crypto.randomUUID();
-    const date = formatDate(file.lastModified);
-    const thumbnail = await this._imageResizeService.resize(file, {
-      targetSize: SIZE,
-    });
-    const reduce = await this._imageResizeService.resize(file, {
-      quality: QUALITY,
-    });
-    const cryptedThumbnail = await this._cryptoService.encryptImage(
-      await thumbnail.blob,
-      props.key,
-    );
-    const cryptedOriginImage = await this._cryptoService.encryptImage(file, props.key);
-    const cryptedReducedImage = await this._cryptoService.encryptImage(
-      await reduce.blob,
-      props.key,
-    );
-    const cryptedFileName = await this._cryptoService.encrypString(file.name, props.key);
-    const cryptedDate = await this._cryptoService.encrypString(
-      date.toString(),
-      props.key,
-    );
+    if (VIDEOTYPES.includes(file.type)) {
+      return null;
+    }
+    if (IMAGETYPES.includes(file.type)) {
+      const uuid = crypto.randomUUID();
+      const date = formatDate(file.lastModified);
+      const thumbnail = await this._imageResizeService.resize(file, {
+        targetSize: SIZE,
+      });
+      const reduce = await this._imageResizeService.resize(file, {
+        quality: QUALITY,
+      });
+      const cryptedThumbnail = await this._cryptoService.encryptImage(
+        await thumbnail.blob,
+        props.key,
+      );
+      const cryptedOriginImage = await this._cryptoService.encryptImage(file, props.key);
+      const cryptedReducedImage = await this._cryptoService.encryptImage(
+        await reduce.blob,
+        props.key,
+      );
+      const cryptedFileName = await this._cryptoService.encrypString(
+        file.name,
+        props.key,
+      );
+      const cryptedDate = await this._cryptoService.encrypString(
+        date.toString(),
+        props.key,
+      );
 
-    const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
-    const slicedReducedeImg = this._getChunks(cryptedReducedImage.cryptedImg);
+      const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
+      const slicedReducedeImg = this._getChunks(cryptedReducedImage.cryptedImg);
 
-    const originRes = await this._sendFile(
-      slicedOriginImg,
-      props.albumId,
-      uuid,
-      "original",
-    );
-    const reducedRes = await this._sendFile(
-      slicedReducedeImg,
-      props.albumId,
-      uuid,
-      "reduced",
-    );
-    const thumbRes = await this._sendFile(
-      [cryptedThumbnail.cryptedImg],
-      props.albumId,
-      uuid,
-      "thumbnail",
-    );
-    if (originRes.isSuccess || reducedRes.isSuccess || thumbRes.isSuccess) {
-      const fileMetadata = {
-        fileName: {
-          iv: uint8ArrayToBase64(cryptedFileName.iv),
-          value: arrayBufferToBase64(cryptedFileName.encryptedText),
-        },
-        date: {
-          iv: uint8ArrayToBase64(cryptedDate.iv),
-          value: arrayBufferToBase64(cryptedDate.encryptedText),
-        },
-        thumbnail: thumbnail.url,
-        fileId: uuid,
-        originalIv: uint8ArrayToBase64(cryptedOriginImage.iv),
-        thumbnailIv: uint8ArrayToBase64(cryptedThumbnail.iv),
-        reducedIv: uint8ArrayToBase64(cryptedReducedImage.iv),
-        chunks: {
-          reduced: slicedReducedeImg.length,
-          original: slicedOriginImg.length,
-          thumbnail: 1,
-        },
-      };
-      await this._finalize(props.albumId, fileMetadata);
-      return {
-        thumbnail: thumbnail.url,
-        fileId: uuid,
-        date: date,
-      };
+      const originRes = await this._sendFile(
+        slicedOriginImg,
+        props.albumId,
+        uuid,
+        "original",
+      );
+      const reducedRes = await this._sendFile(
+        slicedReducedeImg,
+        props.albumId,
+        uuid,
+        "reduced",
+      );
+      const thumbRes = await this._sendFile(
+        [cryptedThumbnail.cryptedImg],
+        props.albumId,
+        uuid,
+        "thumbnail",
+      );
+      if (originRes.isSuccess || reducedRes.isSuccess || thumbRes.isSuccess) {
+        const fileMetadata = {
+          fileName: {
+            iv: uint8ArrayToBase64(cryptedFileName.iv),
+            value: arrayBufferToBase64(cryptedFileName.encryptedText),
+          },
+          date: {
+            iv: uint8ArrayToBase64(cryptedDate.iv),
+            value: arrayBufferToBase64(cryptedDate.encryptedText),
+          },
+          fileId: uuid,
+          original: {
+            iv: uint8ArrayToBase64(cryptedOriginImage.iv),
+            chunkCount: slicedOriginImg.length,
+          },
+          reduced: {
+            iv: uint8ArrayToBase64(cryptedReducedImage.iv),
+            chunkCount: slicedOriginImg.length,
+          },
+          thumbnail: {
+            iv: uint8ArrayToBase64(cryptedThumbnail.iv),
+            chunkCount: 1,
+          },
+        };
+        await this._finalize(props.albumId, fileMetadata);
+        return {
+          thumbnail: thumbnail.url,
+          fileId: uuid,
+          date: date,
+        };
+      }
     }
   }
 
@@ -123,15 +144,15 @@ export class UploadService {
     });
     if (res.result !== "success") return { isSuccess: false };
   }
-  private _getChunks(img: ArrayBuffer) {
+  private _getChunks(file: ArrayBuffer) {
     const SIZE = 1000000; //byte
-    const partsOfImg = [];
+    const partsOfFile = [];
 
-    for (let i = 0; i < img.byteLength; i += SIZE) {
-      const part = img.slice(i, i + SIZE);
-      partsOfImg.push(part);
+    for (let i = 0; i < file.byteLength; i += SIZE) {
+      const part = file.slice(i, i + SIZE);
+      partsOfFile.push(part);
     }
-    return partsOfImg;
+    return partsOfFile;
   }
 
   private async _sendFile(

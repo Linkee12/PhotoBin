@@ -13,10 +13,10 @@ export type Metadata = {
       iv: string;
     };
     fileId: string;
-    originalIv: string;
-    reducedIv: string;
-    thumbnailIv: string;
-    chunks: { reduced: number; original: number; thumbnail: number };
+    original: { iv: string; chunkCount: number };
+    reduced: { iv: string; chunkCount: number };
+    thumbnail: { iv: string; chunkCount: number };
+    originalVideo?: { slices: { iv: string; endTimeMs: number }[] } | undefined;
   }[];
 };
 

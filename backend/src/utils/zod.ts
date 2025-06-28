@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const fileMetadataSchema = z.object({
+  fileId: z.string(),
   fileName: z.object({
     value: z.string(),
     iv: z.string(),
@@ -9,15 +10,28 @@ export const fileMetadataSchema = z.object({
     value: z.string(),
     iv: z.string(),
   }),
-  fileId: z.string(),
-  originalIv: z.string(),
-  reducedIv: z.string(),
-  thumbnailIv: z.string(),
-  chunks: z.object({
-    reduced: z.number(),
-    original: z.number(),
-    thumbnail: z.number(),
+  original: z.object({
+    iv: z.string(),
+    chunkCount: z.number(),
   }),
+  reduced: z.object({
+    iv: z.string(),
+    chunkCount: z.number(),
+  }),
+  thumbnail: z.object({
+    iv: z.string(),
+    chunkCount: z.number(),
+  }),
+  originalVideo: z
+    .object({
+      slices: z.array(
+        z.object({
+          iv: z.string(),
+          endTimeMs: z.number(),
+        }),
+      ),
+    })
+    .optional(),
 });
 
 export const metadataSchema = z.object({

@@ -1,20 +1,7 @@
 import { client } from "../../../cuple";
 import { base64ToArrayBuffer } from "../../../utils/base64";
+import { Metadata } from "../hooks/useAlbumContext";
 import { CryptoService } from "./CryptoService";
-
-type Metadata = {
-  albumId: string;
-  albumName: { value: string; iv: string };
-  files: {
-    fileName: { value: string; iv: string };
-    date: { value: string; iv: string };
-    fileId: string;
-    originalIv: string;
-    reducedIv: string;
-    thumbnailIv: string;
-    chunks: { reduced: number; original: number; thumbnail: number };
-  }[];
-};
 
 export class ImageQueryService {
   constructor(private _cryptoService: CryptoService) {}
@@ -26,7 +13,7 @@ export class ImageQueryService {
     type: "original" | "reduced" | "thumbnail",
   ) {
     let parts: ArrayBuffer[] = [];
-    for (let i = 0; i < file.chunks[type]; i++) {
+    for (let i = 0; i < file[type].chunkCount; i++) {
       const base64Part = await this._getPartsOfImage(
         albumId,
         file.fileId,
@@ -38,7 +25,7 @@ export class ImageQueryService {
         parts = [...parts, cryptedArraxBufferPart];
       }
     }
-    const iv = this._getIv(file, type);
+    const iv = file[type].iv;
     const combinedImg = this._combineChunks(parts);
     const img = await this._cryptoService.decryptImage(combinedImg, key, iv);
     const date = await this._cryptoService.decryptText(
@@ -84,19 +71,5 @@ export class ImageQueryService {
     }
 
     return combined.buffer;
-  }
-
-  private _getIv(
-    file: Metadata["files"][number],
-    type: "original" | "reduced" | "thumbnail",
-  ) {
-    switch (type) {
-      case "original":
-        return file.originalIv;
-      case "reduced":
-        return file.reducedIv;
-      case "thumbnail":
-        return file.thumbnailIv;
-    }
   }
 }

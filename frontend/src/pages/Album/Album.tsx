@@ -45,7 +45,6 @@ export default function Album() {
   const [showOrigin, setShowOrigin] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const showUploader = thumbnails.length === 0 || isUploading;
-
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
       setTitle(decodedValues.albumName);
@@ -56,12 +55,10 @@ export default function Album() {
       const newThumbnails = metadata.files.filter(
         (file) => !oldThumbnailIds.has(file.fileId),
       );
-      console.log("new" + newThumbnails);
       getThumbnails(newThumbnails).then((thumb) => {
         // eslint-disable-next-line promise/always-return
         if (thumb !== undefined) {
           const thumbs = groupThumbnailsByDate(thumb);
-          console.log(thumbs);
           setThumbnails((prev) => [...prev, ...thumbs]);
         }
       });
@@ -154,7 +151,6 @@ export default function Album() {
     }
     setIsUploading(false);
   }
-
   function nextOriginImgId(direction: number) {
     const ids: string[] = [];
     thumbnails.forEach((group) => group.thumbnails.forEach((i) => ids.push(i.id)));
@@ -247,8 +243,7 @@ export default function Album() {
           multiple
           onChange={(e) => {
             if (e.target.files != null) {
-              const fileArr = Array.from(e.target.files);
-              uploadImages(fileArr).catch((e) => console.error(e));
+              uploadImages(Array.from(e.target.files)).catch((e) => console.error(e));
             }
           }}
         ></input>
@@ -283,15 +278,18 @@ async function* upload(params: {
     if (uploadData === undefined) {
       throw new Error("Upload error");
     }
-
-    yield {
-      progress: (i / arrLength) * 100,
-      thumbnail: {
-        thumbnail: uploadData.thumbnail,
-        id: uploadData.fileId,
-        date: uploadData.date,
-      },
-    };
+    if (uploadData !== null) {
+      yield {
+        progress: (i / arrLength) * 100,
+        thumbnail: {
+          thumbnail: uploadData.thumbnail,
+          id: uploadData.fileId,
+          date: uploadData.date,
+        },
+      };
+    } else {
+      console.log("vidi");
+    }
   }
   await uploadService.addAlbumName(params.metadata.albumId, base64Title);
 }
