@@ -1,6 +1,6 @@
-export class ImageResizeService {
+export class CanvasService {
   async resize(
-    file: File,
+    file: Blob,
     options: { quality?: number; targetSize?: { width: number; height: number } } = {},
   ): Promise<ResizedImage> {
     const imageObj = await this._loadImage(file);
@@ -9,37 +9,36 @@ export class ImageResizeService {
 
     return new ResizedImage(canvas, options.quality ?? 0.9);
   }
-  async getVideoThumbnail(
-    file: File,
-    options: { quality?: number; targetSize?: { width: number; height: number } } = {},
-  ): Promise<ResizedImage> {
-    const imageObj = await this._loadImage(file);
-    const canvas = await this._getCanvasFromVideo(file, options.targetSize ?? imageObj);
-    URL.revokeObjectURL(imageObj.src);
 
-    return new ResizedImage(canvas, options.quality ?? 0.9);
-  }
-
-  private _getCanvasFromVideo(
-    file: File,
-    target: { width: number; height: number },
-  ): Promise<HTMLCanvasElement> {
+  async getImageFromVideo(file: File): Promise<Blob> {
+    const video = await this._loadVideo(file);
     return new Promise((resolve, reject) => {
-      const video = document.createElement("video");
-      video.src = URL.createObjectURL(file);
-      video.crossOrigin = "anonymous";
-      video.muted = true;
-      video.currentTime = 0.3;
+      video.currentTime = 1;
 
-      video.addEventListener("loadeddata", () => {
-        const { ctx, canvas } = this._initCanvas(target);
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        resolve(canvas);
-      });
+      video.onseeked = async () => {
+        try {
+          const { canvas, ctx } = this._initCanvas({
+            width: video.videoWidth,
+            height: video.videoHeight,
+          });
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      video.addEventListener("error", (e) => {
-        reject(new Error("Error: " + e));
-      });
+          canvas.toBlob(
+            (blob) => {
+              if (!blob) return reject(new Error("Thumbnail blob is null"));
+              resolve(blob);
+            },
+            "image/jpeg",
+            1,
+          );
+        } catch (err) {
+          reject(err);
+        } finally {
+          URL.revokeObjectURL(video.src);
+        }
+      };
+
+      video.onerror = (e) => reject(new Error("Video loading error" + e));
     });
   }
 
@@ -53,7 +52,6 @@ export class ImageResizeService {
     ctx.drawImage(imageObj, transform.x, transform.y, transform.width, transform.height);
     return canvas;
   }
-
   private _initCanvas(target: { width: number; height: number }) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
@@ -86,10 +84,18 @@ export class ImageResizeService {
       y: (target.height - drawHeight) / 2,
     };
   }
-  private _loadImage(file: File): Promise<HTMLImageElement> {
+  private _loadImage(file: Blob): Promise<HTMLImageElement> {
     const imageObj = new Image();
     imageObj.src = URL.createObjectURL(file);
     return new Promise((resolve) => (imageObj.onload = () => resolve(imageObj)));
+  }
+  private _loadVideo(file: File): Promise<HTMLVideoElement> {
+    const video = document.createElement("video");
+    video.src = URL.createObjectURL(file);
+    video.preload = "metadata";
+    return new Promise((resolve) => {
+      video.onloadedmetadata = () => resolve(video);
+    });
   }
 }
 

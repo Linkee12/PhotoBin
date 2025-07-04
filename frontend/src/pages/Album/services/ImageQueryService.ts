@@ -1,6 +1,6 @@
+import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { client } from "../../../cuple";
 import { base64ToArrayBuffer } from "../../../utils/base64";
-import { Metadata } from "../hooks/useAlbumContext";
 import { CryptoService } from "./CryptoService";
 
 export class ImageQueryService {

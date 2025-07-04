@@ -1,7 +1,7 @@
 /* eslint-disable promise/catch-or-return */
 import { styled } from "../../stitches.config";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ImageResizeService } from "./services/ImageResizeService";
+import { CanvasService } from "./services/CanvasService";
 import { UploadService } from "./services/UploadService";
 import { useParams } from "react-router";
 import Toolbar from "./components/Toolbar";
@@ -10,7 +10,7 @@ import { ImageQueryService } from "./services/ImageQueryService";
 import { Header } from "./components/Header";
 import { Cloud } from "@assets/images/cloud";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
-import { Metadata, useAlbumContext } from "./hooks/useAlbumContext";
+import { useAlbumContext } from "./hooks/useAlbumContext";
 import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
 import { DragNdrop } from "./components/DragNdrop";
 import { DownloadService } from "./services/DownloadService";
@@ -18,9 +18,15 @@ import { CryptoService } from "./services/CryptoService";
 import { AlbumItemContainer } from "./components/AlbumItemContainer";
 import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
 import header from "@assets/images/albumItemsBg.svg?no-inline";
+import { Metadata } from "../../../../backend/src/services/MetadataService";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
 
-const imageResizeService = new ImageResizeService();
+const imageResizeService = new CanvasService();
 const cryptoService = new CryptoService();
+const ffmpeg = new FFmpeg();
+ffmpeg.on("log", ({ message }) => {
+  console.log(message);
+});
 const uploadService = new UploadService(imageResizeService, cryptoService);
 const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
@@ -243,7 +249,8 @@ export default function Album() {
           multiple
           onChange={(e) => {
             if (e.target.files != null) {
-              uploadImages(Array.from(e.target.files)).catch((e) => console.error(e));
+              const array = Array.from(e.target.files);
+              uploadImages(array).catch((e) => console.error(e));
             }
           }}
         ></input>

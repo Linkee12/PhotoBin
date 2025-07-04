@@ -8,6 +8,7 @@ import svgr from "vite-plugin-svgr";
 
 export default defineConfig(() => {
   return {
+    optimizeDeps: { exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"] },
     resolve: {
       alias: [
         {
@@ -26,6 +27,10 @@ export default defineConfig(() => {
     ],
     server: {
       host: "0.0.0.0",
+      headers: {
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
+      },
       port: 3000,
       allowedHosts: ["photobin.dev", "localhost", "127.0.0.1"],
       proxy: {

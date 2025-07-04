@@ -3,26 +3,8 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { client } from "../../../cuple";
 import { CryptoService } from "../services/CryptoService";
+import { Metadata } from "../../../../../backend/src/services/MetadataService";
 
-export type Metadata = {
-  albumId: string;
-  albumName: { value: string; iv: string };
-  files: {
-    fileName: {
-      value: string;
-      iv: string;
-    };
-    date: {
-      value: string;
-      iv: string;
-    };
-    fileId: string;
-    original: { iv: string; chunkCount: number };
-    reduced: { iv: string; chunkCount: number };
-    thumbnail: { iv: string; chunkCount: number };
-    originalVideo?: { slices: { iv: string; endTimeMs: number }[] }; //cut 30sec
-  }[];
-};
 export type DecodedValues = {
   albumName: string;
 };
