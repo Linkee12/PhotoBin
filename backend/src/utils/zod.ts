@@ -24,12 +24,8 @@ export const fileMetadataSchema = z.object({
   }),
   originalVideo: z
     .object({
-      slices: z.array(
-        z.object({
-          iv: z.string(),
-          endTimeMs: z.number(),
-        }),
-      ),
+      iv: z.string(),
+      chunkCount: z.number(),
     })
     .optional(),
 });

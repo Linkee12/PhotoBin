@@ -16,7 +16,7 @@ export type Metadata = {
     original: { iv: string; chunkCount: number };
     reduced: { iv: string; chunkCount: number };
     thumbnail: { iv: string; chunkCount: number };
-    originalVideo?: { slices: { iv: string; endTimeMs: number }[] } | undefined;
+    originalVideo?: { iv: string; chunkCount: number } | undefined;
   }[];
 };
 

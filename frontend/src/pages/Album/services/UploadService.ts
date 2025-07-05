@@ -4,8 +4,6 @@ import { CanvasService } from "./CanvasService";
 import { CryptoService } from "./CryptoService";
 import { formatDate } from "../../../utils/formatDate";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
-//import { FfmpegVideo } from "./FfmpegVideo";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
 
 const SIZE = { width: 300, height: 200 };
 const QUALITY = 0.3;
@@ -40,37 +38,22 @@ export class UploadService {
     const uuid = crypto.randomUUID();
     const date = formatDate(file.lastModified);
     const cryptedFileName = await this._cryptoService.encrypString(file.name, props.key);
-    const videoMetadata = [];
     const cryptedDate = await this._cryptoService.encrypString(
       date.toString(),
       props.key,
     );
     let image;
+    let cryptedVideo;
+    let slicedVideo = [];
 
     if (IMAGETYPES.includes(file.type)) {
       image = file;
     } else if (VIDEOTYPES.includes(file.type)) {
       console.log("get img success ");
       image = await this._canvasService.getImageFromVideo(file);
-      /*
-      for await (const element of ffmpeg.getSlices()) {
-        const cryptedSlice = await this._cryptoService.encryptImage(
-          element.blob,
-          props.key,
-        );
-        const sliceRes = await this._sendFile(
-          [cryptedSlice.cryptedImg],
-          props.albumId,
-          uuid,
-          "videoPart",
-        );
-        if (sliceRes) {
-          videoMetadata.push({
-            iv: uint8ArrayToBase64(cryptedSlice.iv),
-            endTimeMs: element.endTime,
-          });
-        }
-      }*/
+      cryptedVideo = await this._cryptoService.encryptImage(file, props.key);
+      slicedVideo = this._getChunks(cryptedVideo.cryptedImg);
+      await this._sendFile(slicedVideo, props.albumId, uuid, "video");
     }
     if (image === undefined) return;
     const thumbnail = await this._canvasService.resize(image, {
@@ -109,6 +92,7 @@ export class UploadService {
       uuid,
       "thumbnail",
     );
+
     if (originRes.isSuccess || reducedRes.isSuccess || thumbRes.isSuccess) {
       const fileMetadata = {
         fileName: {
@@ -132,7 +116,15 @@ export class UploadService {
           iv: uint8ArrayToBase64(cryptedThumbnail.iv),
           chunkCount: 1,
         },
-        originalVideo: videoMetadata.length === 0 ? undefined : { slices: [] },
+        originalVideo:
+          slicedVideo.length === 0
+            ? undefined
+            : {
+                iv: uint8ArrayToBase64(
+                  (cryptedVideo as { iv: Uint8Array<ArrayBuffer> }).iv,
+                ),
+                chunkCount: slicedVideo.length,
+              },
       };
       await this._finalize(props.albumId, fileMetadata);
       return {
