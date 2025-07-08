@@ -21,6 +21,7 @@ type UploadReturn =
       thumbnail: string;
       fileId: string;
       date: string;
+      isVideo: boolean;
     }
   | undefined
   | null;
@@ -110,7 +111,7 @@ export class UploadService {
         },
         reduced: {
           iv: uint8ArrayToBase64(cryptedReducedImage.iv),
-          chunkCount: slicedOriginImg.length,
+          chunkCount: slicedReducedeImg.length,
         },
         thumbnail: {
           iv: uint8ArrayToBase64(cryptedThumbnail.iv),
@@ -131,6 +132,7 @@ export class UploadService {
         thumbnail: thumbnail.url,
         fileId: uuid,
         date: date,
+        isVideo: slicedVideo.length !== 0,
       };
     }
   }

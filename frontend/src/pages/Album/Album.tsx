@@ -19,14 +19,8 @@ import { AlbumItemContainer } from "./components/AlbumItemContainer";
 import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
 import header from "@assets/images/albumItemsBg.svg?no-inline";
 import { Metadata } from "../../../../backend/src/services/MetadataService";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-
 const imageResizeService = new CanvasService();
 const cryptoService = new CryptoService();
-const ffmpeg = new FFmpeg();
-ffmpeg.on("log", ({ message }) => {
-  console.log(message);
-});
 const uploadService = new UploadService(imageResizeService, cryptoService);
 const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
@@ -36,6 +30,7 @@ type Thumbnails = {
   thumbnails: {
     thumbnail: string;
     id: string;
+    isVideo: boolean;
   }[];
 }[];
 
@@ -120,11 +115,17 @@ export default function Album() {
       thumbnail: string;
       id: string;
       date: string;
+      isVideo: boolean;
     }[] = [];
     for (const file of thumbnails) {
       const result = await imageQueryService.getImg(albumId, file, key, "thumbnail");
       if (result === undefined) return;
-      const thumb = { thumbnail: result.img, id: result.id, date: result.date };
+      const thumb = {
+        thumbnail: result.img,
+        id: result.id,
+        date: result.date,
+        isVideo: result.isVideo,
+      };
       thumbArr = [...thumbArr, thumb];
     }
     return thumbArr;
@@ -149,6 +150,7 @@ export default function Album() {
         group.thumbnails.push({
           id: result.thumbnail.id,
           thumbnail: result.thumbnail.thumbnail,
+          isVideo: result.thumbnail.isVideo,
         });
         return thumbnails;
       });
@@ -292,6 +294,7 @@ async function* upload(params: {
           thumbnail: uploadData.thumbnail,
           id: uploadData.fileId,
           date: uploadData.date,
+          isVideo: uploadData.isVideo,
         },
       };
     } else {

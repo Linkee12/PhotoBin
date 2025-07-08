@@ -10,9 +10,10 @@ export class ImageQueryService {
     albumId: string,
     file: Metadata["files"][number],
     key: string,
-    type: "original" | "reduced" | "thumbnail",
+    type: "original" | "reduced" | "thumbnail" | "originalVideo",
   ) {
     let parts: ArrayBuffer[] = [];
+    if (!file[type]) return;
     for (let i = 0; i < file[type].chunkCount; i++) {
       const base64Part = await this._getPartsOfImage(
         albumId,
@@ -45,6 +46,7 @@ export class ImageQueryService {
       fileName: fileName,
       blob,
       date,
+      isVideo: type === "originalVideo",
     };
   }
 

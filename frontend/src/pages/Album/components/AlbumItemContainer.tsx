@@ -5,7 +5,10 @@ import Check3 from "@assets/images/icons/check3.svg?react";
 import { styled } from "../../../stitches.config";
 
 type AlbumItemContainerProps = {
-  group: { date: string; thumbnails: { thumbnail: string; id: string }[] };
+  group: {
+    date: string;
+    thumbnails: { thumbnail: string; id: string; isVideo: boolean }[];
+  };
   index: number;
   selectedImages: string[];
   isUploading: boolean;
@@ -48,6 +51,7 @@ export function AlbumItemContainer(props: AlbumItemContainerProps) {
             props.group.thumbnails.map((image) => (
               <AlbumItem
                 key={image.id}
+                isVideo={image.isVideo}
                 imageSrc={image.thumbnail}
                 isSelected={props.isSelected(image.id)}
                 onSelect={() => props.onSelect([image.id])}

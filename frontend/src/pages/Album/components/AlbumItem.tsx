@@ -1,20 +1,24 @@
 import Check from "@assets/images/icons/check.svg?react";
 import Zoom from "@assets/images/icons/zoom.svg?react";
+import Play from "@assets/images/icons/play.svg?react";
 import { styled } from "../../../stitches.config";
 
 type AlbumItemProps = {
   imageSrc: string;
   isSelected: boolean;
+  isVideo: boolean;
   onSelect: () => void;
   onDeselect: () => void;
   onOpen: () => void;
 };
 
 export function AlbumItem(props: AlbumItemProps) {
+  console.log("video?" + props.isVideo);
   return (
     <div onClick={() => (props.isSelected ? props.onDeselect() : props.onSelect())}>
       <Preview>
         <CheckIcon isVisible={props.isSelected} />
+        {props.isVideo === true ? <Asd /> : <></>}
         <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
         <ZoomIcon
           onClick={() => {
@@ -97,5 +101,13 @@ const ZoomIcon = styled(Zoom, {
   height: "30px",
   bottom: "5px",
   right: "5px",
+  cursor: "pointer",
+});
+
+const Asd = styled(Play, {
+  position: "absolute",
+  width: "60px",
+  height: "60px",
+  alignItems: "center",
   cursor: "pointer",
 });
