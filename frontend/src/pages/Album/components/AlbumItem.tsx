@@ -13,12 +13,11 @@ type AlbumItemProps = {
 };
 
 export function AlbumItem(props: AlbumItemProps) {
-  console.log("video?" + props.isVideo);
   return (
     <div onClick={() => (props.isSelected ? props.onDeselect() : props.onSelect())}>
       <Preview>
         <CheckIcon isVisible={props.isSelected} />
-        {props.isVideo === true ? <Asd /> : <></>}
+        {props.isVideo === true ? <PlayIcon /> : <></>}
         <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
         <ZoomIcon
           onClick={() => {
@@ -104,7 +103,7 @@ const ZoomIcon = styled(Zoom, {
   cursor: "pointer",
 });
 
-const Asd = styled(Play, {
+const PlayIcon = styled(Play, {
   position: "absolute",
   width: "60px",
   height: "60px",
