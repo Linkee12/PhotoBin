@@ -4,7 +4,7 @@ import Check2 from "@assets/images/icons/check2.svg?react";
 import Check3 from "@assets/images/icons/check3.svg?react";
 import { styled } from "../../../stitches.config";
 
-type AlbumItemContainerProps = {
+type AlbumSectionProps = {
   group: {
     date: string;
     thumbnails: { thumbnail: string; id: string; isVideo: boolean }[];
@@ -18,7 +18,7 @@ type AlbumItemContainerProps = {
   onOpen: (imageId: string) => void;
 };
 
-export function AlbumItemContainer(props: AlbumItemContainerProps) {
+export function AlbumSection(props: AlbumSectionProps) {
   const includeAllImages = props.group.thumbnails.every((img) =>
     props.selectedImages.includes(img.id),
   );

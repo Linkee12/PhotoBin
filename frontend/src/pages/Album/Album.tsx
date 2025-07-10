@@ -15,7 +15,7 @@ import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
 import { DragNdrop } from "./components/DragNdrop";
 import { DownloadService } from "./services/DownloadService";
 import { CryptoService } from "./services/CryptoService";
-import { AlbumItemContainer } from "./components/AlbumItemContainer";
+import { AlbumSection } from "./components/AlbumSection";
 import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
 import header from "@assets/images/albumItemsBg.svg?no-inline";
 import { Metadata } from "../../../../backend/src/services/MetadataService";
@@ -213,7 +213,7 @@ export default function Album() {
         />
         {thumbnails != undefined &&
           thumbs.map((group, i) => (
-            <AlbumItemContainer
+            <AlbumSection
               key={i}
               group={group}
               index={i}
