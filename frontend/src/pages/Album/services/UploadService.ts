@@ -50,11 +50,10 @@ export class UploadService {
     if (IMAGETYPES.includes(file.type)) {
       image = file;
     } else if (VIDEOTYPES.includes(file.type)) {
-      console.log("get img success ");
       image = await this._canvasService.getImageFromVideo(file);
       cryptedVideo = await this._cryptoService.encryptImage(file, props.key);
       slicedVideo = this._getChunks(cryptedVideo.cryptedImg);
-      await this._sendFile(slicedVideo, props.albumId, uuid, "video");
+      await this._sendFile(slicedVideo, props.albumId, uuid, "originalVideo");
     }
     if (image === undefined) return;
     const thumbnail = await this._canvasService.resize(image, {

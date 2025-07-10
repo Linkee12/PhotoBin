@@ -24,6 +24,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
   const [fileName, setFileName] = useState("");
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
+  const file = metadata?.files.find((file) => file.fileId === props.fileId);
   useEffect(() => {
     const body = document.body;
     if (props.visible) {
@@ -36,10 +39,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     };
   }, [props.visible]);
 
-  async function updateOriginalImageDataUrl(fileId: string) {
+  async function updateOriginalImageDataUrl() {
     if (!metadata) return;
     if (metadata.albumId === undefined) return;
-    const file = metadata?.files.find((file) => file.fileId === fileId);
     if (file === undefined) return;
     const reduce = await imageDownloadService.getImg(
       metadata.albumId,
@@ -60,10 +62,24 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     if (origin !== undefined) {
       setUrl(origin.img);
     }
+    if (file.originalVideo !== undefined) {
+      setIsLoadingVideo(true);
+      const video = await imageDownloadService.getImg(
+        metadata.albumId,
+        file,
+        key,
+        "originalVideo",
+      );
+      if (video !== undefined) {
+        setUrl(video.img);
+        setIsVideoReady(true);
+      }
+      setIsLoadingVideo(false);
+    }
   }
 
   useEffect(() => {
-    updateOriginalImageDataUrl(props.fileId).catch((e) => console.error(e));
+    updateOriginalImageDataUrl().catch((e) => console.error(e));
   }, [props.fileId]);
 
   return (
@@ -89,7 +105,19 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       <NextButton style={{ left: "0px" }} onClick={() => props.onNext(-1)}>
         <Icons as={Prev} />
       </NextButton>
-      <FullScreenImg src={url} key={"1"} />
+      {file?.originalVideo ? (
+        <>
+          <FullScreenImg src={url} />
+          {isVideoReady && <FullScreenVideo src={url} autoPlay muted loop controls />}
+          {isLoadingVideo && (
+            <LoadingOverlay>
+              <Spinner />
+            </LoadingOverlay>
+          )}
+        </>
+      ) : (
+        <FullScreenImg src={url} />
+      )}
       <NextButton style={{ right: "0px" }} onClick={() => props.onNext(1)}>
         <Icons as={Next} />
       </NextButton>
@@ -118,6 +146,16 @@ const Container = styled("div", {
   },
 });
 const FullScreenImg = styled("img", {
+  display: "block",
+  position: "absolute",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100vh",
+  objectFit: "contain",
+  backgroundColor: "#000",
+});
+const FullScreenVideo = styled("video", {
   display: "block",
   position: "absolute",
   top: 0,
@@ -179,4 +217,25 @@ const NextButton = styled("button", {
     opacity: "1",
   },
   transition: "opacity 0.5s",
+});
+
+const Spinner = styled("div", {
+  width: "3rem",
+  height: "3rem",
+  border: "5px solid rgba(255, 255, 255, 0.3)",
+  borderTop: "5px solid white",
+  borderRadius: "50%",
+  animation: "spin 1s linear infinite",
+});
+const LoadingOverlay = styled("div", {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100vh",
+  backgroundColor: "rgba(0, 0, 0, 0.3)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1,
 });

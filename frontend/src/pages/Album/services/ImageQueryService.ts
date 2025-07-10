@@ -29,6 +29,7 @@ export class ImageQueryService {
     const iv = file[type].iv;
     const combinedImg = this._combineChunks(parts);
     const img = await this._cryptoService.decryptImage(combinedImg, key, iv);
+
     const date = await this._cryptoService.decryptText(
       file.date.value,
       key,
@@ -46,7 +47,6 @@ export class ImageQueryService {
       fileName: fileName,
       blob,
       date,
-      isVideo: type === "originalVideo",
     };
   }
 

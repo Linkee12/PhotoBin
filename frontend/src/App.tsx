@@ -29,4 +29,8 @@ const globalStyles = globalCss({
     backgroundColor: "#0E0E10",
     color: "#fff",
   },
+  "@keyframes spin": {
+    "0%": { transform: "rotate(0deg)" },
+    "100%": { transform: "rotate(360deg)" },
+  },
 });
