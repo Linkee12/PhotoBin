@@ -124,7 +124,7 @@ export default function Album() {
         thumbnail: result.img,
         id: result.id,
         date: result.date,
-        isVideo: result.isVideo,
+        isVideo: !!file.originalVideo,
       };
       thumbArr = [...thumbArr, thumb];
     }
