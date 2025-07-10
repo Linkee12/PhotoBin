@@ -1,6 +1,5 @@
-/* eslint-disable promise/catch-or-return */
 import { styled } from "../../stitches.config";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { CanvasService } from "./services/CanvasService";
 import { UploadService } from "./services/UploadService";
 import { useParams } from "react-router";
@@ -8,31 +7,28 @@ import Toolbar from "./components/Toolbar";
 import { client } from "../../cuple";
 import { ImageQueryService } from "./services/ImageQueryService";
 import { Header } from "./components/Header";
-import { Cloud } from "@assets/images/cloud";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { useAlbumContext } from "./hooks/useAlbumContext";
-import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../utils/base64";
-import { DragNdrop } from "./components/DragNdrop";
 import { DownloadService } from "./services/DownloadService";
 import { CryptoService } from "./services/CryptoService";
-import { AlbumSection } from "./components/AlbumSection";
 import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
-import header from "@assets/images/albumItemsBg.svg?no-inline";
 import { Metadata } from "../../../../backend/src/services/MetadataService";
+import { AlbumContent } from "./components/AlbumContent";
+
 const imageResizeService = new CanvasService();
 const cryptoService = new CryptoService();
 const uploadService = new UploadService(imageResizeService, cryptoService);
 const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
 
-type Thumbnails = {
+export type ThumbnailGroup = {
   date: string;
   thumbnails: {
     thumbnail: string;
     id: string;
     isVideo: boolean;
   }[];
-}[];
+};
 
 export default function Album() {
   const albumContext = useAlbumContext();
@@ -40,8 +36,7 @@ export default function Album() {
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const { albumId } = useParams();
   const [title, setTitle] = useState("");
-  const [thumbnails, setThumbnails] = useState<Thumbnails>([]);
-  const [maskHeight, setMaskHeight] = useState(0);
+  const [thumbnails, setThumbnails] = useState<ThumbnailGroup[]>([]);
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showOrigin, setShowOrigin] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -57,7 +52,6 @@ export default function Album() {
         (file) => !oldThumbnailIds.has(file.fileId),
       );
       getThumbnails(newThumbnails).then((thumb) => {
-        // eslint-disable-next-line promise/always-return
         if (thumb !== undefined) {
           const thumbs = groupThumbnailsByDate(thumb);
           setThumbnails((prev) => [...prev, ...thumbs]);
@@ -74,15 +68,16 @@ export default function Album() {
         ids: ids,
       },
     });
-    if (responses.result === "success") {
-      setThumbnails((prev) =>
-        prev.filter((img) => {
-          // eslint-disable-next-line sonarjs/no-nested-functions
-          img.thumbnails.map((element) => !ids.includes(element.id));
-        }),
-      );
-      setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
-    }
+
+    if (responses.result !== "success") return;
+
+    setThumbnails((prev) =>
+      prev.filter((img) => {
+        // eslint-disable-next-line sonarjs/no-nested-functions
+        img.thumbnails.map((element) => !ids.includes(element.id));
+      }),
+    );
+    setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
     refreshMetadata();
   }
 
@@ -99,15 +94,6 @@ export default function Album() {
   function onUncheckSelected() {
     setSelectedImages([]);
   }
-
-  function setProgress(percentage: number) {
-    const height = 480 * (percentage / 100);
-    setMaskHeight(height);
-  }
-
-  const ref = useRef<HTMLInputElement>(null);
-
-  const thumbs = useMemo(() => thumbnails, [thumbnails]);
 
   async function getThumbnails(thumbnails: Metadata["files"]) {
     if (albumId === undefined) return;
@@ -131,34 +117,6 @@ export default function Album() {
     return thumbArr;
   }
 
-  async function uploadImages(files: File[]) {
-    if (!metadata) return;
-    setIsUploading(true);
-    const results = upload({ files, key, metadata, albumTitle: title });
-
-    for await (const result of results) {
-      setProgress(result.progress);
-      setThumbnails((thumbnails) => {
-        const date = result.thumbnail.date;
-        let group = thumbnails.find((g) => g.date === date);
-
-        if (!group) {
-          group = { date, thumbnails: [] };
-          thumbnails.push(group);
-        }
-
-        group.thumbnails.push({
-          id: result.thumbnail.id,
-          thumbnail: result.thumbnail.thumbnail,
-          isVideo: result.thumbnail.isVideo,
-        });
-        return thumbnails;
-      });
-
-      refreshMetadata();
-    }
-    setIsUploading(false);
-  }
   function nextOriginImgId(direction: number) {
     const ids: string[] = [];
     thumbnails.forEach((group) => group.thumbnails.forEach((i) => ids.push(i.id)));
@@ -198,65 +156,40 @@ export default function Album() {
         onChangeTitle={setTitle}
         onSaveName={saveAlbumName}
       />
+      <AlbumContent
+        uploadService={uploadService}
+        showUploader={showUploader}
+        isUploading={isUploading}
+        onUploadStarted={() => setIsUploading(true)}
+        onUploadFinished={() => setIsUploading(false)}
+        thumbnailGroups={thumbnails}
+        onAddThumbnail={(result) => {
+          setThumbnails((thumbnails) => {
+            const group = thumbnails.find((g) => g.date === result.date);
 
-      <Content bgColor={showUploader}>
-        <ContentHeaderBg show={showUploader}>
-          <ContentHeader />
-        </ContentHeaderBg>
-        <DragNdrop
-          onDroppedFiles={(files) => {
-            if (files != null) {
-              const fileArr = Array.from(files);
-              uploadImages(fileArr).catch((e) => console.error(e));
+            if (!group) {
+              const newGroup = { date: result.date, thumbnails: [result] };
+              thumbnails.push(newGroup);
+              return thumbnails;
             }
-          }}
-        />
-        {thumbnails != undefined &&
-          thumbs.map((group, i) => (
-            <AlbumSection
-              key={i}
-              group={group}
-              index={i}
-              isUploading={isUploading}
-              selectedImages={selectedImages}
-              isSelected={(id) => selectedImages.includes(id)}
-              onSelect={(id: string[]) => setSelectedImages([...selectedImages, ...id])}
-              onDeSelect={(id: string[]) => {
-                if (id) {
-                  setSelectedImages(
-                    selectedImages.filter((imgId) => !id.includes(imgId)),
-                  );
-                }
-              }}
-              onOpen={(id) => {
-                setFullscreenImage({ fileId: id });
-                setShowOrigin(true);
-              }}
-            />
-          ))}
-        <CloudContainer
-          isVisible={showUploader}
-          onClick={() => {
-            if (!ref.current) return;
-            ref.current.click();
-          }}
-        >
-          <StyledUpload height={maskHeight} />
-          <Text>Drop your photos here to upload</Text>
-        </CloudContainer>
-        <input
-          type="file"
-          style={{ display: "none" }}
-          ref={ref}
-          multiple
-          onChange={(e) => {
-            if (e.target.files != null) {
-              const array = Array.from(e.target.files);
-              uploadImages(array).catch((e) => console.error(e));
-            }
-          }}
-        ></input>
-      </Content>
+
+            group.thumbnails.push(result);
+            return thumbnails;
+          });
+        }}
+        selectedImages={selectedImages}
+        isSelected={(id) => selectedImages.includes(id)}
+        onSelect={(id: string[]) => setSelectedImages([...selectedImages, ...id])}
+        onDeSelect={(id: string[]) => {
+          if (id) {
+            setSelectedImages(selectedImages.filter((imgId) => !id.includes(imgId)));
+          }
+        }}
+        onOpen={(id) => {
+          setFullscreenImage({ fileId: id });
+          setShowOrigin(true);
+        }}
+      />
       <Toolbar
         selectedImages={selectedImages}
         onDeleteSelected={onDeleteSelected}
@@ -265,43 +198,6 @@ export default function Album() {
       />
     </Container>
   );
-}
-
-async function* upload(params: {
-  files: File[];
-  key: string;
-  metadata: { albumId: string };
-  albumTitle: string;
-}) {
-  const arrLength = params.files.length;
-  const encryptedTitle = await cryptoService.encrypString(params.albumTitle, params.key);
-  const base64Title = {
-    iv: uint8ArrayToBase64(encryptedTitle.iv),
-    value: arrayBufferToBase64(encryptedTitle.encryptedText),
-  };
-  for (let i = 0; i < arrLength; ++i) {
-    const uploadData = await uploadService.upload(params.files[i], {
-      albumId: params.metadata.albumId,
-      key: params.key,
-    });
-    if (uploadData === undefined) {
-      throw new Error("Upload error");
-    }
-    if (uploadData !== null) {
-      yield {
-        progress: (i / arrLength) * 100,
-        thumbnail: {
-          thumbnail: uploadData.thumbnail,
-          id: uploadData.fileId,
-          date: uploadData.date,
-          isVideo: uploadData.isVideo,
-        },
-      };
-    } else {
-      console.log("vidi");
-    }
-  }
-  await uploadService.addAlbumName(params.metadata.albumId, base64Title);
 }
 
 const Container = styled("div", {
@@ -320,97 +216,5 @@ const Container = styled("div", {
         backgroundColor: "#181818",
       },
     },
-  },
-});
-
-const Content = styled("div", {
-  display: "flex",
-  maxWidth: "100%",
-  flexDirection: "column",
-  alignItems: "center",
-  flex: 1,
-  alignContent: "flex-start",
-  flexWrap: "wrap",
-  transition: "background-color 0.3s",
-  variants: {
-    bgColor: {
-      true: {
-        backgroundColor: "#181818",
-      },
-      false: {
-        backgroundColor: "rgba(51, 51, 51)",
-      },
-    },
-  },
-});
-
-const ContentHeader = styled("div", {
-  display: "flex",
-  width: "100%",
-  maxHeight: "5rem",
-  flex: 1,
-  maskImage: `url(${header})`,
-  maskRepeat: "no-repeat",
-  maskSize: "100% 100%",
-  maskPosition: "center",
-  backgroundColor: "#181818",
-  variants: {
-    bg: {
-      true: {
-        backgroundColor: "#181818",
-      },
-      false: {},
-    },
-  },
-});
-const ContentHeaderBg = styled("div", {
-  display: "flex",
-  width: "100%",
-  maxHeight: "5rem",
-  flex: 1,
-  backgroundColor: "#333333",
-  variants: {
-    show: {
-      true: {
-        display: "flex",
-      },
-      false: { display: "none" },
-    },
-  },
-});
-const CloudContainer = styled("div", {
-  flexDirection: "column",
-  alignItems: "center",
-  position: "absolute",
-  top: "30vh",
-  transition: "display 0.3s",
-  variants: {
-    isVisible: {
-      true: {
-        display: "flex",
-      },
-      false: {
-        display: "none",
-      },
-    },
-  },
-});
-
-const Text = styled("div", {
-  textAlign: "center",
-  width: "12rem",
-  fontSize: "1rem",
-  marginTop: "0.5rem",
-  color: "#DBDCD9",
-});
-
-const StyledUpload = styled(Cloud, {
-  width: "12rem",
-  height: "12rem",
-  color: "#333333",
-  cursor: "pointer",
-  transition: "color 300ms",
-  "&:hover": {
-    color: "#444444",
   },
 });
