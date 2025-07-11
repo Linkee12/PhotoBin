@@ -10,13 +10,15 @@ type DownloadProps = {
 export class DownloadService {
   constructor(private _imageQueryService: ImageQueryService) {}
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   async download(props: DownloadProps) {
     try {
       const root = await navigator.storage.getDirectory();
-      const fileHandle = await root.getFileHandle(
-        props.albumContext.decodedValues.albumName,
-        { create: true },
-      );
+      const albumName =
+        props.albumContext.decodedValues.albumName === ""
+          ? "Album"
+          : props.albumContext.decodedValues.albumName;
+      const fileHandle = await root.getFileHandle(albumName, { create: true });
       const writable = await fileHandle.createWritable();
 
       let zipFinished = false;
@@ -43,13 +45,15 @@ export class DownloadService {
           continue;
 
         const file = props.albumContext.metadata.files.find((f) => f.fileId === imgID);
+
         if (!file) continue;
 
+        const type = file.originalVideo !== undefined ? "originalVideo" : "original";
         const origin = await this._imageQueryService.getImg(
           props.albumContext.metadata.albumId,
           file,
           props.albumContext.key,
-          "original",
+          type,
         );
         if (!origin) continue;
 
