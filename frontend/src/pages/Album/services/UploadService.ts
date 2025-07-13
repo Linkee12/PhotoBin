@@ -30,7 +30,6 @@ export class UploadService {
   constructor(
     private _canvasService: CanvasService,
     private _cryptoService: CryptoService,
-    //   private _ffmpeg: FFmpeg,
   ) {}
   async upload(
     file: File,
