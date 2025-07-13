@@ -163,6 +163,7 @@ const FullScreenVideo = styled("video", {
   width: "100%",
   height: "100vh",
   objectFit: "contain",
+  zIndex: 2,
   backgroundColor: "#000",
 });
 const Button = styled("button", {
@@ -196,7 +197,7 @@ const ButtonBar = styled("div", {
   flex: 1,
   position: "absolute",
   top: "0px",
-  zIndex: "2",
+  zIndex: "3",
 });
 const ButtonGroup = styled("div", {
   display: "flex",
@@ -206,11 +207,11 @@ const NextButton = styled("button", {
   justifyContent: "center",
   alignItems: "center",
   width: "20%",
-  height: "80%",
+  height: "100%",
   position: "absolute",
   opacity: "0",
   bottom: "0px",
-  zIndex: 11,
+  zIndex: 2,
   border: "none",
   background: "none",
   "&:hover": {
