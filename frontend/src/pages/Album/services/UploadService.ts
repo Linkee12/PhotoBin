@@ -16,25 +16,25 @@ const IMAGETYPES = [
   "image/svg+xml",
 ];
 
-type UploadReturn =
+type UploadYield =
   | {
+      result: "finish";
       thumbnail: string;
       fileId: string;
       date: string;
       isVideo: boolean;
     }
-  | undefined
-  | null;
+  | { result: "progress"; bytes: number };
 
 export class UploadService {
   constructor(
     private _canvasService: CanvasService,
     private _cryptoService: CryptoService,
   ) {}
-  async upload(
+  async *upload(
     file: File,
     props: { key: string; albumId: string },
-  ): Promise<UploadReturn> {
+  ): AsyncGenerator<UploadYield> {
     const uuid = crypto.randomUUID();
     const date = formatDate(file.lastModified);
     const cryptedFileName = await this._cryptoService.encrypString(file.name, props.key);
@@ -52,8 +52,10 @@ export class UploadService {
       image = await this._canvasService.getImageFromVideo(file);
       cryptedVideo = await this._cryptoService.encryptImage(file, props.key);
       slicedVideo = this._getChunks(cryptedVideo.cryptedImg);
-      await this._sendFile(slicedVideo, props.albumId, uuid, "originalVideo");
+      const videoRes = this._sendFile(slicedVideo, props.albumId, uuid, "originalVideo");
+      for await (const bytes of videoRes) yield { result: "progress", bytes };
     }
+    //TODO upload all file format
     if (image === undefined) return;
     const thumbnail = await this._canvasService.resize(image, {
       targetSize: SIZE,
@@ -71,68 +73,62 @@ export class UploadService {
       props.key,
     );
     const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
-    const slicedReducedeImg = this._getChunks(cryptedReducedImage.cryptedImg);
+    const slicedReducedImg = this._getChunks(cryptedReducedImage.cryptedImg);
 
-    const originRes = await this._sendFile(
-      slicedOriginImg,
-      props.albumId,
-      uuid,
-      "original",
-    );
-    const reducedRes = await this._sendFile(
-      slicedReducedeImg,
-      props.albumId,
-      uuid,
-      "reduced",
-    );
-    const thumbRes = await this._sendFile(
+    const originRes = this._sendFile(slicedOriginImg, props.albumId, uuid, "original");
+    for await (const bytes of originRes) yield { result: "progress", bytes };
+
+    const reducedRes = this._sendFile(slicedReducedImg, props.albumId, uuid, "reduced");
+    for await (const bytes of reducedRes) yield { result: "progress", bytes };
+
+    const thumbRes = this._sendFile(
       [cryptedThumbnail.cryptedImg],
       props.albumId,
       uuid,
       "thumbnail",
     );
+    for await (const bytes of thumbRes) yield { result: "progress", bytes };
 
-    if (originRes.isSuccess || reducedRes.isSuccess || thumbRes.isSuccess) {
-      const fileMetadata = {
-        fileName: {
-          iv: uint8ArrayToBase64(cryptedFileName.iv),
-          value: arrayBufferToBase64(cryptedFileName.encryptedText),
-        },
-        date: {
-          iv: uint8ArrayToBase64(cryptedDate.iv),
-          value: arrayBufferToBase64(cryptedDate.encryptedText),
-        },
-        fileId: uuid,
-        original: {
-          iv: uint8ArrayToBase64(cryptedOriginImage.iv),
-          chunkCount: slicedOriginImg.length,
-        },
-        reduced: {
-          iv: uint8ArrayToBase64(cryptedReducedImage.iv),
-          chunkCount: slicedReducedeImg.length,
-        },
-        thumbnail: {
-          iv: uint8ArrayToBase64(cryptedThumbnail.iv),
-          chunkCount: 1,
-        },
-        originalVideo:
-          slicedVideo.length === 0
-            ? undefined
-            : {
-                iv: uint8ArrayToBase64(
-                  (cryptedVideo as { iv: Uint8Array<ArrayBuffer> }).iv,
-                ),
-                chunkCount: slicedVideo.length,
-              },
-      };
-      await this._finalize(props.albumId, fileMetadata);
-      return {
-        thumbnail: thumbnail.url,
-        fileId: uuid,
-        date: date,
-        isVideo: slicedVideo.length !== 0,
-      };
-    }
+    const fileMetadata = {
+      fileName: {
+        iv: uint8ArrayToBase64(cryptedFileName.iv),
+        value: arrayBufferToBase64(cryptedFileName.encryptedText),
+      },
+      date: {
+        iv: uint8ArrayToBase64(cryptedDate.iv),
+        value: arrayBufferToBase64(cryptedDate.encryptedText),
+      },
+      fileId: uuid,
+      original: {
+        iv: uint8ArrayToBase64(cryptedOriginImage.iv),
+        chunkCount: slicedOriginImg.length,
+      },
+      reduced: {
+        iv: uint8ArrayToBase64(cryptedReducedImage.iv),
+        chunkCount: slicedReducedImg.length,
+      },
+      thumbnail: {
+        iv: uint8ArrayToBase64(cryptedThumbnail.iv),
+        chunkCount: 1,
+      },
+      originalVideo:
+        slicedVideo.length === 0
+          ? undefined
+          : {
+              iv: uint8ArrayToBase64(
+                (cryptedVideo as { iv: Uint8Array<ArrayBuffer> }).iv,
+              ),
+              chunkCount: slicedVideo.length,
+            },
+    };
+    await this._finalize(props.albumId, fileMetadata);
+    yield {
+      result: "finish",
+      thumbnail: thumbnail.url,
+      fileId: uuid,
+      date: date,
+      isVideo: slicedVideo.length !== 0,
+    };
   }
 
   async saveName(albumId: string, name: string, key: string) {
@@ -170,7 +166,7 @@ export class UploadService {
     return partsOfFile;
   }
 
-  private async _sendFile(
+  private async *_sendFile(
     files: ArrayBuffer[],
     albumId: string,
     fileId: string,
@@ -187,8 +183,8 @@ export class UploadService {
           encryptedFile: objUrl,
         },
       });
-      if (responses.result !== "success") return { isSuccess: false };
+      if (responses.result !== "success") throw new Error("Error while uploading");
+      yield files[i].byteLength;
     }
-    return { isSuccess: true };
   }
 }

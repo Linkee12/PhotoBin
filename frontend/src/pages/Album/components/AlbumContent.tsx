@@ -48,8 +48,13 @@ export function AlbumContent(props: AlbumContentProps) {
     const results = upload({ uploadService: props.uploadService, files, key, metadata });
 
     for await (const result of results) {
-      setProgress(result.progress);
-      props.onAddThumbnail(result.thumbnail);
+      if (result.result === "progress") {
+        setProgress(result.progress);
+      } else {
+        if (result.thumbnail !== undefined) {
+          props.onAddThumbnail(result.thumbnail);
+        }
+      }
 
       refreshMetadata();
     }
@@ -207,26 +212,28 @@ async function* upload(params: {
   metadata: { albumId: string };
 }) {
   const arrLength = params.files.length;
+  const totalSize = params.files.reduce((acc, file) => file.size + acc, 0);
+  let currentSize = 0;
   for (let i = 0; i < arrLength; ++i) {
-    const uploadData = await params.uploadService.upload(params.files[i], {
+    const uploadData = params.uploadService.upload(params.files[i], {
       albumId: params.metadata.albumId,
       key: params.key,
     });
-    if (uploadData === undefined) {
-      throw new Error("Upload error");
-    }
-    if (uploadData !== null) {
-      yield {
-        progress: (i / arrLength) * 100,
-        thumbnail: {
-          thumbnail: uploadData.thumbnail,
-          id: uploadData.fileId,
-          date: uploadData.date,
-          isVideo: uploadData.isVideo,
-        },
-      };
-    } else {
-      console.log("vidi");
+    for await (const response of uploadData) {
+      if (response.result === "progress") {
+        currentSize += response.bytes;
+        yield { result: "progress", progress: (currentSize / totalSize) * 100 };
+      } else {
+        yield {
+          thumbnail: {
+            result: "thumbnail",
+            thumbnail: response.thumbnail,
+            id: response.fileId,
+            date: response.date,
+            isVideo: response.isVideo,
+          },
+        };
+      }
     }
   }
 }
