@@ -3,6 +3,7 @@ import Link from "@assets/images/icons/link.svg?react";
 import Ok from "@assets/images/icons/ok.svg?react";
 import { styled } from "../../../stitches.config";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "react-toastify";
 
 type HeaderProps = {
   isEmptyAlbum: boolean;
@@ -15,6 +16,7 @@ export function Header(props: HeaderProps) {
   const [isEdit, setIsEdit] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inputRef = useRef<any>(null);
+  const notify = () => toast.success("Copied URL");
   useEffect(() => {
     if (isEdit && inputRef.current) {
       const input = inputRef.current;
@@ -58,7 +60,12 @@ export function Header(props: HeaderProps) {
         >
           <Icons as={isEdit ? Ok : Edit} />
         </Button>
-        <Button onClick={() => console.log("asd")}>
+        <Button
+          onClick={() => {
+            navigator.clipboard.writeText(window.location.href);
+            notify();
+          }}
+        >
           <Icons as={Link} />
         </Button>
       </Tools>
