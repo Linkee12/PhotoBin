@@ -10,18 +10,24 @@ export const fileMetadataSchema = z.object({
     value: z.string(),
     iv: z.string(),
   }),
-  original: z.object({
-    iv: z.string(),
-    chunkCount: z.number(),
-  }),
-  reduced: z.object({
-    iv: z.string(),
-    chunkCount: z.number(),
-  }),
-  thumbnail: z.object({
-    iv: z.string(),
-    chunkCount: z.number(),
-  }),
+  original: z
+    .object({
+      iv: z.string(),
+      chunkCount: z.number(),
+    })
+    .optional(),
+  reduced: z
+    .object({
+      iv: z.string(),
+      chunkCount: z.number(),
+    })
+    .optional(),
+  thumbnail: z
+    .object({
+      iv: z.string(),
+      chunkCount: z.number(),
+    })
+    .optional(),
   originalVideo: z
     .object({
       iv: z.string(),

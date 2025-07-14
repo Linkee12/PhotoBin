@@ -13,10 +13,11 @@ export type Metadata = {
       iv: string;
     };
     fileId: string;
-    original: { iv: string; chunkCount: number };
-    reduced: { iv: string; chunkCount: number };
-    thumbnail: { iv: string; chunkCount: number };
-    originalVideo?: { iv: string; chunkCount: number } | undefined;
+    original?: { iv: string; chunkCount: number };
+    reduced?: { iv: string; chunkCount: number };
+    thumbnail?: { iv: string; chunkCount: number };
+    originalVideo?: { iv: string; chunkCount: number };
+    unsupportedFile?: { iv: string; chunkCount: number };
   }[];
 };
 
