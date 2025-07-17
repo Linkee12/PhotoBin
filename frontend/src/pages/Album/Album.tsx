@@ -104,7 +104,12 @@ export default function Album() {
       isVideo: boolean;
     }[] = [];
     for (const file of thumbnails) {
-      const result = await imageQueryService.getImg(albumId, file, key, "thumbnail");
+      const result = await imageQueryService.getImg(
+        albumId,
+        file,
+        key,
+        file.thumbnail !== undefined ? "thumbnail" : "unsupportedFile",
+      );
       if (result === undefined) return;
       const thumb = {
         thumbnail: result.img,
@@ -170,6 +175,7 @@ export default function Album() {
             if (!group) {
               const newGroup = { date: result.date, thumbnails: [result] };
               thumbnails.push(newGroup);
+
               return thumbnails;
             }
 
