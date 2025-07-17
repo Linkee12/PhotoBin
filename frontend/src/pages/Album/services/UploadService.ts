@@ -19,7 +19,7 @@ const IMAGETYPES = [
 type UploadYield =
   | {
       result: "finish";
-      thumbnail: string;
+      thumbnail: string | undefined;
       fileId: string;
       date: string;
       isVideo: boolean;
@@ -42,89 +42,124 @@ export class UploadService {
       date.toString(),
       props.key,
     );
-    let image;
     let cryptedVideo;
+    let cryptedUnsupported;
     let slicedVideo = [];
+    let image;
+    let fileMetadata;
+    let thumbnail;
 
-    if (IMAGETYPES.includes(file.type)) {
-      image = file;
-    } else if (VIDEOTYPES.includes(file.type)) {
-      image = await this._canvasService.getImageFromVideo(file);
-      cryptedVideo = await this._cryptoService.encryptImage(file, props.key);
-      slicedVideo = this._getChunks(cryptedVideo.cryptedImg);
-      const videoRes = this._sendFile(slicedVideo, props.albumId, uuid, "originalVideo");
+    if (IMAGETYPES.includes(file.type) && VIDEOTYPES.includes(file.type)) {
+      if (image === undefined) return;
+      if (IMAGETYPES.includes(file.type)) {
+        image = file;
+      } else if (VIDEOTYPES.includes(file.type)) {
+        image = await this._canvasService.getImageFromVideo(file);
+        cryptedVideo = await this._cryptoService.encryptImage(file, props.key);
+        slicedVideo = this._getChunks(cryptedVideo.cryptedImg);
+        const videoRes = this._sendFile(
+          slicedVideo,
+          props.albumId,
+          uuid,
+          "originalVideo",
+        );
+        for await (const bytes of videoRes) yield { result: "progress", bytes };
+      }
+      thumbnail = await this._canvasService.resize(image, {
+        targetSize: SIZE,
+      });
+      const reduce = await this._canvasService.resize(image, {
+        quality: QUALITY,
+      });
+      const cryptedThumbnail = await this._cryptoService.encryptImage(
+        await thumbnail.blob,
+        props.key,
+      );
+      const cryptedOriginImage = await this._cryptoService.encryptImage(image, props.key);
+      const cryptedReducedImage = await this._cryptoService.encryptImage(
+        await reduce.blob,
+        props.key,
+      );
+      const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
+      const slicedReducedImg = this._getChunks(cryptedReducedImage.cryptedImg);
+
+      const originRes = this._sendFile(slicedOriginImg, props.albumId, uuid, "original");
+      for await (const bytes of originRes) yield { result: "progress", bytes };
+
+      const reducedRes = this._sendFile(slicedReducedImg, props.albumId, uuid, "reduced");
+      for await (const bytes of reducedRes) yield { result: "progress", bytes };
+
+      const thumbRes = this._sendFile(
+        [cryptedThumbnail.cryptedImg],
+        props.albumId,
+        uuid,
+        "thumbnail",
+      );
+      for await (const bytes of thumbRes) yield { result: "progress", bytes };
+      fileMetadata = {
+        fileName: {
+          iv: uint8ArrayToBase64(cryptedFileName.iv),
+          value: arrayBufferToBase64(cryptedFileName.encryptedText),
+        },
+        date: {
+          iv: uint8ArrayToBase64(cryptedDate.iv),
+          value: arrayBufferToBase64(cryptedDate.encryptedText),
+        },
+        fileId: uuid,
+        original: {
+          iv: uint8ArrayToBase64(cryptedOriginImage.iv),
+          chunkCount: slicedOriginImg.length,
+        },
+        reduced: {
+          iv: uint8ArrayToBase64(cryptedReducedImage.iv),
+          chunkCount: slicedReducedImg.length,
+        },
+        thumbnail: {
+          iv: uint8ArrayToBase64(cryptedThumbnail.iv),
+          chunkCount: 1,
+        },
+        originalVideo:
+          slicedVideo.length === 0
+            ? undefined
+            : {
+                iv: uint8ArrayToBase64(
+                  (cryptedVideo as { iv: Uint8Array<ArrayBuffer> }).iv,
+                ),
+                chunkCount: slicedVideo.length,
+              },
+      };
+    } else {
+      cryptedUnsupported = await this._cryptoService.encryptImage(file, props.key);
+      const slicedUnsopported = this._getChunks(cryptedUnsupported.cryptedImg);
+      const videoRes = this._sendFile(
+        slicedUnsopported,
+        props.albumId,
+        uuid,
+        "unsupportedFile",
+      );
       for await (const bytes of videoRes) yield { result: "progress", bytes };
+      fileMetadata = {
+        fileName: {
+          iv: uint8ArrayToBase64(cryptedFileName.iv),
+          value: arrayBufferToBase64(cryptedFileName.encryptedText),
+        },
+        date: {
+          iv: uint8ArrayToBase64(cryptedDate.iv),
+          value: arrayBufferToBase64(cryptedDate.encryptedText),
+        },
+        fileId: uuid,
+        unsupportedFile: {
+          iv: uint8ArrayToBase64(cryptedUnsupported.iv),
+          chunkCount: slicedUnsopported.length,
+        },
+      };
     }
-    //TODO upload all file format
-    if (image === undefined) return;
-    const thumbnail = await this._canvasService.resize(image, {
-      targetSize: SIZE,
-    });
-    const reduce = await this._canvasService.resize(image, {
-      quality: QUALITY,
-    });
-    const cryptedThumbnail = await this._cryptoService.encryptImage(
-      await thumbnail.blob,
-      props.key,
-    );
-    const cryptedOriginImage = await this._cryptoService.encryptImage(image, props.key);
-    const cryptedReducedImage = await this._cryptoService.encryptImage(
-      await reduce.blob,
-      props.key,
-    );
-    const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
-    const slicedReducedImg = this._getChunks(cryptedReducedImage.cryptedImg);
 
-    const originRes = this._sendFile(slicedOriginImg, props.albumId, uuid, "original");
-    for await (const bytes of originRes) yield { result: "progress", bytes };
-
-    const reducedRes = this._sendFile(slicedReducedImg, props.albumId, uuid, "reduced");
-    for await (const bytes of reducedRes) yield { result: "progress", bytes };
-
-    const thumbRes = this._sendFile(
-      [cryptedThumbnail.cryptedImg],
-      props.albumId,
-      uuid,
-      "thumbnail",
-    );
-    for await (const bytes of thumbRes) yield { result: "progress", bytes };
-
-    const fileMetadata = {
-      fileName: {
-        iv: uint8ArrayToBase64(cryptedFileName.iv),
-        value: arrayBufferToBase64(cryptedFileName.encryptedText),
-      },
-      date: {
-        iv: uint8ArrayToBase64(cryptedDate.iv),
-        value: arrayBufferToBase64(cryptedDate.encryptedText),
-      },
-      fileId: uuid,
-      original: {
-        iv: uint8ArrayToBase64(cryptedOriginImage.iv),
-        chunkCount: slicedOriginImg.length,
-      },
-      reduced: {
-        iv: uint8ArrayToBase64(cryptedReducedImage.iv),
-        chunkCount: slicedReducedImg.length,
-      },
-      thumbnail: {
-        iv: uint8ArrayToBase64(cryptedThumbnail.iv),
-        chunkCount: 1,
-      },
-      originalVideo:
-        slicedVideo.length === 0
-          ? undefined
-          : {
-              iv: uint8ArrayToBase64(
-                (cryptedVideo as { iv: Uint8Array<ArrayBuffer> }).iv,
-              ),
-              chunkCount: slicedVideo.length,
-            },
-    };
     await this._finalize(props.albumId, fileMetadata);
+
     yield {
       result: "finish",
-      thumbnail: thumbnail.url,
+      thumbnail: thumbnail ? thumbnail.url : undefined,
       fileId: uuid,
       date: date,
       isVideo: slicedVideo.length !== 0,

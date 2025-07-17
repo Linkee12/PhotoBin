@@ -2,6 +2,7 @@ import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { client } from "../../../cuple";
 import { base64ToArrayBuffer } from "../../../utils/base64";
 import { CryptoService } from "./CryptoService";
+import DefaultThumbnail from "@assets/images/defaultThumbnail.jpeg";
 
 export class ImageQueryService {
   constructor(private _cryptoService: CryptoService) {}
@@ -10,7 +11,7 @@ export class ImageQueryService {
     albumId: string,
     file: Metadata["files"][number],
     key: string,
-    type: "original" | "reduced" | "thumbnail" | "originalVideo",
+    type: "original" | "reduced" | "thumbnail" | "originalVideo" | "unsupportedFile",
   ) {
     let parts: ArrayBuffer[] = [];
     if (!file[type]) return;
@@ -42,7 +43,7 @@ export class ImageQueryService {
       file.fileName.iv,
     );
     return {
-      img: URL.createObjectURL(blob),
+      img: type === "unsupportedFile" ? DefaultThumbnail : URL.createObjectURL(blob),
       id: file.fileId,
       fileName: fileName,
       blob,

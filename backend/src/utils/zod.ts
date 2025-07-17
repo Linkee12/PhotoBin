@@ -34,6 +34,12 @@ export const fileMetadataSchema = z.object({
       chunkCount: z.number(),
     })
     .optional(),
+  unsupportedFile: z
+    .object({
+      iv: z.string(),
+      chunkCount: z.number(),
+    })
+    .optional(),
 });
 
 export const metadataSchema = z.object({

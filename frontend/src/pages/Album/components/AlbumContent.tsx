@@ -27,7 +27,7 @@ type AlbumContentProps = {
   onAddThumbnail: (thumbnail: {
     date: string;
     id: string;
-    thumbnail: string;
+    thumbnail: string | undefined;
     isVideo: boolean;
   }) => void;
 };
