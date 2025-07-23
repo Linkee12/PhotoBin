@@ -49,8 +49,7 @@ export class UploadService {
     let fileMetadata;
     let thumbnail;
 
-    if (IMAGETYPES.includes(file.type) && VIDEOTYPES.includes(file.type)) {
-      if (image === undefined) return;
+    if (IMAGETYPES.includes(file.type) || VIDEOTYPES.includes(file.type)) {
       if (IMAGETYPES.includes(file.type)) {
         image = file;
       } else if (VIDEOTYPES.includes(file.type)) {
@@ -65,6 +64,7 @@ export class UploadService {
         );
         for await (const bytes of videoRes) yield { result: "progress", bytes };
       }
+      if (image === undefined) return;
       thumbnail = await this._canvasService.resize(image, {
         targetSize: SIZE,
       });
@@ -156,7 +156,6 @@ export class UploadService {
     }
 
     await this._finalize(props.albumId, fileMetadata);
-
     yield {
       result: "finish",
       thumbnail: thumbnail ? thumbnail.url : undefined,

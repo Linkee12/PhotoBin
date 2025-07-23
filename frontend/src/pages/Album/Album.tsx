@@ -24,7 +24,7 @@ const downloadService = new DownloadService(imageQueryService);
 export type ThumbnailGroup = {
   date: string;
   thumbnails: {
-    thumbnail: string;
+    thumbnail: string | undefined;
     id: string;
     isVideo: boolean;
   }[];
@@ -175,7 +175,6 @@ export default function Album() {
             if (!group) {
               const newGroup = { date: result.date, thumbnails: [result] };
               thumbnails.push(newGroup);
-
               return thumbnails;
             }
 
