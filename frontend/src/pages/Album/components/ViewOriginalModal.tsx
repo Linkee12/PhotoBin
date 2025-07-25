@@ -102,7 +102,13 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           <Icons as={Exit} />
         </Button>
       </ButtonBar>
-      <NextButton style={{ left: "0px" }} onClick={() => props.onNext(-1)}>
+      <NextButton
+        style={{ left: "0px" }}
+        onClick={() => {
+          props.onNext(-1);
+          setIsVideoReady(false);
+        }}
+      >
         <Icons as={Prev} />
       </NextButton>
       {file?.originalVideo ? (
@@ -118,7 +124,13 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       ) : (
         <FullScreenImg src={url} />
       )}
-      <NextButton style={{ right: "0px" }} onClick={() => props.onNext(1)}>
+      <NextButton
+        style={{ right: "0px" }}
+        onClick={() => {
+          props.onNext(1);
+          setIsVideoReady(false);
+        }}
+      >
         <Icons as={Next} />
       </NextButton>
     </Container>
