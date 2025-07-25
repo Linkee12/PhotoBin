@@ -47,8 +47,15 @@ export class DownloadService {
         const file = props.albumContext.metadata.files.find((f) => f.fileId === imgID);
 
         if (!file) continue;
+        let type: "original" | "originalVideo" | "unsupportedFile";
+        if (file.original) {
+          type = "original";
+        } else if (file.originalVideo) {
+          type = "originalVideo";
+        } else {
+          type = "unsupportedFile";
+        }
 
-        const type = file.originalVideo !== undefined ? "originalVideo" : "original";
         const origin = await this._imageQueryService.getImg(
           props.albumContext.metadata.albumId,
           file,
