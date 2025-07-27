@@ -38,7 +38,7 @@ export function AlbumContent(props: AlbumContentProps) {
   const { metadata, refreshMetadata, key } = useAlbumContext();
 
   function setProgress(percentage: number) {
-    const height = 480 * (percentage / 100);
+    const height = 445 * (percentage / 100);
     setMaskHeight(height);
   }
 
