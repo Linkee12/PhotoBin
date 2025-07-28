@@ -1,13 +1,19 @@
 interface ThumbnailItem {
   id: string;
   date: string;
-  thumbnail: string;
+  name: string;
+  thumbnail: string | undefined;
   isVideo: boolean;
 }
 
 interface ThumbnailGroup {
   date: string;
-  thumbnails: { id: string; thumbnail: string; isVideo: boolean }[];
+  thumbnails: {
+    id: string;
+    thumbnail: string | undefined;
+    isVideo: boolean;
+    name: string;
+  }[];
 }
 
 type Thumbnails = ThumbnailGroup[];
@@ -24,8 +30,9 @@ export function groupThumbnailsByDate(thumbs: ThumbnailItem[]): Thumbnails {
 
     group.thumbnails.push({
       id: current.id,
-      thumbnail: current.thumbnail,
+      thumbnail: current.thumbnail ?? undefined,
       isVideo: current.isVideo,
+      name: current.name,
     });
 
     return acc;

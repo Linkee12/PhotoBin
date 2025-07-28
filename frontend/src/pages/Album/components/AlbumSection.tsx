@@ -4,12 +4,15 @@ import Check2 from "@assets/images/icons/check2.svg?react";
 import Check3 from "@assets/images/icons/check3.svg?react";
 import { styled } from "../../../stitches.config";
 
-import DefaultThumbnail from "@assets/images/defaultThumbnail.jpeg";
-
 type AlbumSectionProps = {
   group: {
     date: string;
-    thumbnails: { thumbnail: string | undefined; id: string; isVideo: boolean }[];
+    thumbnails: {
+      thumbnail: string | undefined;
+      name: string;
+      id: string;
+      isVideo: boolean;
+    }[];
   };
   index: number;
   selectedImages: string[];
@@ -54,7 +57,8 @@ export function AlbumSection(props: AlbumSectionProps) {
               <AlbumItem
                 key={image.id}
                 isVideo={image.isVideo}
-                imageSrc={image.thumbnail ?? DefaultThumbnail}
+                imageSrc={image.thumbnail}
+                fileName={image.name}
                 isSelected={props.isSelected(image.id)}
                 onSelect={() => props.onSelect([image.id])}
                 onDeselect={() => props.onDeSelect([image.id])}

@@ -27,6 +27,7 @@ type AlbumContentProps = {
   onAddThumbnail: (thumbnail: {
     date: string;
     id: string;
+    name: string;
     thumbnail: string | undefined;
     isVideo: boolean;
   }) => void;
@@ -176,7 +177,7 @@ const CloudContainer = styled("div", {
   flexDirection: "column",
   alignItems: "center",
   position: "absolute",
-  top: "30vh",
+  top: "15rem",
   transition: "display 0.3s",
   variants: {
     isVisible: {
@@ -233,6 +234,7 @@ async function* upload(params: {
             result: "thumbnail",
             thumbnail: response.thumbnail,
             id: response.fileId,
+            name: response.name,
             date: response.date,
             isVideo: response.isVideo,
           },

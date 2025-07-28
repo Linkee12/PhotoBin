@@ -4,7 +4,8 @@ import Play from "@assets/images/icons/play.svg?react";
 import { styled } from "../../../stitches.config";
 
 type AlbumItemProps = {
-  imageSrc: string;
+  imageSrc: string | undefined;
+  fileName: string;
   isSelected: boolean;
   isVideo: boolean;
   onSelect: () => void;
@@ -18,7 +19,13 @@ export function AlbumItem(props: AlbumItemProps) {
       <Preview>
         <CheckIcon isVisible={props.isSelected} />
         {props.isVideo === true ? <PlayIcon /> : <></>}
-        <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
+        {props.imageSrc !== undefined ? (
+          <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
+        ) : (
+          <UnsupportedFile isSelected={props.isSelected}>
+            <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
+          </UnsupportedFile>
+        )}
         <ZoomIcon
           onClick={() => {
             props.onOpen();
@@ -59,6 +66,44 @@ const Image = styled("img", {
       },
     },
   },
+});
+const UnsupportedFile = styled("div", {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "#595959",
+  borderRadius: "10px",
+  width: "var(--width, 300px)",
+  height: "var(--height, 200px)",
+  transition: "width 0.2s, height 0.2s",
+  variants: {
+    isSelected: {
+      true: {
+        "@portrait": {
+          width: "calc(100% - 20px)",
+          height: "calc(100% - 20px)",
+        },
+        "@landscape": {
+          width: 280,
+          height: 180,
+        },
+      },
+      false: {
+        "@portrait": {
+          width: "100%",
+          height: "100%",
+        },
+        "@landscape": {
+          width: 300,
+          height: 200,
+        },
+      },
+    },
+  },
+});
+const UnsupportedFileName = styled("p", {
+  fontSize: "1.2rem",
+  fontFamily: "Open Sans",
 });
 
 const Preview = styled("div", {

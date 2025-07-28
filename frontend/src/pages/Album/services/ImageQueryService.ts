@@ -2,7 +2,6 @@ import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { client } from "../../../cuple";
 import { base64ToArrayBuffer } from "../../../utils/base64";
 import { CryptoService } from "./CryptoService";
-import DefaultThumbnail from "@assets/images/defaultThumbnail.jpeg";
 
 export class ImageQueryService {
   constructor(private _cryptoService: CryptoService) {}
@@ -43,7 +42,7 @@ export class ImageQueryService {
       file.fileName.iv,
     );
     return {
-      img: type === "unsupportedFile" ? DefaultThumbnail : URL.createObjectURL(blob),
+      img: type === "unsupportedFile" ? undefined : URL.createObjectURL(blob),
       id: file.fileId,
       fileName: fileName,
       blob,

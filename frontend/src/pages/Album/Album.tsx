@@ -26,6 +26,7 @@ export type ThumbnailGroup = {
   thumbnails: {
     thumbnail: string | undefined;
     id: string;
+    name: string;
     isVideo: boolean;
   }[];
 };
@@ -98,8 +99,9 @@ export default function Album() {
   async function getThumbnails(thumbnails: Metadata["files"]) {
     if (albumId === undefined) return;
     let thumbArr: {
-      thumbnail: string;
+      thumbnail: string | undefined;
       id: string;
+      name: string;
       date: string;
       isVideo: boolean;
     }[] = [];
@@ -115,6 +117,7 @@ export default function Album() {
         thumbnail: result.img,
         id: result.id,
         date: result.date,
+        name: result.fileName,
         isVideo: !!file.originalVideo,
       };
       thumbArr = [...thumbArr, thumb];

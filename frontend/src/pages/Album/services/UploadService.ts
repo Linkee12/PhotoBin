@@ -21,6 +21,7 @@ type UploadYield =
       result: "finish";
       thumbnail: string | undefined;
       fileId: string;
+      name: string;
       date: string;
       isVideo: boolean;
     }
@@ -159,6 +160,7 @@ export class UploadService {
     yield {
       result: "finish",
       thumbnail: thumbnail ? thumbnail.url : undefined,
+      name: file.name,
       fileId: uuid,
       date: date,
       isVideo: slicedVideo.length !== 0,
