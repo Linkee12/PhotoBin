@@ -3,8 +3,8 @@
 
 <svg
    width="94.869766mm"
-   height="13.308385mm"
-   viewBox="0 0 94.869767 13.308385"
+   height="12.408mm"
+   viewBox="0 0 94.869767 12.408"
    version="1.1"
    preserveAspectRatio="none"
    id="svg1"
@@ -25,10 +25,10 @@
     </g>
   </g>
   <rect
-     style="fill:none;fill-rule:evenodd;stroke-width:0.264583"
+     style="fill:none;fill-rule:evenodd;stroke-width:0.255477"
      id="rect1"
      width="94.869766"
-     height="13.308384"
-     x="1.6051288e-08"
-     y="-7.0334295e-08" />
+     height="12.408"
+     x="9.7102084e-17"
+     y="-5.8383376e-16" />
 </svg>

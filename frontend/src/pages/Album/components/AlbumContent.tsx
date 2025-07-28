@@ -141,8 +141,12 @@ const ContentHeader = styled("div", {
   flex: 1,
   maskImage: `url(${header})`,
   maskRepeat: "no-repeat",
-  maskSize: "100% 100%",
-  maskPosition: "center",
+  "@portrait": {
+    maskSize: "100% 100%",
+  },
+  "@landscape": {
+    maskSize: "50% 100%",
+  },
   backgroundColor: "#181818",
   variants: {
     bg: {
