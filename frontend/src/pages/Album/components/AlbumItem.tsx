@@ -23,7 +23,7 @@ export function AlbumItem(props: AlbumItemProps) {
           <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
         ) : (
           <UnsupportedFile isSelected={props.isSelected}>
-            <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
+            <UnsupportedFileName>{formatFilename(props.fileName)}</UnsupportedFileName>
           </UnsupportedFile>
         )}
         <ZoomIcon
@@ -155,3 +155,14 @@ const PlayIcon = styled(Play, {
   alignItems: "center",
   cursor: "pointer",
 });
+function formatFilename(filename: string): string {
+  if (filename.length <= 20) {
+    return filename;
+  }
+
+  const lastDotIndex = filename.lastIndexOf(".");
+  const fileType = lastDotIndex !== -1 ? filename.slice(lastDotIndex) : "";
+  const namePart = filename.slice(0, 15);
+
+  return `${namePart}... ${fileType}`;
+}
