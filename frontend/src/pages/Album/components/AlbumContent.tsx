@@ -146,7 +146,7 @@ const ContentHeader = styled("div", {
     maskSize: "100% 100%",
   },
   "@landscape": {
-    maskSize: "50% 100%",
+    maskSize: "750px 100%",
   },
   backgroundColor: "#181818",
   variants: {

@@ -95,6 +95,11 @@ export default function Album() {
   function onUncheckSelected() {
     setSelectedImages([]);
   }
+  function onSelectAll() {
+    if (metadata?.files) {
+      setSelectedImages(metadata?.files.map((file) => file.fileId));
+    }
+  }
 
   async function getThumbnails(thumbnails: Metadata["files"]) {
     if (albumId === undefined) return;
@@ -146,7 +151,6 @@ export default function Album() {
       uploadService.saveName(metadata.albumId, title, key);
     }
   }
-
   return (
     <Container isEmptyAlbum={thumbnails.length === 0}>
       {fullscreenImage && (
@@ -163,6 +167,9 @@ export default function Album() {
         title={title}
         onChangeTitle={setTitle}
         onSaveName={saveAlbumName}
+        onSelectAll={onSelectAll}
+        onUnselectAll={onUncheckSelected}
+        selectedAll={selectedImages.length === metadata?.files.length}
       />
       <AlbumContent
         uploadService={uploadService}

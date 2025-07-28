@@ -74,28 +74,24 @@ const UnsupportedFile = styled("div", {
   backgroundColor: "#595959",
   borderRadius: "10px",
   width: "var(--width, 300px)",
-  height: "var(--height, 200px)",
+  aspectRatio: "3 / 2",
   transition: "width 0.2s, height 0.2s",
   variants: {
     isSelected: {
       true: {
         "@portrait": {
           width: "calc(100% - 20px)",
-          height: "calc(100% - 20px)",
         },
         "@landscape": {
           width: 280,
-          height: 180,
         },
       },
       false: {
         "@portrait": {
           width: "100%",
-          height: "100%",
         },
         "@landscape": {
           width: 300,
-          height: 200,
         },
       },
     },
@@ -115,6 +111,7 @@ const Preview = styled("div", {
     width: "300px",
     height: "200px",
   },
+  margin: "1.9rem",
   borderRadius: "10px",
   backgroundColor: "#232323",
   boxSizing: "border-box",

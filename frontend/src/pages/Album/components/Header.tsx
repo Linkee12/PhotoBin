@@ -1,6 +1,8 @@
 import Edit from "@assets/images/icons/edit.svg?react";
 import Link from "@assets/images/icons/link.svg?react";
 import Ok from "@assets/images/icons/ok.svg?react";
+import SelectAll from "@assets/images/icons/selectAll.svg?react";
+import UnselectAll from "@assets/images/icons/unselectAll.svg?react";
 import { styled } from "../../../stitches.config";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
@@ -8,8 +10,11 @@ import { toast } from "react-toastify";
 type HeaderProps = {
   isEmptyAlbum: boolean;
   title: string;
+  selectedAll: boolean;
   onChangeTitle: (title: string) => void;
   onSaveName: () => void;
+  onSelectAll: () => void;
+  onUnselectAll: () => void;
 };
 
 export function Header(props: HeaderProps) {
@@ -27,31 +32,39 @@ export function Header(props: HeaderProps) {
   const isPlaceholder = props.title.length === 0;
   return (
     <Container isEmptyAlbum={props.isEmptyAlbum}>
-      <TextContainer>
-        {isEdit ? (
-          <Title
-            value={props.title}
-            ref={inputRef}
-            onChange={(e) => props.onChangeTitle(e.target.value)}
-            autoCapitalize="sentences"
-            onFocus={() => setIsEdit(true)}
-            onKeyDown={(event) => {
-              if (event.code === "Enter") {
+      <StartContainer>
+        <TextContainer>
+          {isEdit ? (
+            <Title
+              value={props.title}
+              ref={inputRef}
+              onChange={(e) => props.onChangeTitle(e.target.value)}
+              autoCapitalize="sentences"
+              onFocus={() => setIsEdit(true)}
+              onKeyDown={(event) => {
+                if (event.code === "Enter") {
+                  setIsEdit(false);
+                  props.onSaveName();
+                }
+              }}
+              onBlur={() => {
                 setIsEdit(false);
                 props.onSaveName();
-              }
-            }}
-            onBlur={() => {
-              setIsEdit(false);
-              props.onSaveName();
-            }}
-          />
-        ) : (
-          <Text isPlaceholder={isPlaceholder} onClick={() => setIsEdit(true)}>
-            {props.title || "Album title"}
-          </Text>
-        )}
-      </TextContainer>
+              }}
+            />
+          ) : (
+            <Text isPlaceholder={isPlaceholder} onClick={() => setIsEdit(true)}>
+              {props.title || "Album title"}
+            </Text>
+          )}
+        </TextContainer>
+        <SelectAllContainer
+          onClick={props.selectedAll ? props.onUnselectAll : props.onSelectAll}
+        >
+          <Icons as={props.selectedAll ? SelectAll : UnselectAll} />
+          <p>SELECT ALL</p>
+        </SelectAllContainer>
+      </StartContainer>
       <Tools>
         <Button
           onClick={() => {
@@ -136,7 +149,15 @@ const Container = styled("div", {
     },
   },
 });
-
+const StartContainer = styled("div", {
+  display: "flex",
+  flexDirection: "column",
+});
+const SelectAllContainer = styled("div", {
+  display: "flex",
+  alignItems: "center",
+  gap: "3px",
+});
 const Icons = styled("svg", {
   width: "2rem",
   height: "2rem",

@@ -134,13 +134,14 @@ const Images = styled("div", {
   gap: "10px",
   maxWidth: "100%",
   flex: 1,
-  margin: "1rem 1.28rem 1.28rem 1.28rem",
   justifyContent: "center",
   "@portrait": {
     justifyContent: "center",
+    margin: "1rem 1.28rem 1.28rem 1.28rem",
   },
   "@landscape": {
     justifyContent: "flex-start",
+    margin: "1.9rem 1.9rem 1.9rem 1.9rem",
   },
   flexWrap: "wrap",
 });
@@ -159,7 +160,7 @@ const Header = styled("div", {
   width: "100%",
   display: "flex",
   height: "3.3rem",
-  alignItems: "center",
+  alignItems: "end",
   maskImage: `url(${header})`,
   maskRepeat: "no-repeat",
   "@portrait": {
@@ -167,8 +168,8 @@ const Header = styled("div", {
     paddingLeft: "1.28rem",
   },
   "@landscape": {
-    maskSize: "50% 100%",
-    paddingLeft: "8.6rem",
+    maskSize: "750px 100%",
+    paddingLeft: "5rem",
   },
   backgroundSize: "100% 100%",
   transition: "background-color 0.3s",
