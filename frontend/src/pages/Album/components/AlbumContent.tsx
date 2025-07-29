@@ -177,7 +177,7 @@ const CloudContainer = styled("div", {
   flexDirection: "column",
   alignItems: "center",
   position: "absolute",
-  top: "15rem",
+  top: "18rem",
   transition: "display 0.3s",
   variants: {
     isVisible: {

@@ -61,8 +61,14 @@ export function Header(props: HeaderProps) {
         <SelectAllContainer
           onClick={props.selectedAll ? props.onUnselectAll : props.onSelectAll}
         >
-          <Icons as={props.selectedAll ? SelectAll : UnselectAll} />
-          <p>SELECT ALL</p>
+          {props.isEmptyAlbum ? (
+            <></>
+          ) : (
+            <>
+              <Icons as={props.selectedAll ? SelectAll : UnselectAll} />
+              <p>SELECT ALL</p>
+            </>
+          )}
         </SelectAllContainer>
       </StartContainer>
       <Tools>
