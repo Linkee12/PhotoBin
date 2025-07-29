@@ -14,13 +14,14 @@ const imageDownloadService = new ImageQueryService(new CryptoService());
 type ViewOriginalModalProps = {
   fileId: string;
   visible: boolean;
+  fileName: string;
   onNext: (direction: number) => void;
   onDelete: () => void;
   onShowChange: (visible: boolean) => void;
 };
 export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const { metadata, key } = useAlbumContext();
-  const [url, setUrl] = useState(
+  const [url, setUrl] = useState<string | undefined>(
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
   const [fileName, setFileName] = useState("");
@@ -43,26 +44,27 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     if (!metadata) return;
     if (metadata.albumId === undefined) return;
     if (file === undefined) return;
-    const reduce = await imageDownloadService.getImg(
-      metadata.albumId,
-      file,
-      key,
-      "reduced",
-    );
-    if (reduce !== undefined) {
-      setUrl(reduce.img);
-      setFileName(reduce.fileName);
-    }
-    const origin = await imageDownloadService.getImg(
-      metadata.albumId,
-      file,
-      key,
-      "original",
-    );
-    if (origin !== undefined) {
-      setUrl(origin.img);
-    }
-    if (file.originalVideo !== undefined) {
+    if (file.original !== undefined) {
+      const reduce = await imageDownloadService.getImg(
+        metadata.albumId,
+        file,
+        key,
+        "reduced",
+      );
+      if (reduce !== undefined) {
+        setUrl(reduce.img);
+        setFileName(reduce.fileName);
+      }
+      const origin = await imageDownloadService.getImg(
+        metadata.albumId,
+        file,
+        key,
+        "original",
+      );
+      if (origin !== undefined) {
+        setUrl(origin.img);
+      }
+    } else if (file.originalVideo !== undefined) {
       setIsLoadingVideo(true);
       const video = await imageDownloadService.getImg(
         metadata.albumId,
@@ -75,6 +77,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         setIsVideoReady(true);
       }
       setIsLoadingVideo(false);
+    } else {
+      setUrl("");
     }
   }
 
@@ -121,8 +125,13 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
             </LoadingOverlay>
           )}
         </>
-      ) : (
+      ) : // eslint-disable-next-line sonarjs/no-nested-conditional
+      file?.original ? (
         <FullScreenImg src={url} />
+      ) : (
+        <UnsupportedFile>
+          <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
+        </UnsupportedFile>
       )}
       <NextButton
         style={{ right: "0px" }}
@@ -252,4 +261,20 @@ const LoadingOverlay = styled("div", {
   alignItems: "center",
   justifyContent: "center",
   zIndex: 1,
+});
+const UnsupportedFile = styled("div", {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100vh",
+  backgroundImage: "linear-gradient(black 0%, #404040 10%, #404040 90%, black 100%)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1,
+});
+const UnsupportedFileName = styled("p", {
+  fontFamily: "Open Sans",
+  fontSize: "1.7rem",
 });

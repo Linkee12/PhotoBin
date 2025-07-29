@@ -157,6 +157,13 @@ export default function Album() {
         <ViewOriginalModal
           fileId={fullscreenImage.fileId}
           visible={showOrigin}
+          fileName={
+            thumbnails.map((thumbnailsGroup) =>
+              thumbnailsGroup.thumbnails.find(
+                (thumb) => thumb.id === fullscreenImage.fileId,
+              ),
+            )[0]?.name ?? ""
+          }
           onShowChange={setShowOrigin}
           onNext={(direction) => nextOriginImgId(direction)}
           onDelete={() => deleteImages([fullscreenImage.fileId])}
