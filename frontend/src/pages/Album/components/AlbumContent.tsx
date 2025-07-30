@@ -116,6 +116,7 @@ export function AlbumContent(props: AlbumContentProps) {
 
 const Content = styled("div", {
   display: "flex",
+  marginTop: "-3rem",
   maxWidth: "100%",
   flexDirection: "column",
   alignItems: "center",
@@ -138,7 +139,7 @@ const Content = styled("div", {
 const ContentHeader = styled("div", {
   display: "flex",
   width: "100%",
-  maxHeight: "5rem",
+  maxHeight: "3rem",
   flex: 1,
   maskImage: `url(${header})`,
   maskRepeat: "no-repeat",
@@ -161,7 +162,7 @@ const ContentHeader = styled("div", {
 const ContentHeaderBg = styled("div", {
   display: "flex",
   width: "100%",
-  maxHeight: "5rem",
+  maxHeight: "3rem",
   flex: 1,
   backgroundColor: "#333333",
   variants: {

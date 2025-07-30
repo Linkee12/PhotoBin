@@ -125,6 +125,7 @@ const Button = styled("button", {
 
 const Tools = styled("div", {
   display: "flex",
+  justifyContent: "center",
   flexDirection: "column",
   alignItems: "end",
   gap: "3rem",
@@ -139,6 +140,7 @@ const Container = styled("div", {
   width: "100%",
   display: "flex",
   gap: "2rem",
+  height: "13rem",
   justifyContent: "space-between",
   backgroundSize: "100% 100%",
   padding: "2rem",
@@ -163,6 +165,7 @@ const SelectAllContainer = styled("div", {
   display: "flex",
   alignItems: "center",
   gap: "3px",
+  marginBottom: "3rem",
 });
 const Icons = styled("svg", {
   width: "2rem",

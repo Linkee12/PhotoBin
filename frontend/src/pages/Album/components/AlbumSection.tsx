@@ -29,7 +29,7 @@ export function AlbumSection(props: AlbumSectionProps) {
   );
 
   return (
-    <AlbumBgContainer bg={props.index % 2 === 0} isUploading={props.isUploading}>
+    <AlbumBgContainer>
       <AlbumBg bg={props.index % 2 === 0} isUploading={props.isUploading}>
         <HeaderContainer
           bg={props.index === 0 ? "first" : props.index % 2 === 0}
@@ -126,9 +126,9 @@ const AlbumBgContainer = styled("div", {
   display: "flex",
   width: "100%",
   flex: 1,
-  variants: BGVARIANTS,
-  compoundVariants: BG,
+  marginTop: "-52.8px",
 });
+
 const Images = styled("div", {
   display: "flex",
   gap: "10px",
@@ -154,12 +154,13 @@ const AlbumBg = styled("div", {
   transition: "background-color 0.3s",
   flexDirection: "column",
   variants: BGVARIANTS,
+  paddingBottom: "3.3rem",
   compoundVariants: BG,
 });
 const Header = styled("div", {
   width: "100%",
   display: "flex",
-  height: "3.3rem",
+  height: "3rem",
   alignItems: "end",
   maskImage: `url(${header})`,
   maskRepeat: "no-repeat",
@@ -168,13 +169,12 @@ const Header = styled("div", {
     paddingLeft: "1.28rem",
   },
   "@landscape": {
-    maskSize: "750px 100%",
+    maskSize: "50% 100%",
     paddingLeft: "5rem",
   },
   backgroundSize: "100% 100%",
   transition: "background-color 0.3s",
   variants: BGVARIANTS,
-
   compoundVariants: BG,
 });
 const HeaderContainer = styled("div", {
