@@ -116,7 +116,6 @@ export function AlbumContent(props: AlbumContentProps) {
 
 const Content = styled("div", {
   display: "flex",
-  marginTop: "-3rem",
   maxWidth: "100%",
   flexDirection: "column",
   alignItems: "center",
@@ -128,6 +127,7 @@ const Content = styled("div", {
     bgColor: {
       true: {
         backgroundColor: "#181818",
+        marginTop: "-3rem",
       },
       false: {
         backgroundColor: "rgba(51, 51, 51)",
@@ -147,7 +147,7 @@ const ContentHeader = styled("div", {
     maskSize: "100% 100%",
   },
   "@landscape": {
-    maskSize: "750px 100%",
+    maskSize: "800px 100%",
   },
   backgroundColor: "#181818",
   variants: {

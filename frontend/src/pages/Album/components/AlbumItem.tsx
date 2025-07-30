@@ -42,6 +42,7 @@ const Image = styled("img", {
   width: "var(--width, 300px)",
   height: "var(--height, 200px)",
   transition: "width 0.2s, height 0.2s",
+  objectFit: "contain",
   variants: {
     isSelected: {
       true: {
@@ -57,7 +58,7 @@ const Image = styled("img", {
       false: {
         "@portrait": {
           width: "100%",
-          height: "100%",
+          height: "auto",
         },
         "@landscape": {
           width: 300,
@@ -103,15 +104,30 @@ const UnsupportedFileName = styled("p", {
 });
 
 const Preview = styled("div", {
-  "@portrait": {
-    width: "90vw",
-    height: "100%",
+  "@portrait": {},
+  "@landscape": {},
+  variants: {
+    isSelected: {
+      true: {
+        "@portrait": {
+          width: "calc(100% - 20px)",
+        },
+        "@landscape": {
+          width: 280,
+        },
+      },
+      false: {
+        "@portrait": {
+          width: "100%",
+        },
+        "@landscape": {
+          width: "300px",
+          height: "200px",
+        },
+      },
+    },
   },
-  "@landscape": {
-    width: "300px",
-    height: "200px",
-  },
-  margin: "1.9rem",
+  margin: "1rem",
   borderRadius: "10px",
   backgroundColor: "#232323",
   boxSizing: "border-box",

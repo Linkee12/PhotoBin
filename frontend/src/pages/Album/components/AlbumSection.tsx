@@ -125,8 +125,8 @@ const SelectAll = styled("div", {
 const AlbumBgContainer = styled("div", {
   display: "flex",
   width: "100%",
+  paddingBottom: "3rem",
   flex: 1,
-  marginTop: "-52.8px",
 });
 
 const Images = styled("div", {
@@ -154,7 +154,6 @@ const AlbumBg = styled("div", {
   transition: "background-color 0.3s",
   flexDirection: "column",
   variants: BGVARIANTS,
-  paddingBottom: "3.3rem",
   compoundVariants: BG,
 });
 const Header = styled("div", {
@@ -169,7 +168,7 @@ const Header = styled("div", {
     paddingLeft: "1.28rem",
   },
   "@landscape": {
-    maskSize: "50% 100%",
+    maskSize: "800px 100%",
     paddingLeft: "5rem",
   },
   backgroundSize: "100% 100%",
@@ -181,6 +180,7 @@ const HeaderContainer = styled("div", {
   width: "100%",
   display: "flex",
   maskRepeat: "no-repeat",
+  marginTop: "-3rem",
   maskSize: "100% 100%",
   maskPosition: "center",
   backgroundSize: "100% 100%",
@@ -198,6 +198,13 @@ const HeaderContainer = styled("div", {
   },
 
   compoundVariants: [
+    {
+      bg: "first",
+      isUploading: "true",
+      css: {
+        backgroundColor: "#333333",
+      },
+    },
     {
       bg: "true",
       isUploading: "false",
