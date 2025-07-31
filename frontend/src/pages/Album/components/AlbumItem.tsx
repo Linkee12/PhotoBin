@@ -16,7 +16,7 @@ type AlbumItemProps = {
 export function AlbumItem(props: AlbumItemProps) {
   return (
     <div onClick={() => (props.isSelected ? props.onDeselect() : props.onSelect())}>
-      <Preview>
+      <Preview isSelected={props.isSelected}>
         <CheckIcon isVisible={props.isSelected} />
         {props.isVideo === true ? <PlayIcon /> : <></>}
         {props.imageSrc !== undefined ? (
@@ -41,7 +41,7 @@ const Image = styled("img", {
   borderRadius: "10px",
   width: "var(--width, 300px)",
   height: "var(--height, 200px)",
-  transition: "width 0.2s, height 0.2s",
+  transition: "width 0.2s, height 0.2s, padding 0.2s",
   objectFit: "contain",
   variants: {
     isSelected: {
@@ -49,6 +49,8 @@ const Image = styled("img", {
         "@portrait": {
           width: "calc(100% - 20px)",
           height: "calc(100% - 20px)",
+          paddingTop: "10px",
+          paddingBottom: "10px",
         },
         "@landscape": {
           width: 280,
@@ -104,25 +106,24 @@ const UnsupportedFileName = styled("p", {
 });
 
 const Preview = styled("div", {
-  "@portrait": {},
-  "@landscape": {},
   variants: {
     isSelected: {
       true: {
         "@portrait": {
-          width: "calc(100% - 20px)",
+          width: "90vw",
         },
         "@landscape": {
-          width: 280,
+          width: 300,
+          height: 200,
         },
       },
       false: {
         "@portrait": {
-          width: "100%",
+          width: "90vw",
         },
         "@landscape": {
-          width: "300px",
-          height: "200px",
+          width: 300,
+          height: 200,
         },
       },
     },
