@@ -3,6 +3,9 @@ import header from "@assets/images/albumItemsBg.svg?no-inline";
 import Check2 from "@assets/images/icons/check2.svg?react";
 import Check3 from "@assets/images/icons/check3.svg?react";
 import { styled } from "../../../stitches.config";
+import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline";
+import LandscapeDownloadIcon from "@assets/images/icons/landscapeDownloadIcon.svg?react";
+import LandscapeAddIcon from "@assets/images/icons/landscapeAddIcon.svg?react";
 
 type AlbumSectionProps = {
   group: {
@@ -21,6 +24,8 @@ type AlbumSectionProps = {
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
   onOpen: (imageId: string) => void;
+  onAddPhoto: () => void;
+  onDownloadAll: () => void;
 };
 
 export function AlbumSection(props: AlbumSectionProps) {
@@ -37,6 +42,7 @@ export function AlbumSection(props: AlbumSectionProps) {
         >
           <Header bg={props.index % 2 === 0} isUploading={props.isUploading}>
             <ShowDate>{props.group.date}</ShowDate>
+
             <SelectAll
               onClick={() => {
                 if (includeAllImages) {
@@ -49,6 +55,20 @@ export function AlbumSection(props: AlbumSectionProps) {
               {includeAllImages ? <CheckIcon as={Check3} /> : <CheckIcon as={Check2} />}
             </SelectAll>
           </Header>
+          {props.index === 0 ? (
+            <LandscapeButtonsBg>
+              <LandscapeButtons>
+                <ButtonText onClick={props.onDownloadAll}>DOWNLOAD ALL</ButtonText>{" "}
+                <LandscapeDownloadIcon />
+              </LandscapeButtons>
+              <LandscapeButtons>
+                <ButtonText onClick={props.onAddPhoto}> ADD PHOTO</ButtonText>
+                <LandscapeAddIcon />
+              </LandscapeButtons>
+            </LandscapeButtonsBg>
+          ) : (
+            <></>
+          )}
         </HeaderContainer>
 
         <Images>
@@ -124,10 +144,8 @@ const SelectAll = styled("div", {
 });
 const AlbumBgContainer = styled("div", {
   display: "flex",
-
-  zIndex: 1,
   width: "100%",
-  paddingBottom: "3rem",
+  paddingTop: "-3rem",
   flex: 1,
 });
 
@@ -179,14 +197,12 @@ const Header = styled("div", {
   compoundVariants: BG,
 });
 const HeaderContainer = styled("div", {
+  display: "grid",
+  gridTemplateColumns: "5fr 3fr",
   width: "100%",
-  display: "flex",
-  maskRepeat: "no-repeat",
-  marginTop: "-3rem",
-  maskSize: "100% 100%",
-  maskPosition: "center",
-  backgroundSize: "100% 100%",
-  transition: "background-color 0.3s",
+  height: "6rem",
+  backgroundColor: "#333333",
+  alignItems: "end",
   variants: {
     bg: {
       true: {},
@@ -248,4 +264,40 @@ const HeaderContainer = styled("div", {
 const CheckIcon = styled("div", {
   width: "1.35rem",
   height: "1.35rem",
+});
+const LandscapeButtonsBg = styled("div", {
+  display: "flex",
+  height: "5rem",
+  justifyContent: "right",
+  alignItems: "center",
+  maskSize: "cover",
+  backgroundColor: "#0E0E0E",
+  maskImage: `url(${landscapeButtonsBg})`,
+  maskRepeat: "no-repeat",
+  backgroundSize: "100% 100%",
+  transition: "display 0.3s",
+  variants: {
+    show: {
+      true: {
+        display: "grid",
+      },
+      false: { display: "none" },
+    },
+  },
+});
+const LandscapeButtons = styled("div", {
+  cursor: "pointer",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  color: "#fff",
+  border: "solid 2px #333333",
+  fontSize: "0.7rem",
+  fontWeight: "bold",
+  marginRight: "0.6rem",
+  borderRadius: "1.5rem",
+  padding: "0.5rem",
+});
+const ButtonText = styled("div", {
+  paddingRight: "0.5rem",
 });

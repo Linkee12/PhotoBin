@@ -7,7 +7,6 @@ import { useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
-import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline";
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -22,7 +21,7 @@ type AlbumContentProps = {
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
   onOpen: (imageId: string) => void;
-
+  onDownloadAll: (files: string[]) => void;
   onUploadStarted: () => void;
   onUploadFinished: () => void;
   onAddThumbnail: (thumbnail: {
@@ -62,11 +61,19 @@ export function AlbumContent(props: AlbumContentProps) {
     }
     props.onUploadFinished();
   }
-
+  function openFilePicker() {
+    if (!ref.current) return;
+    ref.current.click();
+  }
+  function getAllId(): string[] {
+    return props.thumbnailGroups.flatMap((group) =>
+      group.thumbnails.map((file) => file.id),
+    );
+  }
   return (
     <Content bgColor={props.showUploader}>
-      <ContentHeaderBg show={props.showUploader}>
-        <ContentHeader /> <LandscapeButtonsBg />
+      <ContentHeaderBg show={props.showUploader && props.thumbnailGroups.length === 0}>
+        <ContentHeader />
       </ContentHeaderBg>
       <DragNdrop
         onDroppedFiles={(files) => {
@@ -87,15 +94,11 @@ export function AlbumContent(props: AlbumContentProps) {
           onSelect={props.onSelect}
           onDeSelect={props.onDeSelect}
           onOpen={props.onOpen}
+          onAddPhoto={openFilePicker}
+          onDownloadAll={() => props.onDownloadAll(getAllId())}
         />
       ))}
-      <CloudContainer
-        isVisible={props.showUploader}
-        onClick={() => {
-          if (!ref.current) return;
-          ref.current.click();
-        }}
-      >
+      <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
         <StyledUpload height={maskHeight} />
         <Text>Drop your photos here to upload</Text>
       </CloudContainer>
@@ -140,8 +143,7 @@ const Content = styled("div", {
 const ContentHeader = styled("div", {
   display: "flex",
   width: "100%",
-  maxHeight: "3rem",
-  flex: 1,
+  height: "3rem",
   maskImage: `url(${header})`,
   maskRepeat: "no-repeat",
   "@portrait": {
@@ -211,20 +213,7 @@ const StyledUpload = styled(Cloud, {
     color: "#444444",
   },
 });
-const LandscapeButtonsBg = styled("div", {
-  zIndex: 0,
-  right: 0,
-  width: "30rem",
-  maskSize: "contain",
-  backgroundColor: "red",
-  marginTop: "-2rem",
-  height: "5rem",
-  maskImage: `url(${landscapeButtonsBg})`,
-  maskRepeat: "no-repeat",
-  maskPosition: "center",
-  backgroundSize: "100% 100%",
-  transition: "background-color 0.3s",
-});
+
 async function* upload(params: {
   uploadService: UploadService;
   files: File[];

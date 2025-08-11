@@ -125,10 +125,9 @@ const Button = styled("button", {
 
 const Tools = styled("div", {
   display: "flex",
-  justifyContent: "center",
   flexDirection: "column",
-  alignItems: "end",
   gap: "3rem",
+  zIndex: 1,
 });
 const TextContainer = styled("div", {
   display: "flex",
@@ -140,7 +139,6 @@ const Container = styled("div", {
   width: "100%",
   display: "flex",
   gap: "2rem",
-  height: "17rem",
   justifyContent: "space-between",
   backgroundSize: "100% 100%",
   padding: "2rem",
@@ -150,22 +148,25 @@ const Container = styled("div", {
     isEmptyAlbum: {
       true: {
         backgroundColor: "rgba(51, 51, 51)",
+        height: "11rem",
       },
       false: {
         backgroundColor: "#181818",
+        height: "9rem",
       },
     },
   },
 });
 const StartContainer = styled("div", {
   display: "flex",
+  height: "7.5rem",
   flexDirection: "column",
+  justifyContent: "space-between",
 });
 const SelectAllContainer = styled("div", {
   display: "flex",
   alignItems: "center",
   gap: "3px",
-  marginBottom: "3rem",
 });
 const Icons = styled("svg", {
   width: "2rem",

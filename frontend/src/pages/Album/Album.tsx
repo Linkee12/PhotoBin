@@ -91,6 +91,9 @@ export default function Album() {
   async function onDownloadSelected() {
     if (metadata) await downloadService.download({ albumContext, selectedImages });
   }
+  async function onDownloadAll(selectedImages: string[]) {
+    if (metadata) await downloadService.download({ albumContext, selectedImages });
+  }
 
   function onUncheckSelected() {
     setSelectedImages([]);
@@ -184,6 +187,7 @@ export default function Album() {
         isUploading={isUploading}
         onUploadStarted={() => setIsUploading(true)}
         onUploadFinished={() => setIsUploading(false)}
+        onDownloadAll={(files: string[]) => onDownloadAll(files)}
         thumbnailGroups={thumbnails}
         onAddThumbnail={(result) => {
           setThumbnails((thumbnails) => {
