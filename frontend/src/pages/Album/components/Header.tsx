@@ -140,7 +140,7 @@ const Container = styled("div", {
   width: "100%",
   display: "flex",
   gap: "2rem",
-  height: "13rem",
+  height: "17rem",
   justifyContent: "space-between",
   backgroundSize: "100% 100%",
   padding: "2rem",

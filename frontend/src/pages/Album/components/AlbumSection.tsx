@@ -124,6 +124,8 @@ const SelectAll = styled("div", {
 });
 const AlbumBgContainer = styled("div", {
   display: "flex",
+
+  zIndex: 1,
   width: "100%",
   paddingBottom: "3rem",
   flex: 1,

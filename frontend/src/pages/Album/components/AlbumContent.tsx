@@ -7,6 +7,7 @@ import { useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
+import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline";
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -65,7 +66,7 @@ export function AlbumContent(props: AlbumContentProps) {
   return (
     <Content bgColor={props.showUploader}>
       <ContentHeaderBg show={props.showUploader}>
-        <ContentHeader />
+        <ContentHeader /> <LandscapeButtonsBg />
       </ContentHeaderBg>
       <DragNdrop
         onDroppedFiles={(files) => {
@@ -210,7 +211,20 @@ const StyledUpload = styled(Cloud, {
     color: "#444444",
   },
 });
-
+const LandscapeButtonsBg = styled("div", {
+  zIndex: 0,
+  right: 0,
+  width: "30rem",
+  maskSize: "contain",
+  backgroundColor: "red",
+  marginTop: "-2rem",
+  height: "5rem",
+  maskImage: `url(${landscapeButtonsBg})`,
+  maskRepeat: "no-repeat",
+  maskPosition: "center",
+  backgroundSize: "100% 100%",
+  transition: "background-color 0.3s",
+});
 async function* upload(params: {
   uploadService: UploadService;
   files: File[];
