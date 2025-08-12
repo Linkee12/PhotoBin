@@ -182,7 +182,8 @@ export default function Album() {
         selectedAll={selectedImages.length === metadata?.files.length}
       />
       {
-        //TODO album buttons
+        //TODO
+        //album buttons
         //downloaded zip name .zip
       }
       <AlbumContent
