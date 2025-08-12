@@ -275,6 +275,7 @@ const LandscapeButtonsBg = styled("div", {
   maskImage: `url(${landscapeButtonsBg})`,
   maskRepeat: "no-repeat",
   backgroundSize: "100% 100%",
+  minWidth: "490px",
   transition: "display 0.3s",
   variants: {
     show: {

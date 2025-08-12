@@ -181,6 +181,10 @@ export default function Album() {
         onUnselectAll={onUncheckSelected}
         selectedAll={selectedImages.length === metadata?.files.length}
       />
+      {
+        //TODO album buttons
+        //downloaded zip name .zip
+      }
       <AlbumContent
         uploadService={uploadService}
         showUploader={showUploader}
