@@ -164,6 +164,7 @@ const StartContainer = styled("div", {
   justifyContent: "space-between",
 });
 const SelectAllContainer = styled("div", {
+  cursor: "pointer",
   display: "flex",
   alignItems: "center",
   gap: "3px",
