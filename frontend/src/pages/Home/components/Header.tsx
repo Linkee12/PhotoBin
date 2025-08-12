@@ -11,7 +11,17 @@ export default function Header() {
       <Icons>
         <Bird src={bird} alt="Bird Icon" />
         <Title src={title} alt="Title Icon" />
-        <Git src={git} alt="Git Icon" />
+        <Git
+          src={git}
+          onClick={() =>
+            window.open(
+              "https://github.com/Linkee12/PhotoBin/",
+              "_blank",
+              "noopener,noreferrer",
+            )
+          }
+          alt="Git Icon"
+        />
       </Icons>
       <HeaderStart />
       <HeaderEnd />
@@ -45,6 +55,7 @@ const Title = styled("img", {
 const Git = styled("img", {
   height: "40px",
   objectFit: "cover",
+  cursor: "pointer",
 });
 const Icons = styled("div", {
   width: "100%",
