@@ -234,7 +234,6 @@ export default function Album() {
 const Container = styled("div", {
   width: "100%",
   minHeight: "100vh",
-  position: "relative",
   fontFamily: "Open Sans",
   display: "flex",
   flexDirection: "column",

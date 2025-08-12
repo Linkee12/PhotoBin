@@ -26,9 +26,14 @@ export default App;
 
 const globalStyles = globalCss({
   body: {
+    margin: 0,
+    width: "100%",
+    height: "100%",
+    minHeight: "100dvh",
     backgroundColor: "#0E0E10",
     color: "#fff",
   },
+
   "@keyframes spin": {
     "0%": { transform: "rotate(0deg)" },
     "100%": { transform: "rotate(360deg)" },

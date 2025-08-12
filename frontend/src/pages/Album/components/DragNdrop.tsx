@@ -33,8 +33,7 @@ export function DragNdrop(props: DragNdropProps) {
 }
 const Dropzone = styled("div", {
   display: "flex",
-  position: "absolute",
-  top: "20rem",
+  top: "50vh",
   borderColor: "#ff33",
   flex: 1,
   height: "60vh",
