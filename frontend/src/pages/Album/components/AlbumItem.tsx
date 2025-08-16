@@ -38,19 +38,17 @@ export function AlbumItem(props: AlbumItemProps) {
 
 const Image = styled("img", {
   display: "block",
-  borderRadius: "10px",
   width: "var(--width, 300px)",
   height: "var(--height, 200px)",
-  transition: "width 0.2s, height 0.2s, padding 0.2s",
-  objectFit: "contain",
+  transition: "width 0.2s, height 0.2s, padding 0.2s, border-radius 0.2s",
+  objectFit: "cover",
   variants: {
     isSelected: {
       true: {
+        borderRadius: "4px",
         "@portrait": {
           width: "calc(100% - 20px)",
           height: "calc(100% - 20px)",
-          paddingTop: "10px",
-          paddingBottom: "10px",
         },
         "@landscape": {
           width: 280,
@@ -58,6 +56,7 @@ const Image = styled("img", {
         },
       },
       false: {
+        borderRadius: "10px",
         "@portrait": {
           width: "100%",
           height: "auto",
@@ -75,26 +74,31 @@ const UnsupportedFile = styled("div", {
   alignItems: "center",
   justifyContent: "center",
   backgroundColor: "#595959",
-  borderRadius: "10px",
-  width: "var(--width, 300px)",
-  aspectRatio: "3 / 2",
   transition: "width 0.2s, height 0.2s",
+  aspectRatio: "3 / 2",
   variants: {
     isSelected: {
       true: {
+        borderRadius: "4px",
         "@portrait": {
           width: "calc(100% - 20px)",
+          height: "calc(100% - 20px)",
         },
         "@landscape": {
+          objectFit: "cover",
           width: 280,
+          height: 180,
         },
       },
       false: {
+        borderRadius: "10px",
         "@portrait": {
           width: "100%",
+          height: "auto",
         },
         "@landscape": {
           width: 300,
+          height: 200,
         },
       },
     },
@@ -114,7 +118,6 @@ const Preview = styled("div", {
         },
         "@landscape": {
           width: 300,
-          height: 200,
         },
       },
       false: {
@@ -123,11 +126,11 @@ const Preview = styled("div", {
         },
         "@landscape": {
           width: 300,
-          height: 200,
         },
       },
     },
   },
+  aspectRatio: "3/2",
   margin: "1rem",
   borderRadius: "10px",
   backgroundColor: "#232323",

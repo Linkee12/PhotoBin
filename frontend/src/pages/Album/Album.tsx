@@ -181,6 +181,11 @@ export default function Album() {
         onUnselectAll={onUncheckSelected}
         selectedAll={selectedImages.length === metadata?.files.length}
       />
+      {
+        //TODO
+        //album buttons
+        //downloaded zip name .zip
+      }
       <AlbumContent
         uploadService={uploadService}
         showUploader={showUploader}
@@ -229,7 +234,6 @@ export default function Album() {
 const Container = styled("div", {
   width: "100%",
   minHeight: "100vh",
-  position: "relative",
   fontFamily: "Open Sans",
   display: "flex",
   flexDirection: "column",
