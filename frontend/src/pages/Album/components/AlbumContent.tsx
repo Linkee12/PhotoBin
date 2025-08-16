@@ -2,11 +2,14 @@ import { styled } from "../../../stitches.config";
 import { Cloud } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
-import header from "@assets/images/albumItemsBg.svg?no-inline";
 import { useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
+import { Panel, PushDown } from "./Panel";
+import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline";
+import LandscapeDownloadIcon from "@assets/images/icons/landscapeDownloadIcon.svg?react";
+import LandscapeAddIcon from "@assets/images/icons/landscapeAddIcon.svg?react";
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -71,112 +74,119 @@ export function AlbumContent(props: AlbumContentProps) {
     );
   }
   return (
-    <Content bgColor={props.showUploader}>
-      <ContentHeaderBg show={props.showUploader && props.thumbnailGroups.length === 0}>
-        <ContentHeader />
-      </ContentHeaderBg>
-      <DragNdrop
-        onDroppedFiles={(files) => {
-          if (files != null) {
-            const fileArr = Array.from(files);
-            uploadImages(fileArr).catch((e) => console.error(e));
-          }
-        }}
-      />
-      {props.thumbnailGroups.map((group, i) => (
-        <AlbumSection
-          key={i}
-          group={group}
-          index={i}
-          isUploading={props.isUploading}
-          selectedImages={props.selectedImages}
-          isSelected={props.isSelected}
-          onSelect={props.onSelect}
-          onDeSelect={props.onDeSelect}
-          onOpen={props.onOpen}
-          onAddPhoto={openFilePicker}
-          onDownloadAll={() => props.onDownloadAll(getAllId())}
+    <Panel variant={0}>
+      <PushDown />
+      {props.thumbnailGroups.length > 0 && (
+        <LandscapeButtonsBg>
+          <LandscapeButton>
+            <ButtonText onClick={() => props.onDownloadAll(getAllId())}>
+              DOWNLOAD ALL
+            </ButtonText>
+            <LandscapeDownloadIcon />
+          </LandscapeButton>
+          <LandscapeButton>
+            <ButtonText onClick={openFilePicker}> ADD PHOTO</ButtonText>
+            <LandscapeAddIcon />
+          </LandscapeButton>
+        </LandscapeButtonsBg>
+      )}
+
+      <AlbumSections>
+        {props.thumbnailGroups.map((group, i) => (
+          <AlbumSection
+            key={i}
+            group={group}
+            index={i}
+            isUploading={props.isUploading}
+            selectedImages={props.selectedImages}
+            isSelected={props.isSelected}
+            onSelect={props.onSelect}
+            onDeSelect={props.onDeSelect}
+            onOpen={props.onOpen}
+          />
+        ))}
+      </AlbumSections>
+
+      <UploadSection>
+        <DragNdrop
+          onDroppedFiles={(files) => {
+            if (files != null) {
+              const fileArr = Array.from(files);
+              uploadImages(fileArr).catch((e) => console.error(e));
+            }
+          }}
         />
-      ))}
-      <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
-        <StyledUpload height={maskHeight} />
-        <Text>Drop your photos here to upload</Text>
-      </CloudContainer>
-      <input
-        type="file"
-        style={{ display: "none" }}
-        ref={ref}
-        multiple
-        onChange={(e) => {
-          if (e.target.files != null) {
-            const array = Array.from(e.target.files);
-            uploadImages(array).catch((e) => console.error(e));
-          }
-        }}
-      ></input>
-    </Content>
+
+        <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
+          <StyledUpload height={maskHeight} />
+          <Text>Drop your photos here to upload</Text>
+        </CloudContainer>
+        <input
+          type="file"
+          style={{ display: "none" }}
+          ref={ref}
+          multiple
+          onChange={(e) => {
+            if (e.target.files != null) {
+              const array = Array.from(e.target.files);
+              uploadImages(array).catch((e) => console.error(e));
+            }
+          }}
+        ></input>
+      </UploadSection>
+    </Panel>
   );
 }
 
-const Content = styled("div", {
-  display: "flex",
-  maxWidth: "100%",
-  flexDirection: "column",
-  alignItems: "center",
+const UploadSection = styled("div", {
   flex: 1,
-  alignContent: "flex-start",
-  flexWrap: "wrap",
-  transition: "background-color 0.3s",
-  variants: {
-    bgColor: {
-      true: {
-        backgroundColor: "#181818",
-        marginTop: "-3rem",
-      },
-      false: {
-        backgroundColor: "rgba(51, 51, 51)",
-      },
-    },
-  },
+  display: "flex",
+  justifyContent: "center",
 });
 
-const ContentHeader = styled("div", {
+const AlbumSections = styled("div", {
   display: "flex",
-  width: "100%",
-  height: "3rem",
-  maskImage: `url(${header})`,
-  maskRepeat: "no-repeat",
-  "@portrait": {
-    maskSize: "100% 100%",
-  },
-  "@landscape": {
-    maskSize: "800px 100%",
-  },
-  backgroundColor: "#181818",
-  variants: {
-    bg: {
-      true: {
-        backgroundColor: "#181818",
-      },
-      false: {},
-    },
-  },
+  flexDirection: "column",
 });
-const ContentHeaderBg = styled("div", {
+
+const LandscapeButtonsBg = styled("div", {
   display: "flex",
-  width: "100%",
-  maxHeight: "3rem",
-  flex: 1,
-  backgroundColor: "#333333",
+  height: "5rem",
+  justifyContent: "right",
+  alignItems: "center",
+  maskSize: "cover",
+  backgroundColor: "#0E0E0E",
+  maskImage: `url(${landscapeButtonsBg})`,
+  maskRepeat: "no-repeat",
+  backgroundSize: "100% 100%",
+  transition: "display 0.3s",
   variants: {
     show: {
       true: {
-        display: "flex",
+        display: "grid",
       },
       false: { display: "none" },
     },
   },
 });
+const LandscapeButton = styled("button", {
+  zIndex: "1",
+  background: "#0e0e0e",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  color: "#fff",
+  border: "solid 2px #333333",
+  fontSize: "0.7rem",
+  fontWeight: "bold",
+  marginRight: "0.6rem",
+  borderRadius: "1.5rem",
+  padding: "0.5rem",
+});
+const ButtonText = styled("div", {
+  paddingRight: "0.5rem",
+});
+
 const CloudContainer = styled("div", {
   flexDirection: "column",
   alignItems: "center",
