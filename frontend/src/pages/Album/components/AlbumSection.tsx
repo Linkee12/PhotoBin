@@ -2,7 +2,7 @@ import { AlbumItem } from "./AlbumItem";
 import Check2 from "@assets/images/icons/check2.svg?react";
 import Check3 from "@assets/images/icons/check3.svg?react";
 import { styled } from "../../../stitches.config";
-import { Panel, PushDown } from "./Panel";
+import { Panel, PanelHeader, PushDown } from "./Panel";
 
 type AlbumSectionProps = {
   group: {
@@ -29,8 +29,8 @@ export function AlbumSection(props: AlbumSectionProps) {
   );
 
   return (
-    <Panel variant={props.index % 2 == 0 ? 1 : 2}>
-      <PanelBody>
+    <Panel zIndex={0} variant={props.index % 2 == 0 ? 1 : 2}>
+      <PanelHeader>
         <Header>
           <ShowDate>{props.group.date}</ShowDate>
           <SelectAll
@@ -45,6 +45,8 @@ export function AlbumSection(props: AlbumSectionProps) {
             {includeAllImages ? <CheckIcon as={Check3} /> : <CheckIcon as={Check2} />}
           </SelectAll>
         </Header>
+      </PanelHeader>
+      <PanelBody>
         <Images>
           {props.group.thumbnails !== undefined &&
             props.group.thumbnails.map((image) => (

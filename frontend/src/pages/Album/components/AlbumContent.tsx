@@ -7,9 +7,7 @@ import { useAlbumContext } from "../hooks/useAlbumContext";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
 import { Panel, PushDown } from "./Panel";
-import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline";
-import LandscapeDownloadIcon from "@assets/images/icons/landscapeDownloadIcon.svg?react";
-import LandscapeAddIcon from "@assets/images/icons/landscapeAddIcon.svg?react";
+import { Menu } from "./Menu";
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -77,18 +75,10 @@ export function AlbumContent(props: AlbumContentProps) {
     <Panel variant={0}>
       <PushDown />
       {props.thumbnailGroups.length > 0 && (
-        <LandscapeButtonsBg>
-          <LandscapeButton>
-            <ButtonText onClick={() => props.onDownloadAll(getAllId())}>
-              DOWNLOAD ALL
-            </ButtonText>
-            <LandscapeDownloadIcon />
-          </LandscapeButton>
-          <LandscapeButton>
-            <ButtonText onClick={openFilePicker}> ADD PHOTO</ButtonText>
-            <LandscapeAddIcon />
-          </LandscapeButton>
-        </LandscapeButtonsBg>
+        <Menu
+          onDownloadAll={() => props.onDownloadAll(getAllId())}
+          onAddPhoto={openFilePicker}
+        />
       )}
 
       <AlbumSections>
@@ -138,6 +128,40 @@ export function AlbumContent(props: AlbumContentProps) {
   );
 }
 
+async function* upload(params: {
+  uploadService: UploadService;
+  files: File[];
+  key: string;
+  metadata: { albumId: string };
+}) {
+  const arrLength = params.files.length;
+  const totalSize = params.files.reduce((acc, file) => file.size + acc, 0);
+  let currentSize = 0;
+  for (let i = 0; i < arrLength; ++i) {
+    const uploadData = params.uploadService.upload(params.files[i], {
+      albumId: params.metadata.albumId,
+      key: params.key,
+    });
+    for await (const response of uploadData) {
+      if (response.result === "progress") {
+        currentSize += response.bytes;
+        yield { result: "progress", progress: (currentSize / totalSize) * 100 };
+      } else {
+        yield {
+          thumbnail: {
+            result: "thumbnail",
+            thumbnail: response.thumbnail,
+            id: response.fileId,
+            name: response.name,
+            date: response.date,
+            isVideo: response.isVideo,
+          },
+        };
+      }
+    }
+  }
+}
+
 const UploadSection = styled("div", {
   flex: 1,
   display: "flex",
@@ -147,44 +171,6 @@ const UploadSection = styled("div", {
 const AlbumSections = styled("div", {
   display: "flex",
   flexDirection: "column",
-});
-
-const LandscapeButtonsBg = styled("div", {
-  display: "flex",
-  height: "5rem",
-  justifyContent: "right",
-  alignItems: "center",
-  maskSize: "cover",
-  backgroundColor: "#0E0E0E",
-  maskImage: `url(${landscapeButtonsBg})`,
-  maskRepeat: "no-repeat",
-  backgroundSize: "100% 100%",
-  transition: "display 0.3s",
-  variants: {
-    show: {
-      true: {
-        display: "grid",
-      },
-      false: { display: "none" },
-    },
-  },
-});
-const LandscapeButton = styled("button", {
-  zIndex: "1",
-  background: "#0e0e0e",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  color: "#fff",
-  border: "solid 2px #333333",
-  fontSize: "0.7rem",
-  fontWeight: "bold",
-  marginRight: "0.6rem",
-  borderRadius: "1.5rem",
-  padding: "0.5rem",
-});
-const ButtonText = styled("div", {
-  paddingRight: "0.5rem",
 });
 
 const CloudContainer = styled("div", {
@@ -223,37 +209,3 @@ const StyledUpload = styled(Cloud, {
     color: "#444444",
   },
 });
-
-async function* upload(params: {
-  uploadService: UploadService;
-  files: File[];
-  key: string;
-  metadata: { albumId: string };
-}) {
-  const arrLength = params.files.length;
-  const totalSize = params.files.reduce((acc, file) => file.size + acc, 0);
-  let currentSize = 0;
-  for (let i = 0; i < arrLength; ++i) {
-    const uploadData = params.uploadService.upload(params.files[i], {
-      albumId: params.metadata.albumId,
-      key: params.key,
-    });
-    for await (const response of uploadData) {
-      if (response.result === "progress") {
-        currentSize += response.bytes;
-        yield { result: "progress", progress: (currentSize / totalSize) * 100 };
-      } else {
-        yield {
-          thumbnail: {
-            result: "thumbnail",
-            thumbnail: response.thumbnail,
-            id: response.fileId,
-            name: response.name,
-            date: response.date,
-            isVideo: response.isVideo,
-          },
-        };
-      }
-    }
-  }
-}
