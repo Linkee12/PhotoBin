@@ -7,21 +7,30 @@ const COLORS = ["#181818", "#333333", "#666666"];
 type PanelProps = {
   children: ReactNode;
   variant: 0 | 1 | 2;
+  zIndex?: number;
 };
 export function Panel(props: PanelProps) {
   return (
     <Content>
       <ContentHeader style={{ background: COLORS[props.variant] }} />
-      <ContentBody style={{ background: COLORS[props.variant] }}>
+      <ContentBody style={{ background: COLORS[props.variant], zIndex: props.zIndex }}>
         {props.children}
       </ContentBody>
     </Content>
   );
 }
 
+export const PanelInteractive = styled("div", {});
+
 export const PushDown = styled("div", {
   width: "100%",
   height: "3rem",
+});
+
+export const PanelHeader = styled("div", {
+  marginTop: "-3rem",
+  pointerEvents: "auto",
+  width: "0",
 });
 
 const Content = styled("div", {
@@ -29,6 +38,7 @@ const Content = styled("div", {
   display: "flex",
   flexDirection: "column",
   marginTop: "-3rem",
+  pointerEvents: "none",
 });
 
 const ContentBody = styled("div", {
@@ -37,6 +47,7 @@ const ContentBody = styled("div", {
   transition: "background-color 0.3s",
   display: "flex",
   flexDirection: "column",
+  pointerEvents: "auto",
 });
 
 const ContentHeader = styled("div", {
