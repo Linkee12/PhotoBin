@@ -36,6 +36,7 @@ type AlbumContentProps = {
 
 export function AlbumContent(props: AlbumContentProps) {
   const [maskHeight, setMaskHeight] = useState(0);
+  const [showPushDown, setShowPushDown] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const { metadata, refreshMetadata, key } = useAlbumContext();
 
@@ -61,6 +62,7 @@ export function AlbumContent(props: AlbumContentProps) {
       refreshMetadata();
     }
     props.onUploadFinished();
+    setShowPushDown(true);
   }
   function openFilePicker() {
     if (!ref.current) return;
@@ -73,7 +75,7 @@ export function AlbumContent(props: AlbumContentProps) {
   }
   return (
     <Panel variant={0}>
-      <PushDown />
+      <PushDown isVisible={showPushDown} />
       {props.thumbnailGroups.length > 0 && (
         <Menu
           onDownloadAll={() => props.onDownloadAll(getAllId())}

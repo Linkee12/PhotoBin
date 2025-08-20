@@ -1,7 +1,7 @@
 import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline";
 import LandscapeDownloadIcon from "@assets/images/icons/landscapeDownloadIcon.svg?react";
 import LandscapeAddIcon from "@assets/images/icons/landscapeAddIcon.svg?react";
-import { styled } from "@stitches/react";
+import { styled } from "../../../stitches.config";
 
 type MenuProps = {
   onDownloadAll: () => void;

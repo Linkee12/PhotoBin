@@ -173,7 +173,7 @@ export default function Album() {
         />
       )}
       <Header
-        isEmptyAlbum={showUploader}
+        isEmptyAlbum={thumbnails.length === 0}
         title={title}
         onChangeTitle={setTitle}
         onSaveName={saveAlbumName}
