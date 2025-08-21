@@ -6,12 +6,13 @@ import { styled } from "../../../stitches.config";
 type MenuProps = {
   onDownloadAll: () => void;
   onAddPhoto: () => void;
+  isBusy: boolean;
 };
 
 export function Menu(props: MenuProps) {
   return (
     <LandscapeButtonsBg>
-      <LandscapeButton>
+      <LandscapeButton disabled={props.isBusy}>
         <ButtonText onClick={props.onDownloadAll}>DOWNLOAD ALL</ButtonText>
         <LandscapeDownloadIcon />
       </LandscapeButton>

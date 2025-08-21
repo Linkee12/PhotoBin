@@ -41,6 +41,7 @@ export default function Album() {
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showOrigin, setShowOrigin] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const showUploader = thumbnails.length === 0 || isUploading;
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
@@ -89,10 +90,15 @@ export default function Album() {
   }
 
   async function onDownloadSelected() {
+    setIsDownloading(true);
     if (metadata) await downloadService.download({ albumContext, selectedImages });
+    setIsDownloading(false);
   }
+  // eslint-disable-next-line sonarjs/no-identical-functions
   async function onDownloadAll(selectedImages: string[]) {
+    setIsDownloading(true);
     if (metadata) await downloadService.download({ albumContext, selectedImages });
+    setIsDownloading(false);
   }
 
   function onUncheckSelected() {
@@ -186,6 +192,7 @@ export default function Album() {
         uploadService={uploadService}
         showUploader={showUploader}
         isUploading={isUploading}
+        isDownloading={isDownloading}
         onUploadStarted={() => setIsUploading(true)}
         onUploadFinished={() => setIsUploading(false)}
         onDownloadAll={(files: string[]) => onDownloadAll(files)}
@@ -218,6 +225,7 @@ export default function Album() {
         }}
       />
       <Toolbar
+        isBusy={isDownloading || isUploading}
         selectedImages={selectedImages}
         onDeleteSelected={onDeleteSelected}
         onUncheckSelected={onUncheckSelected}

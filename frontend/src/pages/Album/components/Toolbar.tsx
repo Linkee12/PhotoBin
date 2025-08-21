@@ -5,6 +5,7 @@ import Trash from "@assets/images/icons/trash.svg?react";
 import UnCheckAll from "@assets/images/icons/unCheckAll.svg?react";
 export default function Toolbar(props: {
   selectedImages: string[];
+  isBusy: boolean;
   onDeleteSelected: () => void;
   onUncheckSelected: () => void;
   onDownloadSelected: () => void;
@@ -18,7 +19,7 @@ export default function Toolbar(props: {
       >
         <ToolbarIcons as={Trash} />
       </Button>
-      <Button>
+      <Button disabled={props.isBusy}>
         <ToolbarIcons as={SimpleCloud} onClick={() => props.onDownloadSelected()} />
       </Button>
       <Button>

@@ -12,8 +12,8 @@ import { Menu } from "./Menu";
 type AlbumContentProps = {
   showUploader: boolean;
   isUploading: boolean;
+  isDownloading: boolean;
   thumbnailGroups: ThumbnailGroup[];
-
   uploadService: UploadService;
 
   // selection
@@ -78,6 +78,7 @@ export function AlbumContent(props: AlbumContentProps) {
         <Menu
           onDownloadAll={() => props.onDownloadAll(getAllId())}
           onAddPhoto={openFilePicker}
+          isBusy={props.isUploading || props.isDownloading}
         />
       )}
       <DragNdrop
