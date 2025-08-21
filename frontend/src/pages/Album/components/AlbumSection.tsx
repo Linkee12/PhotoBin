@@ -32,18 +32,21 @@ export function AlbumSection(props: AlbumSectionProps) {
     <Panel zIndex={0} variant={props.index % 2 == 0 ? 1 : 2}>
       <PanelHeader>
         <Header>
-          <ShowDate>{props.group.date}</ShowDate>
-          <SelectAll
-            onClick={() => {
-              if (includeAllImages) {
-                props.onDeSelect(props.group.thumbnails.map((thumb) => thumb.id));
-              } else {
-                props.onSelect(props.group.thumbnails.map((thumb) => thumb.id));
-              }
-            }}
-          >
-            {includeAllImages ? <CheckIcon as={Check3} /> : <CheckIcon as={Check2} />}
-          </SelectAll>
+          <ShowDate>
+            {props.group.date}
+
+            <SelectAll
+              onClick={() => {
+                if (includeAllImages) {
+                  props.onDeSelect(props.group.thumbnails.map((thumb) => thumb.id));
+                } else {
+                  props.onSelect(props.group.thumbnails.map((thumb) => thumb.id));
+                }
+              }}
+            >
+              {includeAllImages ? <CheckIcon as={Check3} /> : <CheckIcon as={Check2} />}
+            </SelectAll>
+          </ShowDate>
         </Header>
       </PanelHeader>
       <PanelBody>
@@ -70,16 +73,20 @@ export function AlbumSection(props: AlbumSectionProps) {
 
 const PanelBody = styled("div", {});
 const ShowDate = styled("div", {
+  display: "flex",
+  alignItems: "center",
   fontSize: "1.42rem",
   color: "#fff",
   marginRight: "1rem",
   fontFamily: "SourceCodeVF",
+  height: "3rem",
 });
 
 const SelectAll = styled("div", {
   cursor: "pointer",
   width: "1.4rem",
   height: "1.4rem",
+  marginLeft: "0.5rem",
 });
 
 const Images = styled("div", {
@@ -102,7 +109,7 @@ const Header = styled("div", {
   width: "100%",
   display: "flex",
   height: "3rem",
-  alignItems: "end",
+  alignItems: "center",
   "@portrait": {
     paddingLeft: "1.28rem",
   },
