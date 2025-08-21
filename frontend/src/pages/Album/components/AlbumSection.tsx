@@ -112,6 +112,5 @@ const Header = styled("div", {
 });
 
 const CheckIcon = styled("div", {
-  width: "1.35rem",
-  height: "1.35rem",
+  overflow: "visible",
 });
