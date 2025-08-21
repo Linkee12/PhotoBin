@@ -104,7 +104,7 @@ export function AlbumContent(props: AlbumContentProps) {
             />
           ))}
         </AlbumSections>
-        <UploadSection>
+        <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
           <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
             <StyledUpload height={maskHeight} />
             <Text>Drop your photos here to upload</Text>
@@ -165,6 +165,16 @@ const UploadSection = styled("div", {
   flex: 1,
   display: "flex",
   justifyContent: "center",
+  variants: {
+    isEmpty: {
+      true: {
+        background: "#333333",
+      },
+      false: {
+        background: "#181818",
+      },
+    },
+  },
 });
 
 const AlbumSections = styled("div", {
