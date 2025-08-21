@@ -104,6 +104,7 @@ export function AlbumContent(props: AlbumContentProps) {
             />
           ))}
         </AlbumSections>
+        <UploadMask show={props.isUploading} />
         <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
           <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
             <StyledUpload height={maskHeight} />
@@ -178,6 +179,7 @@ const UploadSection = styled("div", {
 });
 
 const AlbumSections = styled("div", {
+  backgroundColor: "rgba(51, 51, 51,0.2)",
   display: "flex",
   flexDirection: "column",
 });
@@ -216,5 +218,23 @@ const StyledUpload = styled(Cloud, {
   transition: "color 300ms",
   "&:hover": {
     color: "#444444",
+  },
+});
+
+const UploadMask = styled("div", {
+  position: "fixed",
+  top: 0,
+  width: "100%",
+  height: "100%",
+  backgroundColor: "rgba(0, 0, 0,0.7)",
+  variants: {
+    show: {
+      true: {
+        display: "flex",
+      },
+      false: {
+        display: "none",
+      },
+    },
   },
 });

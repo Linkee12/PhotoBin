@@ -187,7 +187,6 @@ export default function Album() {
         onUnselectAll={onUncheckSelected}
         selectedAll={selectedImages.length === metadata?.files.length}
       />
-
       <AlbumContent
         uploadService={uploadService}
         showUploader={showUploader}
