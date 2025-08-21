@@ -36,7 +36,6 @@ type AlbumContentProps = {
 
 export function AlbumContent(props: AlbumContentProps) {
   const [maskHeight, setMaskHeight] = useState(0);
-  const [showPushDown, setShowPushDown] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
   const { metadata, refreshMetadata, key } = useAlbumContext();
 
@@ -62,7 +61,6 @@ export function AlbumContent(props: AlbumContentProps) {
       refreshMetadata();
     }
     props.onUploadFinished();
-    setShowPushDown(true);
   }
   function openFilePicker() {
     if (!ref.current) return;
@@ -75,57 +73,55 @@ export function AlbumContent(props: AlbumContentProps) {
   }
   return (
     <Panel variant={0}>
-      <PushDown isVisible={showPushDown} />
+      <PushDown />
       {props.thumbnailGroups.length > 0 && (
         <Menu
           onDownloadAll={() => props.onDownloadAll(getAllId())}
           onAddPhoto={openFilePicker}
         />
       )}
-
-      <AlbumSections>
-        {props.thumbnailGroups.map((group, i) => (
-          <AlbumSection
-            key={i}
-            group={group}
-            index={i}
-            isUploading={props.isUploading}
-            selectedImages={props.selectedImages}
-            isSelected={props.isSelected}
-            onSelect={props.onSelect}
-            onDeSelect={props.onDeSelect}
-            onOpen={props.onOpen}
-          />
-        ))}
-      </AlbumSections>
-
-      <UploadSection>
-        <DragNdrop
-          onDroppedFiles={(files) => {
-            if (files != null) {
-              const fileArr = Array.from(files);
-              uploadImages(fileArr).catch((e) => console.error(e));
-            }
-          }}
-        />
-
-        <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
-          <StyledUpload height={maskHeight} />
-          <Text>Drop your photos here to upload</Text>
-        </CloudContainer>
-        <input
-          type="file"
-          style={{ display: "none" }}
-          ref={ref}
-          multiple
-          onChange={(e) => {
-            if (e.target.files != null) {
-              const array = Array.from(e.target.files);
-              uploadImages(array).catch((e) => console.error(e));
-            }
-          }}
-        ></input>
-      </UploadSection>
+      <DragNdrop
+        onDroppedFiles={(files) => {
+          if (files != null) {
+            const fileArr = Array.from(files);
+            uploadImages(fileArr).catch((e) => console.error(e));
+          }
+        }}
+      >
+        <AlbumSections>
+          {props.thumbnailGroups.map((group, i) => (
+            <AlbumSection
+              key={i}
+              group={group}
+              index={i}
+              isUploading={props.isUploading}
+              selectedImages={props.selectedImages}
+              isSelected={props.isSelected}
+              onSelect={props.onSelect}
+              onDeSelect={props.onDeSelect}
+              onOpen={props.onOpen}
+            />
+          ))}
+        </AlbumSections>
+        <UploadSection>
+          <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
+            <StyledUpload height={maskHeight} />
+            <Text>Drop your photos here to upload</Text>
+          </CloudContainer>
+          <input
+            type="file"
+            style={{ display: "none" }}
+            ref={ref}
+            multiple
+            onChange={(e) => {
+              if (e.target.files != null) {
+                const array = Array.from(e.target.files);
+                uploadImages(array).catch((e) => console.error(e));
+              }
+            }}
+          ></input>
+        </UploadSection>
+      </DragNdrop>
     </Panel>
   );
 }

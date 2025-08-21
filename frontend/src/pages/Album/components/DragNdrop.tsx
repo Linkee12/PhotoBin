@@ -1,21 +1,25 @@
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 import { styled } from "../../../stitches.config";
 type DragNdropProps = {
   onDroppedFiles: (file: FileList) => void;
+  children: ReactNode;
 };
 export function DragNdrop(props: DragNdropProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(true);
-    console.log("dragover");
   };
   const handleLeaveDrag = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
   };
-  const handleDragEnter = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+  const handleDrop = (e: React.DragEvent) => {
     setIsDragOver(false);
     e.preventDefault();
     console.log(e.dataTransfer.files);
@@ -25,19 +29,22 @@ export function DragNdrop(props: DragNdropProps) {
   return (
     <Dropzone
       isDragOver={isDragOver}
-      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
       onDragLeave={handleLeaveDrag}
-      onDrop={handleDragEnter}
-    />
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {props.children}
+    </Dropzone>
   );
 }
 const Dropzone = styled("div", {
   display: "flex",
-  top: "50vh",
+  flexDirection: "column",
   borderColor: "#ff33",
+  justifyContent: "center",
   flex: 1,
-  height: "60vh",
-  width: "80%",
+  alignItems: "stretch",
   transition: "border 0.2s",
   variants: {
     isDragOver: {

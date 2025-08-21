@@ -16,8 +16,8 @@ export class DownloadService {
       const root = await navigator.storage.getDirectory();
       const albumName =
         props.albumContext.decodedValues.albumName === ""
-          ? "Album"
-          : props.albumContext.decodedValues.albumName;
+          ? "Album.zip"
+          : props.albumContext.decodedValues.albumName + ".zip";
       const fileHandle = await root.getFileHandle(albumName, { create: true });
       const writable = await fileHandle.createWritable();
 
