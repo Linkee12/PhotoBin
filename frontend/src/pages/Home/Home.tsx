@@ -2,6 +2,7 @@
 /* eslint-disable react/no-unescaped-entities */
 import { styled } from "../../stitches.config";
 import bottomBg from "@assets/images/bottomBg.svg?no-inline";
+import bottomBg2 from "@assets/images/bottomBg2.svg?no-inline";
 import Header from "./components/Header";
 import IntroImg from "@assets/images/intro";
 import { useNavigate } from "react-router";
@@ -36,7 +37,6 @@ export default function Home() {
         </TextContainer>
         <ButtonContainer>
           <Text css={{ "--color": "#808080" }}>Start your E2E encripted album</Text>
-
           <Button
             onClick={() => {
               genKey()
@@ -78,7 +78,6 @@ const Intro = styled("div", {
 });
 const Panel = styled("div", {
   minHeight: "350px",
-  padding: "1rem",
   paddingTop: "2rem",
   color: "#fff",
   display: "flex",
@@ -91,7 +90,7 @@ const Panel = styled("div", {
 });
 
 const Button = styled("div", {
-  width: "100%",
+  width: "25rem",
   fontWeight: "bold",
   display: "flex",
   justifyContent: "center",
@@ -107,9 +106,14 @@ const Button = styled("div", {
 
 const ButtonContainer = styled("div", {
   display: "flex",
+  width: "100%",
+  justifyContent: "center",
   flexDirection: "column",
-  alignItems: "bottom",
+  alignItems: "center",
   flex: 1,
+  backgroundImage: `url(${bottomBg2})`,
+  backgroundSize: "100% 100%",
+  paddingBottom: "1rem",
 });
 export const Text = styled("h1", {
   fontSize: "var(--size, 1.5rem)",
