@@ -42,14 +42,27 @@ export function Menu(props: MenuProps) {
         </PortraitHeader>
         <Bottom isOpen={isOpen}>
           <Buttons>
-            <Button disabled={props.isBusy} isOpen={showButton && isOpen}>
-              <div></div>
-              <ButtonText onClick={props.onDownloadAll}>DOWNLOAD ALL</ButtonText>
+            <Button
+              disabled={props.isBusy}
+              isOpen={showButton && isOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onDownloadAll();
+              }}
+            >
+              <div />
+              <ButtonText>DOWNLOAD ALL</ButtonText>
               <LandscapeDownloadIcon />
             </Button>
-            <Button isOpen={showButton && isOpen}>
-              <div></div>
-              <ButtonText onClick={props.onAddPhoto}> ADD PHOTO</ButtonText>
+            <Button
+              isOpen={showButton && isOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onAddPhoto();
+              }}
+            >
+              <div />
+              <ButtonText> ADD PHOTO</ButtonText>
               <LandscapeAddIcon />
             </Button>
           </Buttons>

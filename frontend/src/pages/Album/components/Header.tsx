@@ -168,6 +168,7 @@ const SelectAllContainer = styled("div", {
   display: "flex",
   alignItems: "center",
   gap: "3px",
+  zIndex: 1,
 });
 const Icons = styled("svg", {
   width: "2rem",
