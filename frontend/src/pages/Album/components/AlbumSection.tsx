@@ -1,6 +1,6 @@
 import { AlbumItem } from "./AlbumItem";
 import Check2 from "@assets/images/icons/check2.svg?react";
-import Check3 from "@assets/images/icons/check3.svg?react";
+import Check from "@assets/images/icons/check.svg?react";
 import { styled } from "../../../stitches.config";
 import { Panel, PanelHeader, PushDown } from "./Panel";
 
@@ -44,7 +44,7 @@ export function AlbumSection(props: AlbumSectionProps) {
                 }
               }}
             >
-              {includeAllImages ? <CheckIcon as={Check3} /> : <CheckIcon as={Check2} />}
+              {includeAllImages ? <CheckIcon as={Check} /> : <CheckIcon as={Check2} />}
             </SelectAll>
           </ShowDate>
         </Header>

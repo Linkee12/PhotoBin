@@ -2,6 +2,7 @@ import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline"
 import albumItemsBg from "@assets/images/albumItemsBg.svg?no-inline";
 import LandscapeDownloadIcon from "@assets/images/icons/landscapeDownloadIcon.svg?react";
 import SlideUp from "@assets/images/icons/slideUp.svg?react";
+import SlideDown from "@assets/images/icons/slideDown.svg?react";
 import LandscapeAddIcon from "@assets/images/icons/landscapeAddIcon.svg?react";
 import { styled } from "../../../stitches.config";
 import { useEffect, useState } from "react";
@@ -36,19 +37,27 @@ export function Menu(props: MenuProps) {
         </Button>
       </LandscapeButtonsBg>
       <PortraitButtonsContainer onClick={() => setIsOpen(!isOpen)}>
-        <PortraitButtonsHeader isOpen={isOpen} />
+        <PortraitHeader isOpen={isOpen}>
+          <SlideIconUp as={SlideUp} />
+        </PortraitHeader>
         <Bottom isOpen={isOpen}>
-          <SlideUp />
-          <Button disabled={props.isBusy} isOpen={showButton && isOpen}>
-            <div></div>
-            <ButtonText onClick={props.onDownloadAll}>DOWNLOAD ALL</ButtonText>
-            <LandscapeDownloadIcon />
-          </Button>
-          <Button isOpen={showButton && isOpen}>
-            <div></div>
-            <ButtonText onClick={props.onAddPhoto}> ADD PHOTO</ButtonText>
-            <LandscapeAddIcon />
-          </Button>
+          <Buttons>
+            <Button disabled={props.isBusy} isOpen={showButton && isOpen}>
+              <div></div>
+              <ButtonText onClick={props.onDownloadAll}>DOWNLOAD ALL</ButtonText>
+              <LandscapeDownloadIcon />
+            </Button>
+            <Button isOpen={showButton && isOpen}>
+              <div></div>
+              <ButtonText onClick={props.onAddPhoto}> ADD PHOTO</ButtonText>
+              <LandscapeAddIcon />
+            </Button>
+          </Buttons>
+          {isOpen ? (
+            <SlideIconDown as={SlideDown} isOpen={showButton && isOpen} />
+          ) : (
+            <></>
+          )}
         </Bottom>
       </PortraitButtonsContainer>
     </>
@@ -102,6 +111,7 @@ const Bottom = styled("div", {
   alignItems: "center",
   height: "3rem",
   cursor: "pointer",
+  justifyContent: "space-between",
   width: "100%",
   backgroundColor: "#0E0E0E",
   transition: "margin 0.4s , height 0.4s",
@@ -113,9 +123,11 @@ const Bottom = styled("div", {
   },
 });
 
-const PortraitButtonsHeader = styled("div", {
+const PortraitHeader = styled("div", {
   display: "flex",
   width: "100%",
+  justifyContent: "center",
+  alignItems: "end",
   maskRepeat: "no-repeat",
   maskSize: "100% 100%",
   maskPosition: "bottom",
@@ -156,7 +168,28 @@ const Button = styled("button", {
     },
   },
 });
-
+const Buttons = styled("div", {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  width: "100%",
+});
 const ButtonText = styled("div", {
   paddingRight: "0.5rem",
+});
+const SlideIconUp = styled("div", {
+  margin: "0.5rem",
+});
+const SlideIconDown = styled("div", {
+  margin: "3rem",
+  variants: {
+    isOpen: {
+      true: {
+        "@portrait": { display: "flex" },
+      },
+      false: {
+        "@portrait": { display: "none" },
+      },
+    },
+  },
 });
