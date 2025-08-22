@@ -72,7 +72,7 @@ export function AlbumContent(props: AlbumContentProps) {
     );
   }
   return (
-    <Panel variant={0}>
+    <Panel variant={0} zIndex={1}>
       <PushDown />
       {props.thumbnailGroups.length > 0 && (
         <Menu

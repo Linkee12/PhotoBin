@@ -2,7 +2,6 @@ import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline"
 import albumItemsBg from "@assets/images/albumItemsBg.svg?no-inline";
 import LandscapeDownloadIcon from "@assets/images/icons/landscapeDownloadIcon.svg?react";
 import SlideUp from "@assets/images/icons/slideUp.svg?react";
-import SlideDown from "@assets/images/icons/slideDown.svg?react";
 import LandscapeAddIcon from "@assets/images/icons/landscapeAddIcon.svg?react";
 import { styled } from "../../../stitches.config";
 import { useEffect, useState } from "react";
@@ -123,7 +122,6 @@ const PortraitButtonsHeader = styled("div", {
   height: "3rem",
   backgroundColor: "#0E0E0E",
   maskImage: `url(${albumItemsBg})`,
-  zIndex: 2,
   variants: {
     isOpen: {
       true: { height: "0rem", overflow: "hidden" },
