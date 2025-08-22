@@ -43,6 +43,7 @@ export default function Album() {
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const showUploader = thumbnails.length === 0 || isUploading;
+
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
       setTitle(decodedValues.albumName);
@@ -50,6 +51,7 @@ export default function Album() {
       thumbnails.forEach((thumb) =>
         thumb.thumbnails.forEach((t) => oldThumbnailIds.add(t.id)),
       );
+
       const newThumbnails = metadata.files.filter(
         (file) => !oldThumbnailIds.has(file.fileId),
       );
@@ -72,12 +74,14 @@ export default function Album() {
     });
 
     if (responses.result !== "success") return;
-
     setThumbnails((prev) =>
-      prev.filter((img) => {
-        // eslint-disable-next-line sonarjs/no-nested-functions
-        img.thumbnails.map((element) => !ids.includes(element.id));
-      }),
+      prev
+        .map((group) => ({
+          ...group,
+          // eslint-disable-next-line sonarjs/no-nested-functions
+          thumbnails: group.thumbnails.filter((element) => !ids.includes(element.id)),
+        }))
+        .filter((group) => group.thumbnails.length > 0),
     );
     setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
     refreshMetadata();

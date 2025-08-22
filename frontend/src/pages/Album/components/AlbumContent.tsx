@@ -61,6 +61,7 @@ export function AlbumContent(props: AlbumContentProps) {
       refreshMetadata();
     }
     props.onUploadFinished();
+    setMaskHeight(0);
   }
   function openFilePicker() {
     if (!ref.current) return;
