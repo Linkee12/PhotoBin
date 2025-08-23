@@ -77,7 +77,7 @@ const ShowDate = styled("div", {
   alignItems: "center",
   fontSize: "1.42rem",
   color: "#fff",
-  marginRight: "1rem",
+  marginRight: "2rem",
   fontFamily: "SourceCodeVF",
   height: "3rem",
 });

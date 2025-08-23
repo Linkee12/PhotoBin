@@ -45,15 +45,15 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     if (metadata.albumId === undefined) return;
     if (file === undefined) return;
     if (file.original !== undefined) {
-      const reduce = await imageDownloadService.getImg(
+      const reduced = await imageDownloadService.getImg(
         metadata.albumId,
         file,
         key,
         "reduced",
       );
-      if (reduce !== undefined) {
-        setUrl(reduce.img);
-        setFileName(reduce.fileName);
+      if (reduced !== undefined) {
+        setUrl(reduced.img);
+        setFileName(reduced.fileName);
       }
       const origin = await imageDownloadService.getImg(
         metadata.albumId,
@@ -64,19 +64,20 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       if (origin !== undefined) {
         setUrl(origin.img);
       }
-    } else if (file.originalVideo !== undefined) {
-      setIsLoadingVideo(true);
-      const video = await imageDownloadService.getImg(
-        metadata.albumId,
-        file,
-        key,
-        "originalVideo",
-      );
-      if (video !== undefined) {
-        setUrl(video.img);
-        setIsVideoReady(true);
+      if (file.originalVideo !== undefined) {
+        setIsLoadingVideo(true);
+        const video = await imageDownloadService.getImg(
+          metadata.albumId,
+          file,
+          key,
+          "originalVideo",
+        );
+        if (video !== undefined) {
+          setUrl(video.img);
+          setIsVideoReady(true);
+        }
+        setIsLoadingVideo(false);
       }
-      setIsLoadingVideo(false);
     } else {
       setUrl("");
     }
