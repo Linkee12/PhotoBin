@@ -106,6 +106,7 @@ export function AlbumContent(props: AlbumContentProps) {
           ))}
         </AlbumSections>
         <UploadMask show={props.isUploading} />
+        <DownloadMask show={props.isDownloading}>Preparing your files </DownloadMask>
         <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
           <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
             <StyledUpload height={maskHeight} />
@@ -227,7 +228,30 @@ const UploadMask = styled("div", {
   top: 0,
   width: "100%",
   height: "100%",
-  backgroundColor: "rgba(0, 0, 0,0.7)",
+  backgroundColor: "rgba(0, 0, 0,0.5)",
+  variants: {
+    show: {
+      true: {
+        display: "flex",
+      },
+      false: {
+        display: "none",
+      },
+    },
+  },
+});
+const DownloadMask = styled("div", {
+  position: "fixed",
+  top: 0,
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  fontSize: "2rem",
+  fontWeight: "bold",
+  fontFamily: "Open Sans",
+  width: "100%",
+  height: "100%",
+  backgroundColor: "rgba(0, 0, 0,0.5)",
   variants: {
     show: {
       true: {

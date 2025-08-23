@@ -42,11 +42,13 @@ export default function Album() {
   const [showOrigin, setShowOrigin] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const showUploader = thumbnails.length === 0 || isUploading;
+  const [emptyAlbum, setEmptyAlbum] = useState(false);
+  const showUploader = (thumbnails.length === 0 && emptyAlbum) || isUploading;
 
   useEffect(() => {
     if (metadata !== undefined && albumId !== undefined) {
       setTitle(decodedValues.albumName);
+      setEmptyAlbum(metadata?.files.length === 0);
       const oldThumbnailIds = new Set();
       thumbnails.forEach((thumb) =>
         thumb.thumbnails.forEach((t) => oldThumbnailIds.add(t.id)),
@@ -74,6 +76,7 @@ export default function Album() {
     });
 
     if (responses.result !== "success") return;
+
     setThumbnails((prev) =>
       prev
         .map((group) => ({
@@ -84,7 +87,7 @@ export default function Album() {
         .filter((group) => group.thumbnails.length > 0),
     );
     setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
-    refreshMetadata();
+    setTimeout(() => refreshMetadata(), 1000);
   }
 
   function onDeleteSelected() {
