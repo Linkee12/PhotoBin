@@ -3,7 +3,7 @@ import albumItemsBg from "@assets/images/albumItemsBg.svg?no-inline";
 import LandscapeDownloadIcon from "@assets/images/icons/landscapeDownloadIcon.svg?react";
 import SlideUp from "@assets/images/icons/slideUp.svg?react";
 import SlideDown from "@assets/images/icons/slideDown.svg?react";
-import LandscapeAddIcon from "@assets/images/icons/landscapeAddIcon.svg?react";
+import AddIcon from "@assets/images/icons/addIcon.svg?react";
 import { styled } from "../../../stitches.config";
 import { useEffect, useState } from "react";
 
@@ -33,7 +33,7 @@ export function Menu(props: MenuProps) {
         </Button>
         <Button>
           <ButtonText onClick={props.onAddPhoto}> ADD PHOTO</ButtonText>
-          <LandscapeAddIcon />
+          <AddIcon />
         </Button>
       </LandscapeButtonsBg>
       <PortraitButtonsContainer onClick={() => setIsOpen(!isOpen)}>
@@ -63,7 +63,7 @@ export function Menu(props: MenuProps) {
             >
               <div />
               <ButtonText> ADD PHOTO</ButtonText>
-              <LandscapeAddIcon />
+              <AddIcon />
             </Button>
           </Buttons>
           {isOpen ? (

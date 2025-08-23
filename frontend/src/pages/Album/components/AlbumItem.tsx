@@ -131,7 +131,7 @@ const Preview = styled("div", {
     },
   },
   aspectRatio: "3/2",
-  margin: "1rem",
+  margin: "0.5rem",
   borderRadius: "10px",
   backgroundColor: "#232323",
   boxSizing: "border-box",

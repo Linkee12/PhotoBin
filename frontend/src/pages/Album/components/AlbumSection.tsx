@@ -74,36 +74,36 @@ export function AlbumSection(props: AlbumSectionProps) {
 const PanelBody = styled("div", {});
 const ShowDate = styled("div", {
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-end",
+  gap: "0.5rem",
   fontSize: "1.42rem",
   color: "#fff",
-  marginRight: "2rem",
   fontFamily: "SourceCodeVF",
-  height: "3rem",
+  height: "100%",
 });
 
 const SelectAll = styled("div", {
   cursor: "pointer",
   width: "1.4rem",
   height: "1.4rem",
-  marginLeft: "0.5rem",
+  display: "flex",
+  alignItems: "flex-end",
 });
 
 const Images = styled("div", {
-  display: "flex",
-  gap: "10px",
   maxWidth: "100%",
-  flex: 1,
-  justifyContent: "center",
   "@portrait": {
+    display: "flex",
+    flexDirection: "column",
     justifyContent: "center",
     margin: "1rem 1.28rem 1.28rem 1.28rem",
+    gap: "10px",
   },
   "@landscape": {
-    justifyContent: "flex-start",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
     margin: "1.9rem 1.9rem 1.9rem 1.9rem",
   },
-  flexWrap: "wrap",
 });
 const Header = styled("div", {
   width: "100%",
