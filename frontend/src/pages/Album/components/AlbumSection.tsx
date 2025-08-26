@@ -101,6 +101,7 @@ const Images = styled("div", {
   },
   "@landscape": {
     display: "grid",
+    justifyItems: "center",
     gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
     margin: "1.9rem 1.9rem 1.9rem 1.9rem",
   },
