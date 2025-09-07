@@ -15,60 +15,45 @@ type AlbumItemProps = {
 
 export function AlbumItem(props: AlbumItemProps) {
   return (
-    <div onClick={() => (props.isSelected ? props.onDeselect() : props.onSelect())}>
-      <Preview isSelected={props.isSelected}>
-        <CheckIcon isVisible={props.isSelected} />
-        {props.isVideo === true ? <PlayIcon /> : <></>}
-        {props.imageSrc !== undefined ? (
-          <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
-        ) : (
-          <UnsupportedFile isSelected={props.isSelected}>
-            <UnsupportedFileName>{formatFilename(props.fileName)}</UnsupportedFileName>
-          </UnsupportedFile>
-        )}
-        <ZoomIcon
-          onClick={() => {
-            props.onOpen();
-          }}
-        />
-      </Preview>
-    </div>
+    <Preview onClick={() => (props.isSelected ? props.onDeselect() : props.onSelect())}>
+      <CheckIcon isVisible={props.isSelected} />
+      {props.isVideo === true ? <PlayIcon /> : <></>}
+      {props.imageSrc !== undefined ? (
+        <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
+      ) : (
+        <UnsupportedFile isSelected={props.isSelected}>
+          <UnsupportedFileName>{formatFilename(props.fileName)}</UnsupportedFileName>
+        </UnsupportedFile>
+      )}
+      <ZoomIcon
+        onClick={() => {
+          props.onOpen();
+        }}
+      />
+    </Preview>
   );
 }
 
 const Image = styled("img", {
   display: "block",
-  width: "var(--width, 300px)",
-  height: "var(--height, 200px)",
   transition: "width 0.2s, height 0.2s, padding 0.2s, border-radius 0.2s",
   objectFit: "cover",
   variants: {
     isSelected: {
       true: {
         borderRadius: "4px",
-        "@portrait": {
-          width: "calc(100% - 20px)",
-          height: "calc(100% - 20px)",
-        },
-        "@landscape": {
-          width: 280,
-          height: 180,
-        },
+        width: "calc(100% - 20px)",
+        height: "calc(100% - 20px)",
       },
       false: {
         borderRadius: "10px",
-        "@portrait": {
-          width: "100%",
-          height: "auto",
-        },
-        "@landscape": {
-          width: 300,
-          height: 200,
-        },
+        width: "100%",
+        height: "auto",
       },
     },
   },
 });
+
 const UnsupportedFile = styled("div", {
   display: "flex",
   alignItems: "center",
@@ -80,26 +65,13 @@ const UnsupportedFile = styled("div", {
     isSelected: {
       true: {
         borderRadius: "4px",
-        "@portrait": {
-          width: "calc(100% - 20px)",
-          height: "calc(100% - 20px)",
-        },
-        "@landscape": {
-          objectFit: "cover",
-          width: 280,
-          height: 180,
-        },
+        width: "calc(100% - 20px)",
+        height: "calc(100% - 20px)",
       },
       false: {
         borderRadius: "10px",
-        "@portrait": {
-          width: "100%",
-          height: "auto",
-        },
-        "@landscape": {
-          width: 300,
-          height: 200,
-        },
+        width: "100%",
+        height: "auto",
       },
     },
   },
@@ -110,26 +82,14 @@ const UnsupportedFileName = styled("p", {
 });
 
 const Preview = styled("div", {
-  variants: {
-    isSelected: {
-      true: {
-        "@portrait": {
-          width: "90vw",
-        },
-        "@landscape": {
-          width: 300,
-        },
-      },
-      false: {
-        "@portrait": {
-          width: "90vw",
-        },
-        "@landscape": {
-          width: 300,
-        },
-      },
-    },
+  "@landscape": {
+    minWidth: "150px",
+    maxWidth: "300px",
   },
+  "@portrait": {
+    width: "90vw",
+  },
+  width: "100%",
   aspectRatio: "3/2",
   margin: "0.5rem",
   borderRadius: "10px",
