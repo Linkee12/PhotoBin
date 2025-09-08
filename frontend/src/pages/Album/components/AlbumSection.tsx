@@ -70,7 +70,6 @@ export function AlbumSection(props: AlbumSectionProps) {
     </Panel>
   );
 }
-
 const PanelBody = styled("div", {});
 const ShowDate = styled("div", {
   display: "flex",
@@ -101,8 +100,35 @@ const Images = styled("div", {
   },
   "@landscape": {
     display: "grid",
+    gap: "20px",
     justifyItems: "center",
-    gridTemplateColumns: "repeat(auto-fit, minmax(310px, 1fr))",
+    "@media (max-width:calc(300px * 10 + 60.8px + 9 * 20px))": {
+      gridTemplateColumns: "repeat(10, 1fr)",
+    },
+    "@media (max-width:calc(300px * 9 + 60.8px + 8 * 20px))": {
+      gridTemplateColumns: "repeat(9, 1fr)",
+    },
+    "@media (max-width:calc(300px * 8 + 60.8px + 7 * 20px))": {
+      gridTemplateColumns: "repeat(8, 1fr)",
+    },
+    "@media (max-width:calc(300px * 7 + 60.8px + 6 * 20px))": {
+      gridTemplateColumns: "repeat(7, 1fr)",
+    },
+    "@media (max-width:calc(300px * 6 + 60.8px + 5 * 20px))": {
+      gridTemplateColumns: "repeat(6, 1fr)",
+    },
+    "@media (max-width:calc(300px * 5 + 60.8px + 4 * 20px))": {
+      gridTemplateColumns: "repeat(5, 1fr)",
+    },
+    "@media (max-width:calc(300px * 4 + 60.8px + 3 * 20px))": {
+      gridTemplateColumns: "repeat(4, 1fr)",
+    },
+    "@media (max-width:calc(300px * 3 + 60.8px + 2 * 20px))": {
+      gridTemplateColumns: "repeat(3, 1fr)",
+    },
+    "@media (max-width:calc(300px * 2 + 60.8px + 1 * 20px))": {
+      gridTemplateColumns: "repeat(2, 1fr)",
+    },
     margin: "1.9rem 1.9rem 1.9rem 1.9rem",
   },
 });
