@@ -2,7 +2,7 @@
 /* eslint-disable react/no-unescaped-entities */
 import { styled } from "../../stitches.config";
 import Header from "./components/Header";
-import IntroImg from "./components/intro";
+import Intro from "./components/Intro";
 import { useNavigate } from "react-router";
 import { genKey } from "../../utils/key";
 import { Panel, PanelHeader, PushDown } from "../Album/components/Panel";
@@ -13,31 +13,30 @@ export default function Home() {
   return (
     <Container>
       <Header />
-      <Intro>
-        <IntroImg />
-      </Intro>
+      <IntroContainer>
+        <Intro />
+      </IntroContainer>
       <PushDown style={{ height: "2.5em" }} />
       <Panel variant={0} zIndex={0}>
         <PanelHeader>
           <PanelTitle>ABOUT</PanelTitle>
         </PanelHeader>
-        <Paragraph>
+        <P>
           <Text>
-            Photobin is a temporary photo album provider with E2E encryption. You can
-            share photos and each participant can export them to their storage of choice.
+            Photobin is a <b>temporary</b> photo album provider with <b>E2E encryption</b>
+            . You can share photos and each participant can <b>export</b> them to their
+            storage of choice.
           </Text>
           <Text>
             The server has no way viewing your photos without the key, and the browser
             doesn't send the key to the server because everything after "#" is ignored in
             an http request.
           </Text>
-          <Text css={{ "--size": "1.6em", "--weight": "bold" }}>
+          <Text css={{ "--size": "1.2em", "--weight": "bold" }}>
             Photobin is free and open-source!
           </Text>
-        </Paragraph>
-        <PushDown />
-        <PushDown />
-        <PushDown />
+        </P>
+        <PushDown style={{ height: "8em" }} />
       </Panel>
 
       <FloatingFooter>
@@ -63,7 +62,8 @@ export default function Home() {
 }
 
 const Container = styled("div", {
-  background: "radial-gradient(rgba(134, 147, 192, 0.25), rgba(32, 32, 32, 0.25))",
+  background:
+    "radial-gradient(rgb(55, 58, 69), rgb(29, 29, 29)) center 100px / 100vw 100vw",
   width: "100%",
   height: "auto",
   minHeight: "100vh",
@@ -72,12 +72,9 @@ const Container = styled("div", {
   flexDirection: "column",
   position: "relative",
   fontFamily: "Open Sans",
-
-  "@mobile": {
-    fontSize: "12px",
-  },
+  fontSize: "clamp(14px, 1.5vw, 18px)",
 });
-const Intro = styled("div", {
+const IntroContainer = styled("div", {
   minHeight: "6em",
   display: "flex",
   flexDirection: "column",
@@ -86,7 +83,7 @@ const Intro = styled("div", {
 });
 
 const Button = styled("div", {
-  width: "25em",
+  width: "min(80vw,25em)",
   fontWeight: "bold",
   display: "flex",
   justifyContent: "center",
@@ -112,20 +109,26 @@ const FloatingFooter = styled("div", {
   alignItems: "center",
   flex: 1,
   backgroundColor: "#333333",
-  borderRadius: "40% 40% 0 0",
+  borderRadius: "50vw 50vw 0 0 / 5vw 5vw 0 0",
   paddingBottom: "1em",
+  height: "8em",
 });
 
 const Text = styled("p", {
-  fontSize: "var(--size, 1.5em)",
+  fontSize: "var(--size, 1em)",
   color: "var(--color)",
   fontWeight: "var(--weight, 500)",
 });
 
-const PanelTitle = styled("h1", {
-  margin: "1em 0 0 1em",
+const PanelTitle = styled("h2", {
+  margin: "2rem 0 0 2rem",
+  fontSize: "1rem",
+  fontWeight: "700",
 });
 
-const Paragraph = styled("div", {
-  padding: "0 1.5em 1.5em 1.5em",
+const P = styled("p", {
+  maxWidth: "26em",
+  margin: "auto",
+  padding: "2.5em",
+  textAlign: "justify",
 });
