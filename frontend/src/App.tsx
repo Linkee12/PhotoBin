@@ -32,6 +32,7 @@ const globalStyles = globalCss({
     minHeight: "100dvh",
     backgroundColor: "#0E0E10",
     color: "#fff",
+    fontSize: "clamp(16px, 2.5vw, 20px)",
   },
 
   "@keyframes spin": {
