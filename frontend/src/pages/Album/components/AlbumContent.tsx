@@ -74,7 +74,10 @@ export function AlbumContent(props: AlbumContentProps) {
   }
   return (
     <Panel variant={0} zIndex={1}>
-      <PushDown />
+      <RemainingTimeContainer>
+        <PushDown />
+        <RemainingTime>2 days left</RemainingTime>
+      </RemainingTimeContainer>
       {props.thumbnailGroups.length > 0 && (
         <Menu
           onDownloadAll={() => props.onDownloadAll(getAllId())}
@@ -262,4 +265,17 @@ const DownloadMask = styled("div", {
       },
     },
   },
+});
+const RemainingTimeContainer = styled("div", {
+  display: "flex",
+  flexDirection: "row",
+});
+const RemainingTime = styled("div", {
+  display: "flex",
+  alignItems: "center",
+  paddingRight: "2rem",
+  color: "#8B8B8B",
+  fontSize: "0.8rem",
+  fontWeight: "bold",
+  whiteSpace: "nowrap",
 });
