@@ -40,7 +40,7 @@ export default function Home() {
       </Panel>
 
       <FloatingFooter>
-        <Text css={{ "--color": "#808080" }}>Start your E2E encripted album</Text>
+        <Text css={{ "--color": "#808080" }}>Start your E2E encrypted album</Text>
         <Button
           onClick={() => {
             genKey()

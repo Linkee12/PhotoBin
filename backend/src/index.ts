@@ -90,6 +90,11 @@ const routes = {
       albumService.deleteImages(data.body.albumId, data.body.ids);
       return success({});
     }),
+  test: builder.path("/test").post(async () => {
+    console.log("delete");
+    await albumService.cleanStorage();
+    return success({ message: "Albums deleted" });
+  }),
 };
 
 initRpc(app, {

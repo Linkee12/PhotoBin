@@ -38,6 +38,16 @@ export class AlbumService {
       await this._deleteImage(albumId, imageId);
     }
   }
+  async cleanStorage() {
+    const directions = await fs.readdir("./albums");
+    const now = Date.now();
+    for (const dir of directions) {
+      const s = await fs.stat("./albums/" + dir);
+      if (now - s.birthtimeMs > 600000) {
+        this._deleteDir(dir);
+      }
+    }
+  }
 
   private async _createDirectory(folder: string) {
     try {
@@ -53,6 +63,13 @@ export class AlbumService {
       force: true,
     });
     this._metadataService.removeFile(albumId, imageId);
+  }
+  private async _deleteDir(albumId: string) {
+    await fs.rm(path.join("./albums/", albumId), {
+      recursive: true,
+      force: true,
+    });
+    console.log("deleted");
   }
   private async _checkDirectoryExists(path: string) {
     try {
