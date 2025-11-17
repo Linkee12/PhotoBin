@@ -15,6 +15,7 @@ const builder = createBuilder(app);
 const metadataService = new MetadataService(fs);
 const albumService = new AlbumService(metadataService);
 const routes = {
+  health: builder.path("/health").get(async () => success({ message: "Healthy" })),
   getAlbumMetadata: builder
     .querySchema(
       z.object({
@@ -92,7 +93,7 @@ const routes = {
 };
 
 initRpc(app, {
-  path: "/rpc",
+  path: "/api/rpc",
   routes,
 });
 

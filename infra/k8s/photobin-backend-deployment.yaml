@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -o k8s
+    kompose.image-pull-policy: Always
+    kompose.service.annotations.cloud.google.com/backend-config: '{"default": "photobin-backend-config"}'
+    kompose.service.healthcheck.readiness.http_get_path: /health
+    kompose.service.healthcheck.readiness.http_get_port: "3001"
+    kompose.service.healthcheck.readiness.initial_delay_seconds: "10"
+    kompose.service.healthcheck.readiness.period_seconds: "5"
+    kompose.version: 1.37.0 (HEAD)
+  labels:
+    io.kompose.service: photobin-backend
+  name: photobin-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: photobin-backend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert -o k8s
+        kompose.image-pull-policy: Always
+        kompose.service.annotations.cloud.google.com/backend-config: '{"default": "photobin-backend-config"}'
+        kompose.service.healthcheck.readiness.http_get_path: /health
+        kompose.service.healthcheck.readiness.http_get_port: "3001"
+        kompose.service.healthcheck.readiness.initial_delay_seconds: "10"
+        kompose.service.healthcheck.readiness.period_seconds: "5"
+        kompose.version: 1.37.0 (HEAD)
+      labels:
+        io.kompose.service: photobin-backend
+    spec:
+      containers:
+        - image: gcr.io/kuber-478415/photobin-backend:latest
+          imagePullPolicy: Always
+          name: photobin-backend
+          ports:
+            - containerPort: 3001
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+          resources:
+            limits:
+              cpu: "1"
+              memory: "536870912"
+            requests:
+              cpu: 250m
+              memory: "134217728"
+          volumeMounts:
+            - mountPath: /app/albums
+              name: albums
+      restartPolicy: Always
+      volumes:
+        - name: albums
+          persistentVolumeClaim:
+            claimName: albums

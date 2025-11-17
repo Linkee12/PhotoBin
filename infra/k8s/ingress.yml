@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: photobin-ingress
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    networking.gke.io/managed-certificates: photobin-cert
+spec:
+  ingressClassName: gce
+  defaultBackend:
+    service:
+      name: photobin-frontend
+      port:
+        number: 3000
+  rules:
+    - host: photobin.freeddns.org
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: photobin-backend
+                port:
+                  number: 3001
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: photobin-frontend
+                port:
+                  number: 3000

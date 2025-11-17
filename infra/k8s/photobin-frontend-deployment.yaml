@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -o k8s
+    kompose.image-pull-policy: Always
+    kompose.service.healthcheck.readiness.http_get_path: /
+    kompose.service.healthcheck.readiness.http_get_port: "3000"
+    kompose.service.healthcheck.readiness.initial_delay_seconds: "10"
+    kompose.service.healthcheck.readiness.period_seconds: "5"
+    kompose.version: 1.37.0 (HEAD)
+  labels:
+    io.kompose.service: photobin-frontend
+  name: photobin-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: photobin-frontend
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: kompose convert -o k8s
+        kompose.image-pull-policy: Always
+        kompose.service.healthcheck.readiness.http_get_path: /
+        kompose.service.healthcheck.readiness.http_get_port: "3000"
+        kompose.service.healthcheck.readiness.initial_delay_seconds: "10"
+        kompose.service.healthcheck.readiness.period_seconds: "5"
+        kompose.version: 1.37.0 (HEAD)
+      labels:
+        io.kompose.service: photobin-frontend
+    spec:
+      containers:
+        - image: gcr.io/kuber-478415/photobin-frontend:latest
+          imagePullPolicy: Always
+          name: photobin-frontend
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+          resources:
+            limits:
+              cpu: 500m
+              memory: "268435456"
+            requests:
+              cpu: 250m
+              memory: "134217728"
+      restartPolicy: Always

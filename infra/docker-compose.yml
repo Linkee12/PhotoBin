@@ -1,0 +1,58 @@
+services:
+  photobin-frontend:
+    image: gcr.io/${PROJECT_ID}/photobin-frontend:latest
+    build:
+      context: ..
+      dockerfile: ./frontend/docker/prod.Dockerfile
+    ports:
+      - 3000:3000
+    labels:
+      kompose.service.healthcheck.readiness.http_get_path: /
+      kompose.service.healthcheck.readiness.http_get_port: "3000"
+      kompose.service.healthcheck.readiness.initial_delay_seconds: "10"
+      kompose.service.healthcheck.readiness.period_seconds: "5"
+      kompose.image-pull-policy: Always
+    networks:
+      - photobin-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+  photobin-backend:
+    image: gcr.io/${PROJECT_ID}/photobin-backend:latest
+    build:
+      context: ../backend
+      dockerfile: ./docker/prod.Dockerfile
+    labels:
+      kompose.service.healthcheck.readiness.http_get_path: /health
+      kompose.service.healthcheck.readiness.http_get_port: "3001"
+      kompose.service.healthcheck.readiness.initial_delay_seconds: "10"
+      kompose.service.healthcheck.readiness.period_seconds: "5"
+      kompose.image-pull-policy: Always
+      kompose.service.annotations.cloud.google.com/backend-config: '{"default": "photobin-backend-config"}'
+    ports:
+      - 3001:3001
+    volumes:
+      - albums:/app/albums
+    networks:
+      - photobin-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+
+networks:
+  photobin-net:
+
+volumes:
+  albums:
+    labels:
+      kompose.volume.size: 5Gi

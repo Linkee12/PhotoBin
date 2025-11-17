@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    kompose.cmd: kompose convert -o k8s
+    kompose.image-pull-policy: Always
+    kompose.service.annotations.cloud.google.com/backend-config: '{"default": "photobin-backend-config"}'
+    kompose.service.healthcheck.readiness.http_get_path: /health
+    kompose.service.healthcheck.readiness.http_get_port: "3001"
+    kompose.service.healthcheck.readiness.initial_delay_seconds: "10"
+    kompose.service.healthcheck.readiness.period_seconds: "5"
+    kompose.version: 1.37.0 (HEAD)
+  labels:
+    io.kompose.service: photobin-backend
+  name: photobin-backend
+spec:
+  ports:
+    - name: "3001"
+      port: 3001
+      targetPort: 3001
+  selector:
+    io.kompose.service: photobin-backend
