@@ -26,7 +26,8 @@ export function AlbumItem(props: AlbumItemProps) {
         </UnsupportedFile>
       )}
       <ZoomIcon
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           props.onOpen();
         }}
       />
