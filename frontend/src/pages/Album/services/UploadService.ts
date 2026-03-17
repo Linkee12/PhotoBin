@@ -6,7 +6,7 @@ import { formatDate } from "../../../utils/formatDate";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 
 const SIZE = { width: 300, height: 200 };
-const QUALITY = 0.3;
+const QUALITY = 0.1;
 const VIDEOTYPES = ["video/mp4", "video/webm", "video/ogg"];
 const IMAGETYPES = [
   "image/jpeg",
@@ -32,6 +32,7 @@ export class UploadService {
     private _canvasService: CanvasService,
     private _cryptoService: CryptoService,
   ) {}
+  // eslint-disable-next-line sonarjs/cognitive-complexity
   async *upload(
     file: File,
     props: { key: string; albumId: string },

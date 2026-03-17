@@ -45,8 +45,8 @@ export default function Home() {
           onClick={() => {
             genKey()
               .then((key) => {
-                const albumId = encodeURIComponent(crypto.randomUUID());
-                const albumKey = encodeURIComponent(key);
+                const albumId = crypto.randomUUID();
+                const albumKey = key;
                 navigate(`/bin/${albumId}#${albumKey}`);
               })
               .catch((e) => {
@@ -126,7 +126,7 @@ const PanelTitle = styled("h2", {
   fontWeight: "700",
 });
 
-const P = styled("p", {
+const P = styled("span", {
   maxWidth: "26em",
   margin: "auto",
   padding: "2.5em",

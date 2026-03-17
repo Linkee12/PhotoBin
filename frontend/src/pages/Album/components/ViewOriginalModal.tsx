@@ -40,51 +40,62 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     };
   }, [props.visible]);
 
-  async function updateOriginalImageDataUrl() {
-    if (!metadata) return;
-    if (metadata.albumId === undefined) return;
-    if (file === undefined) return;
-    if (file.original !== undefined) {
-      const reduced = await imageDownloadService.getImg(
-        metadata.albumId,
-        file,
-        key,
-        "reduced",
-      );
-      if (reduced !== undefined) {
-        setUrl(reduced.img);
-        setFileName(reduced.fileName);
-      }
-      const origin = await imageDownloadService.getImg(
-        metadata.albumId,
-        file,
-        key,
-        "original",
-      );
-      if (origin !== undefined) {
-        setUrl(origin.img);
-      }
-      if (file.originalVideo !== undefined) {
-        setIsLoadingVideo(true);
-        const video = await imageDownloadService.getImg(
-          metadata.albumId,
-          file,
-          key,
-          "originalVideo",
-        );
-        if (video !== undefined) {
-          setUrl(video.img);
-          setIsVideoReady(true);
-        }
-        setIsLoadingVideo(false);
-      }
-    } else {
-      setUrl("");
-    }
-  }
-
   useEffect(() => {
-    updateOriginalImageDataUrl().catch((e) => console.error(e));
+    let cancelled = false;
+
+    // eslint-disable-next-line sonarjs/cognitive-complexity
+    async function updateOriginalImageDataUrl() {
+      if (!metadata || metadata.albumId === undefined || file === undefined) return;
+
+      try {
+        if (file.original !== undefined) {
+          const reduced = await imageDownloadService.getImg(
+            metadata.albumId,
+            file,
+            key,
+            "reduced",
+          );
+          if (!cancelled && reduced !== undefined) {
+            setUrl(reduced.img);
+            setFileName(reduced.fileName);
+          }
+
+          const origin = await imageDownloadService.getImg(
+            metadata.albumId,
+            file,
+            key,
+            "original",
+          );
+          if (!cancelled && origin !== undefined) {
+            setUrl(origin.img);
+          }
+
+          if (file.originalVideo !== undefined) {
+            setIsLoadingVideo(true);
+            const video = await imageDownloadService.getImg(
+              metadata.albumId,
+              file,
+              key,
+              "originalVideo",
+            );
+            if (!cancelled && video !== undefined) {
+              setUrl(video.img);
+              setIsVideoReady(true);
+            }
+            if (!cancelled) setIsLoadingVideo(false);
+          }
+        } else {
+          if (!cancelled) setUrl("");
+        }
+      } catch (e) {
+        if (!cancelled) console.error(e);
+      }
+    }
+    updateOriginalImageDataUrl();
+
+    return () => {
+      cancelled = true;
+    };
   }, [props.fileId]);
 
   return (
