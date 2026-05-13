@@ -104,6 +104,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         <ButtonGroup>
           <Button
             onClick={() => {
+              if (!window.confirm("Delete this photo? This cannot be undone.")) {
+                return;
+              }
               props.onShowChange(!props.visible);
               props.onDelete();
             }}

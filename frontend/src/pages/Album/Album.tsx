@@ -95,6 +95,12 @@ export default function Album() {
   }
 
   function onDeleteSelected() {
+    const count = selectedImages.length;
+    const message =
+      count === 1
+        ? "Delete this photo? This cannot be undone."
+        : `Delete ${count} photos? This cannot be undone.`;
+    if (!window.confirm(message)) return;
     deleteImages(selectedImages).catch((reason) => {
       console.error(reason);
       toast.error("Failed to delete");
