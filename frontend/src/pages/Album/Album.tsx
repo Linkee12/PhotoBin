@@ -43,6 +43,7 @@ export default function Album() {
   const [showOrigin, setShowOrigin] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [emptyAlbum, setEmptyAlbum] = useState(false);
   const showUploader = (thumbnails.length === 0 && emptyAlbum) || isUploading;
 
@@ -107,27 +108,31 @@ export default function Album() {
     });
   }
 
-  async function onDownloadSelected() {
+  async function runDownload(imageIds: string[]) {
     setIsDownloading(true);
+    setDownloadProgress(0);
     try {
-      if (metadata) await downloadService.download({ albumContext, selectedImages });
+      if (metadata) {
+        await downloadService.download({
+          albumContext,
+          selectedImages: imageIds,
+          onProgress: setDownloadProgress,
+        });
+      }
     } catch (e) {
       console.error(e);
       toast.error("Download failed");
     } finally {
       setIsDownloading(false);
+      setDownloadProgress(0);
     }
   }
-  async function onDownloadAll(selectedImages: string[]) {
-    setIsDownloading(true);
-    try {
-      if (metadata) await downloadService.download({ albumContext, selectedImages });
-    } catch (e) {
-      console.error(e);
-      toast.error("Download failed");
-    } finally {
-      setIsDownloading(false);
-    }
+
+  function onDownloadSelected() {
+    runDownload(selectedImages).catch((e) => console.error(e));
+  }
+  function onDownloadAll(imageIds: string[]) {
+    runDownload(imageIds).catch((e) => console.error(e));
   }
 
   function onUncheckSelected() {
@@ -221,6 +226,7 @@ export default function Album() {
         showUploader={showUploader}
         isUploading={isUploading}
         isDownloading={isDownloading}
+        downloadProgress={downloadProgress}
         onUploadStarted={() => setIsUploading(true)}
         onUploadFinished={() => setIsUploading(false)}
         onDownloadAll={(files: string[]) => onDownloadAll(files)}

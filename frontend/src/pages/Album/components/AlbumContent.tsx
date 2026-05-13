@@ -14,6 +14,7 @@ type AlbumContentProps = {
   showUploader: boolean;
   isUploading: boolean;
   isDownloading: boolean;
+  downloadProgress: number;
   thumbnailGroups: ThumbnailGroup[];
   uploadService: UploadService;
 
@@ -124,7 +125,12 @@ export function AlbumContent(props: AlbumContentProps) {
           ))}
         </AlbumSections>
         <UploadMask show={props.isUploading} />
-        <DownloadMask show={props.isDownloading}>Preparing your files </DownloadMask>
+        <DownloadMask show={props.isDownloading}>
+          <DownloadText>Preparing your files</DownloadText>
+          {props.downloadProgress > 0 && (
+            <DownloadPercent>{props.downloadProgress}%</DownloadPercent>
+          )}
+        </DownloadMask>
         <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
           <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
             <StyledUpload height={maskHeight} />
@@ -262,8 +268,10 @@ const DownloadMask = styled("div", {
   position: "fixed",
   top: 0,
   display: "flex",
+  flexDirection: "column",
   justifyContent: "center",
   alignItems: "center",
+  gap: "0.5rem",
   fontSize: "2rem",
   fontWeight: "bold",
   fontFamily: "Open Sans",
@@ -280,6 +288,11 @@ const DownloadMask = styled("div", {
       },
     },
   },
+});
+const DownloadText = styled("div", {});
+const DownloadPercent = styled("div", {
+  fontSize: "1.5rem",
+  color: "#DBDCD9",
 });
 const RemainingTimeContainer = styled("div", {
   display: "flex",
