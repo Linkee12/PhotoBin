@@ -92,7 +92,7 @@ const routes = {
   deleteImages: builder
     .bodySchema(z.object({ albumId: uuidSchema, ids: z.array(uuidSchema) }))
     .delete(async ({ data }) => {
-      albumService.deleteImages(data.body.albumId, data.body.ids);
+      await albumService.deleteImages(data.body.albumId, data.body.ids);
       return success({});
     }),
   test: builder.path("/test").post(async () => {
