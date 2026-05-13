@@ -82,17 +82,19 @@ export default function Album() {
       return;
     }
 
-    setThumbnails((prev) =>
-      prev
+    setThumbnails((prev) => {
+      const next = prev
         .map((group) => ({
           ...group,
           // eslint-disable-next-line sonarjs/no-nested-functions
           thumbnails: group.thumbnails.filter((element) => !ids.includes(element.id)),
         }))
-        .filter((group) => group.thumbnails.length > 0),
-    );
+        .filter((group) => group.thumbnails.length > 0);
+      if (next.length === 0) setEmptyAlbum(true);
+      return next;
+    });
     setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
-    setTimeout(() => refreshMetadata(), 1000);
+    refreshMetadata();
   }
 
   function onDeleteSelected() {
