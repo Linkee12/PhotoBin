@@ -53,7 +53,7 @@ export class ImageQueryService {
   private async _getPartsOfImage(
     albumId: string,
     id: string,
-    type: string,
+    type: "original" | "reduced" | "thumbnail" | "originalVideo" | "unsupportedFile",
     name: string,
   ) {
     const response = await client.getPartOfImage.get({

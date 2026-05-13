@@ -3,7 +3,13 @@ import dotenv from "dotenv";
 import { createBuilder, success, initRpc } from "@cuple/server";
 import { z } from "zod";
 import { AlbumService } from "./services/AlbumService";
-import { fileMetadataSchema, metadataSchema } from "./utils/zod";
+import {
+  fileMetadataSchema,
+  metadataSchema,
+  partNameSchema,
+  partTypeSchema,
+  uuidSchema,
+} from "./utils/zod";
 import { MetadataService } from "./services/MetadataService";
 import fs from "fs";
 dotenv.config();
@@ -18,7 +24,7 @@ const routes = {
   getAlbumMetadata: builder
     .querySchema(
       z.object({
-        id: z.string(),
+        id: uuidSchema,
       }),
     )
     .get(async ({ data }) => {
@@ -28,10 +34,10 @@ const routes = {
   getPartOfImage: builder
     .querySchema(
       z.object({
-        albumId: z.string(),
-        id: z.string(),
-        type: z.string(),
-        name: z.string(),
+        albumId: uuidSchema,
+        id: uuidSchema,
+        type: partTypeSchema,
+        name: partNameSchema,
       }),
     )
     .get(async ({ data }) => {
@@ -46,10 +52,10 @@ const routes = {
   uploadFilePart: builder
     .bodySchema(
       z.object({
-        fileType: z.string(),
-        albumId: z.string(),
-        fileId: z.string(),
-        partName: z.string(),
+        fileType: partTypeSchema,
+        albumId: uuidSchema,
+        fileId: uuidSchema,
+        partName: partNameSchema,
         encryptedFile: z.string(),
       }),
     )
@@ -60,7 +66,7 @@ const routes = {
   editAlbumName: builder
     .bodySchema(
       z.object({
-        albumId: z.string(),
+        albumId: uuidSchema,
         albumName: metadataSchema.shape.albumName,
       }),
     )
@@ -73,7 +79,7 @@ const routes = {
   finalizeFile: builder
     .bodySchema(
       z.object({
-        albumId: z.string(),
+        albumId: uuidSchema,
         fileMetadata: fileMetadataSchema,
       }),
     )
@@ -84,7 +90,7 @@ const routes = {
       });
     }),
   deleteImages: builder
-    .bodySchema(z.object({ albumId: z.string(), ids: z.array(z.string()) }))
+    .bodySchema(z.object({ albumId: uuidSchema, ids: z.array(uuidSchema) }))
     .delete(async ({ data }) => {
       albumService.deleteImages(data.body.albumId, data.body.ids);
       return success({});

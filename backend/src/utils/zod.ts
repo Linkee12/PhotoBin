@@ -1,7 +1,17 @@
 import { z } from "zod";
 
+export const uuidSchema = z.string().uuid();
+export const partTypeSchema = z.enum([
+  "original",
+  "reduced",
+  "thumbnail",
+  "originalVideo",
+  "unsupportedFile",
+]);
+export const partNameSchema = z.string().regex(/^\d+$/, "partName must be numeric");
+
 export const fileMetadataSchema = z.object({
-  fileId: z.string(),
+  fileId: uuidSchema,
   fileName: z.object({
     value: z.string(),
     iv: z.string(),
@@ -43,7 +53,7 @@ export const fileMetadataSchema = z.object({
 });
 
 export const metadataSchema = z.object({
-  albumId: z.string(),
+  albumId: uuidSchema,
   albumName: z.object({
     value: z.string(),
     iv: z.string(),

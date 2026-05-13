@@ -207,7 +207,7 @@ export class UploadService {
     files: ArrayBuffer[],
     albumId: string,
     fileId: string,
-    fileType: string,
+    fileType: "original" | "reduced" | "thumbnail" | "originalVideo" | "unsupportedFile",
   ) {
     for (let i = 0; i < files.length; i++) {
       const objUrl = arrayBufferToBase64(files[i]);
