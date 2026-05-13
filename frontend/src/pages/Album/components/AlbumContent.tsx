@@ -2,13 +2,14 @@ import { styled } from "../../../stitches.config";
 import { Cloud } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
 import { Panel, PushDown } from "./Panel";
 import { Menu } from "./Menu";
 import { toast } from "react-toastify";
+import { formatTimeLeft } from "../../../utils/formatTimeLeft";
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -40,7 +41,15 @@ type AlbumContentProps = {
 export function AlbumContent(props: AlbumContentProps) {
   const [maskHeight, setMaskHeight] = useState(0);
   const ref = useRef<HTMLInputElement>(null);
-  const { metadata, refreshMetadata, key } = useAlbumContext();
+  const { metadata, refreshMetadata, key, expiresAt } = useAlbumContext();
+  const [timeLeft, setTimeLeft] = useState(() => formatTimeLeft(expiresAt));
+
+  useEffect(() => {
+    setTimeLeft(formatTimeLeft(expiresAt));
+    if (expiresAt === null) return;
+    const id = setInterval(() => setTimeLeft(formatTimeLeft(expiresAt)), 60_000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
 
   function setProgress(percentage: number) {
     const height = 445 * (percentage / 100);
@@ -90,10 +99,12 @@ export function AlbumContent(props: AlbumContentProps) {
   }
   return (
     <Panel variant={0} zIndex={1}>
-      <RemainingTimeContainer>
-        <PushDown />
-        <RemainingTime>2 days left</RemainingTime>
-      </RemainingTimeContainer>
+      {timeLeft && (
+        <RemainingTimeContainer>
+          <PushDown />
+          <RemainingTime>{timeLeft}</RemainingTime>
+        </RemainingTimeContainer>
+      )}
       {props.thumbnailGroups.length > 0 && (
         <Menu
           onDownloadAll={() => props.onDownloadAll(getAllId())}

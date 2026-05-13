@@ -14,12 +14,17 @@ import { MetadataService } from "./services/MetadataService";
 import fs from "fs";
 dotenv.config();
 
+const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const albumTtlMs = Number(process.env["ALBUM_TTL_MS"]) || ONE_MONTH_MS;
+const cleanupIntervalMs = Number(process.env["CLEANUP_INTERVAL_MS"]) || ONE_HOUR_MS;
+
 const app = express();
 const port = 3001;
 app.use(express.json({ limit: "2mb" }));
 const builder = createBuilder(app);
 const metadataService = new MetadataService(fs);
-const albumService = new AlbumService(metadataService);
+const albumService = new AlbumService(metadataService, albumTtlMs);
 const routes = {
   getAlbumMetadata: builder
     .querySchema(
@@ -29,7 +34,8 @@ const routes = {
     )
     .get(async ({ data }) => {
       const metadata = albumService.getMetaData(data.query.id);
-      return success({ metadata });
+      const expiresAt = await albumService.getExpiresAt(data.query.id);
+      return success({ metadata, expiresAt });
     }),
   getPartOfImage: builder
     .querySchema(
@@ -115,11 +121,6 @@ export type Routes = typeof routes;
 app.listen(port, () => {
   console.log(`Server is running at http://0.0.0.0:${port}`);
 });
-
-const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
-const ONE_HOUR_MS = 60 * 60 * 1000;
-const albumTtlMs = Number(process.env["ALBUM_TTL_MS"]) || ONE_MONTH_MS;
-const cleanupIntervalMs = Number(process.env["CLEANUP_INTERVAL_MS"]) || ONE_HOUR_MS;
 
 function runCleanup() {
   albumService.cleanStorage(albumTtlMs).catch((err) => {

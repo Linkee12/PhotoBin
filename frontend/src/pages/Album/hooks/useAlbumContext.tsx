@@ -12,6 +12,7 @@ export type DecodedValues = {
 export type AlbumContextType = {
   key: string;
   metadata: Metadata | undefined;
+  expiresAt: number | null;
   decodedValues: DecodedValues;
   refreshMetadata: () => void;
 };
@@ -19,6 +20,7 @@ export type AlbumContextType = {
 const AlbumContext = createContext<AlbumContextType>({
   key: "",
   metadata: undefined,
+  expiresAt: null,
   decodedValues: { albumName: "" },
   refreshMetadata: () => undefined,
 });
@@ -34,6 +36,7 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
   const { albumId } = useParams();
   const key = decodeURIComponent(window.location.hash.slice(1));
   const [metadata, setMetadata] = useState<Metadata>();
+  const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [name, setName] = useState("");
 
   const refreshMetadataAsync = async () => {
@@ -50,6 +53,7 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
         response.metadata.albumName.iv,
       );
       setMetadata(response.metadata);
+      setExpiresAt(response.expiresAt);
       setName(name);
     }
   };
@@ -67,7 +71,13 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
   }, []);
   return (
     <AlbumContext.Provider
-      value={{ refreshMetadata, key, metadata, decodedValues: { albumName: name } }}
+      value={{
+        refreshMetadata,
+        key,
+        metadata,
+        expiresAt,
+        decodedValues: { albumName: name },
+      }}
     >
       {props.children}
     </AlbumContext.Provider>

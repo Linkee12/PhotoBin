@@ -14,9 +14,21 @@ function safeAlbumPath(...segments: string[]) {
 }
 
 export class AlbumService {
-  constructor(private _metadataService: MetadataService) {}
+  constructor(
+    private _metadataService: MetadataService,
+    private _ttlMs: number = ONE_MONTH_MS,
+  ) {}
   getMetaData(albumId: string) {
     return this._metadataService.get(albumId);
+  }
+  async getExpiresAt(albumId: string): Promise<number | null> {
+    try {
+      const s = await fs.stat(safeAlbumPath(albumId));
+      return Math.floor(s.birthtimeMs + this._ttlMs);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw err;
+    }
   }
   async rename(albumId: string, newTitle: { value: string; iv: string }) {
     const dir = safeAlbumPath(albumId);
