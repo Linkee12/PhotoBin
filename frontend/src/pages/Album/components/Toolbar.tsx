@@ -19,10 +19,10 @@ export default function Toolbar(props: {
       >
         <ToolbarIcons as={Trash} />
       </Button>
-      <Button disabled={props.isBusy}>
+      <Button disabled={props.isBusy} title="Download selected">
         <ToolbarIcons as={SimpleCloud} onClick={() => props.onDownloadSelected()} />
       </Button>
-      <Button>
+      <Button disabled title="Save to remote storage (coming soon)">
         <ToolbarIcons as={Cloud} />
       </Button>
       {props.selectedImages.length} item(s) selected
@@ -74,6 +74,13 @@ const Button = styled("button", {
   color: "#9A9A9A",
   "&:hover": {
     color: "#fff",
+  },
+  "&:disabled": {
+    cursor: "not-allowed",
+    opacity: 0.4,
+  },
+  "&:disabled:hover": {
+    color: "#9A9A9A",
   },
   fontSize: "2rem",
   background: "none",
