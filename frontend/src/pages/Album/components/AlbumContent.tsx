@@ -8,6 +8,7 @@ import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
 import { Panel, PushDown } from "./Panel";
 import { Menu } from "./Menu";
+import { toast } from "react-toastify";
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -45,23 +46,37 @@ export function AlbumContent(props: AlbumContentProps) {
   }
 
   async function uploadImages(files: File[]) {
-    if (!metadata) return;
-    props.onUploadStarted();
-    const results = upload({ uploadService: props.uploadService, files, key, metadata });
-
-    for await (const result of results) {
-      if (result.result === "progress") {
-        setProgress(result.progress);
-      } else {
-        if (result.thumbnail !== undefined) {
-          props.onAddThumbnail(result.thumbnail);
-        }
-      }
-
-      refreshMetadata();
+    if (!metadata) {
+      toast.error("Album is still loading, please try again");
+      return;
     }
-    props.onUploadFinished();
-    setMaskHeight(0);
+    props.onUploadStarted();
+    try {
+      const results = upload({
+        uploadService: props.uploadService,
+        files,
+        key,
+        metadata,
+      });
+
+      for await (const result of results) {
+        if (result.result === "progress") {
+          setProgress(result.progress);
+        } else {
+          if (result.thumbnail !== undefined) {
+            props.onAddThumbnail(result.thumbnail);
+          }
+        }
+
+        refreshMetadata();
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Upload failed");
+    } finally {
+      props.onUploadFinished();
+      setMaskHeight(0);
+    }
   }
   function openFilePicker() {
     if (!ref.current) return;

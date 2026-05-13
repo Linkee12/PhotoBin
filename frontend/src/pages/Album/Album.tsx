@@ -14,6 +14,7 @@ import { CryptoService } from "./services/CryptoService";
 import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
 import { Metadata } from "../../../../backend/src/services/MetadataService";
 import { AlbumContent } from "./components/AlbumContent";
+import { toast } from "react-toastify";
 
 const imageResizeService = new CanvasService();
 const cryptoService = new CryptoService();
@@ -75,7 +76,10 @@ export default function Album() {
       },
     });
 
-    if (responses.result !== "success") return;
+    if (responses.result !== "success") {
+      toast.error("Failed to delete");
+      return;
+    }
 
     setThumbnails((prev) =>
       prev
@@ -93,19 +97,31 @@ export default function Album() {
   function onDeleteSelected() {
     deleteImages(selectedImages).catch((reason) => {
       console.error(reason);
+      toast.error("Failed to delete");
     });
   }
 
   async function onDownloadSelected() {
     setIsDownloading(true);
-    if (metadata) await downloadService.download({ albumContext, selectedImages });
-    setIsDownloading(false);
+    try {
+      if (metadata) await downloadService.download({ albumContext, selectedImages });
+    } catch (e) {
+      console.error(e);
+      toast.error("Download failed");
+    } finally {
+      setIsDownloading(false);
+    }
   }
-  // eslint-disable-next-line sonarjs/no-identical-functions
   async function onDownloadAll(selectedImages: string[]) {
     setIsDownloading(true);
-    if (metadata) await downloadService.download({ albumContext, selectedImages });
-    setIsDownloading(false);
+    try {
+      if (metadata) await downloadService.download({ albumContext, selectedImages });
+    } catch (e) {
+      console.error(e);
+      toast.error("Download failed");
+    } finally {
+      setIsDownloading(false);
+    }
   }
 
   function onUncheckSelected() {
