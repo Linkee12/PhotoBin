@@ -3,6 +3,7 @@ import path from "node:path";
 import { Metadata, MetadataService } from "./MetadataService";
 
 const ALBUMS_ROOT = path.resolve("./albums");
+const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 function safeAlbumPath(...segments: string[]) {
   const resolved = path.resolve(ALBUMS_ROOT, ...segments);
@@ -53,14 +54,24 @@ export class AlbumService {
       await this._deleteImage(albumId, imageId);
     }
   }
-  async cleanStorage() {
-    const directions = await fs.readdir(ALBUMS_ROOT);
+  async cleanStorage(ttlMs: number = ONE_MONTH_MS) {
+    let directions: string[];
+    try {
+      directions = await fs.readdir(ALBUMS_ROOT);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
     const now = Date.now();
     for (const dir of directions) {
-      const albumPath = safeAlbumPath(dir);
-      const s = await fs.stat(albumPath);
-      if (now - s.birthtimeMs > 600000) {
-        await this._deleteDir(dir);
+      try {
+        const albumPath = safeAlbumPath(dir);
+        const s = await fs.stat(albumPath);
+        if (now - s.birthtimeMs > ttlMs) {
+          await this._deleteDir(dir);
+        }
+      } catch (err) {
+        console.error(`cleanStorage: failed to inspect ${dir}`, err);
       }
     }
   }

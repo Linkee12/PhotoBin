@@ -115,3 +115,17 @@ export type Routes = typeof routes;
 app.listen(port, () => {
   console.log(`Server is running at http://0.0.0.0:${port}`);
 });
+
+const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const albumTtlMs = Number(process.env["ALBUM_TTL_MS"]) || ONE_MONTH_MS;
+const cleanupIntervalMs = Number(process.env["CLEANUP_INTERVAL_MS"]) || ONE_HOUR_MS;
+
+function runCleanup() {
+  albumService.cleanStorage(albumTtlMs).catch((err) => {
+    console.error("Scheduled cleanup failed:", err);
+  });
+}
+
+runCleanup();
+setInterval(runCleanup, cleanupIntervalMs).unref();
