@@ -14,6 +14,7 @@ type AlbumContentProps = {
   showUploader: boolean;
   isUploading: boolean;
   isDownloading: boolean;
+  isLoadingThumbnails: boolean;
   downloadProgress: number;
   thumbnailGroups: ThumbnailGroup[];
   uploadService: UploadService;
@@ -123,6 +124,11 @@ export function AlbumContent(props: AlbumContentProps) {
               onOpen={props.onOpen}
             />
           ))}
+          {props.isLoadingThumbnails && (
+            <LoadingThumbnails>
+              <Spinner />
+            </LoadingThumbnails>
+          )}
         </AlbumSections>
         <UploadMask show={props.isUploading} />
         <DownloadMask show={props.isDownloading}>
@@ -208,6 +214,22 @@ const AlbumSections = styled("div", {
   backgroundColor: "rgba(51, 51, 51,0.2)",
   display: "flex",
   flexDirection: "column",
+});
+
+const LoadingThumbnails = styled("div", {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: "4rem",
+});
+
+const Spinner = styled("div", {
+  width: "3rem",
+  height: "3rem",
+  border: "5px solid rgba(255, 255, 255, 0.2)",
+  borderTop: "5px solid #DBDCD9",
+  borderRadius: "50%",
+  animation: "spin 1s linear infinite",
 });
 
 const CloudContainer = styled("div", {

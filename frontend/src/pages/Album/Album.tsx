@@ -45,6 +45,7 @@ export default function Album() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [emptyAlbum, setEmptyAlbum] = useState(false);
+  const [isLoadingThumbnails, setIsLoadingThumbnails] = useState(false);
   const showUploader = (thumbnails.length === 0 && emptyAlbum) || isUploading;
 
   useEffect(() => {
@@ -59,12 +60,17 @@ export default function Album() {
       const newThumbnails = metadata.files.filter(
         (file) => !oldThumbnailIds.has(file.fileId),
       );
-      getThumbnails(newThumbnails).then((thumb) => {
-        if (thumb !== undefined) {
-          const thumbs = groupThumbnailsByDate(thumb);
-          setThumbnails((prev) => [...prev, ...thumbs]);
-        }
-      });
+      if (newThumbnails.length > 0) {
+        setIsLoadingThumbnails(true);
+        getThumbnails(newThumbnails)
+          .then((thumb) => {
+            if (thumb !== undefined) {
+              const thumbs = groupThumbnailsByDate(thumb);
+              setThumbnails((prev) => [...prev, ...thumbs]);
+            }
+          })
+          .finally(() => setIsLoadingThumbnails(false));
+      }
     }
   }, [metadata]);
 
@@ -228,6 +234,7 @@ export default function Album() {
         showUploader={showUploader}
         isUploading={isUploading}
         isDownloading={isDownloading}
+        isLoadingThumbnails={isLoadingThumbnails && thumbnails.length === 0}
         downloadProgress={downloadProgress}
         onUploadStarted={() => setIsUploading(true)}
         onUploadFinished={() => setIsUploading(false)}
