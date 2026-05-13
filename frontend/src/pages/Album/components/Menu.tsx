@@ -48,6 +48,7 @@ export function Menu(props: MenuProps) {
               onClick={(e) => {
                 e.stopPropagation();
                 props.onDownloadAll();
+                setIsOpen(false);
               }}
             >
               <div />
@@ -59,6 +60,7 @@ export function Menu(props: MenuProps) {
               onClick={(e) => {
                 e.stopPropagation();
                 props.onAddPhoto();
+                setIsOpen(false);
               }}
             >
               <div />
