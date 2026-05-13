@@ -24,6 +24,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const [url, setUrl] = useState<string | undefined>(
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
+  const [downloadUrl, setDownloadUrl] = useState<string | undefined>(undefined);
   const [fileName, setFileName] = useState("");
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
@@ -59,6 +60,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
 
   useEffect(() => {
     let cancelled = false;
+    setDownloadUrl(undefined);
 
     // eslint-disable-next-line sonarjs/cognitive-complexity
     async function updateOriginalImageDataUrl() {
@@ -85,6 +87,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           );
           if (!cancelled && origin !== undefined) {
             setUrl(origin.img);
+            setDownloadUrl(origin.img);
+            setFileName(origin.fileName);
           }
 
           if (file.originalVideo !== undefined) {
@@ -97,9 +101,23 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
             );
             if (!cancelled && video !== undefined) {
               setUrl(video.img);
+              setDownloadUrl(video.img);
+              setFileName(video.fileName);
               setIsVideoReady(true);
             }
             if (!cancelled) setIsLoadingVideo(false);
+          }
+        } else if (file.unsupportedFile !== undefined) {
+          const unsupported = await imageDownloadService.getImg(
+            metadata.albumId,
+            file,
+            key,
+            "unsupportedFile",
+          );
+          if (!cancelled && unsupported !== undefined) {
+            setUrl("");
+            setFileName(unsupported.fileName);
+            setDownloadUrl(URL.createObjectURL(unsupported.blob));
           }
         } else {
           if (!cancelled) setUrl("");
@@ -114,6 +132,12 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       cancelled = true;
     };
   }, [props.fileId]);
+
+  useEffect(() => {
+    return () => {
+      if (downloadUrl?.startsWith("blob:")) URL.revokeObjectURL(downloadUrl);
+    };
+  }, [downloadUrl]);
 
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
@@ -132,9 +156,21 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           >
             <Icons as={Trash} />
           </Button>
-          <Button as="a" style={{ padding: "0px" }} href={url} download={fileName}>
-            <Icons as={SimpleCloud} />
-          </Button>
+          {downloadUrl ? (
+            <Button
+              as="a"
+              style={{ padding: "0px" }}
+              href={downloadUrl}
+              download={fileName}
+              title={`Download ${fileName}`}
+            >
+              <Icons as={SimpleCloud} />
+            </Button>
+          ) : (
+            <Button as="button" disabled title="Preparing download...">
+              <Icons as={SimpleCloud} style={{ opacity: 0.4 }} />
+            </Button>
+          )}
         </ButtonGroup>
         <Button onClick={() => props.onShowChange(!props.visible)}>
           <Icons as={Exit} />
@@ -154,14 +190,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         <>
           <FullScreenImg src={url} />
           {isVideoReady && (
-            <FullScreenVideo
-              src={url}
-              autoPlay
-              muted
-              loop
-              controls
-              onClick={stop}
-            />
+            <FullScreenVideo src={url} autoPlay muted loop controls onClick={stop} />
           )}
           {isLoadingVideo && (
             <LoadingOverlay>
