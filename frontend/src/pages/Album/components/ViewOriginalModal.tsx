@@ -41,6 +41,23 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   }, [props.visible]);
 
   useEffect(() => {
+    if (!props.visible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        props.onShowChange(false);
+      } else if (e.key === "ArrowRight") {
+        props.onNext(1);
+        setIsVideoReady(false);
+      } else if (e.key === "ArrowLeft") {
+        props.onNext(-1);
+        setIsVideoReady(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [props.visible, props.onShowChange, props.onNext]);
+
+  useEffect(() => {
     let cancelled = false;
 
     // eslint-disable-next-line sonarjs/cognitive-complexity
@@ -98,9 +115,11 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     };
   }, [props.fileId]);
 
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
   return (
-    <Container isVisible={props.visible}>
-      <ButtonBar>
+    <Container isVisible={props.visible} onClick={() => props.onShowChange(false)}>
+      <ButtonBar onClick={stop}>
         <ButtonGroup>
           <Button
             onClick={() => {
@@ -123,7 +142,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       </ButtonBar>
       <NextButton
         style={{ left: "0px" }}
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           props.onNext(-1);
           setIsVideoReady(false);
         }}
@@ -133,7 +153,16 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       {file?.originalVideo ? (
         <>
           <FullScreenImg src={url} />
-          {isVideoReady && <FullScreenVideo src={url} autoPlay muted loop controls />}
+          {isVideoReady && (
+            <FullScreenVideo
+              src={url}
+              autoPlay
+              muted
+              loop
+              controls
+              onClick={stop}
+            />
+          )}
           {isLoadingVideo && (
             <LoadingOverlay>
               <Spinner />
@@ -150,7 +179,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       )}
       <NextButton
         style={{ right: "0px" }}
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           props.onNext(1);
           setIsVideoReady(false);
         }}
