@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-PhotoBin is a temporary, E2E-encrypted photo album sharing app. Users create an album, share the link, and all participants can upload/download photos. The encryption key lives only in the URL hash fragment — the server never sees plaintext data. Albums auto-expire after 10 minutes of inactivity (enforced by `AlbumService.cleanStorage`).
+PhotoBin is a temporary, E2E-encrypted photo album sharing app. Users create an album, share the link, and all participants can upload/download photos. The encryption key lives only in the URL hash fragment — the server never sees plaintext data. Albums auto-expire after 30 days (configurable via `ALBUM_TTL_MS`); `AlbumService.cleanStorage` is invoked on backend startup and every `CLEANUP_INTERVAL_MS` (default 1 hour) by a `setInterval` registered in `backend/src/index.ts`.
 
 ## Development
 
