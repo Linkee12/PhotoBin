@@ -69,9 +69,8 @@ export function AlbumContent(props: AlbumContentProps) {
             props.onAddThumbnail(result.thumbnail);
           }
         }
-
-        refreshMetadata();
       }
+      refreshMetadata();
     } catch (e) {
       console.error(e);
       toast.error("Upload failed");
