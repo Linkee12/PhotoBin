@@ -75,9 +75,8 @@ export class AlbumService {
     try {
       const stat = await fs.stat(path);
       return stat.isDirectory();
-    } catch (err) {
+    } catch {
       return false;
-      throw err;
     }
   }
 }
