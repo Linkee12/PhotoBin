@@ -74,7 +74,12 @@ export function Header(props: HeaderProps) {
       <Tools>
         <Button
           onClick={() => {
-            setIsEdit(true);
+            if (isEdit) {
+              setIsEdit(false);
+              props.onSaveName();
+            } else {
+              setIsEdit(true);
+            }
           }}
         >
           <Icons as={isEdit ? Ok : Edit} />
