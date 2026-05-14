@@ -21,14 +21,15 @@ const uploadService = new UploadService(imageResizeService, cryptoService);
 const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
 
+export type Thumbnail = {
+  thumbnail: string | undefined;
+  id: string;
+  name: string;
+  isVideo: boolean;
+};
 export type ThumbnailGroup = {
   date: string;
-  thumbnails: {
-    thumbnail: string | undefined;
-    id: string;
-    name: string;
-    isVideo: boolean;
-  }[];
+  thumbnails: Thumbnail[];
 };
 
 export default function Album() {
@@ -173,6 +174,7 @@ export default function Album() {
         <ViewOriginalModal
           fileId={fullscreenImage.fileId}
           visible={showOrigin}
+          thumbnails={thumbnails}
           fileName={
             thumbnails.map((thumbnailsGroup) =>
               thumbnailsGroup.thumbnails.find(

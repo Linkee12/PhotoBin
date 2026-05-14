@@ -8,6 +8,8 @@ import { ImageQueryService } from "../services/ImageQueryService";
 import { useEffect, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { CryptoService } from "../services/CryptoService";
+import { Thumbnail, ThumbnailGroup } from "../Album";
+import { group } from "console";
 
 const imageDownloadService = new ImageQueryService(new CryptoService());
 
@@ -15,6 +17,7 @@ type ViewOriginalModalProps = {
   fileId: string;
   visible: boolean;
   fileName: string;
+  thumbnails: ThumbnailGroup[];
   onNext: (direction: number) => void;
   onDelete: () => void;
   onShowChange: (visible: boolean) => void;
@@ -24,12 +27,20 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const [url, setUrl] = useState<string | undefined>(
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
+  const [thumbnails, setThumbnails] = useState<Thumbnail[]>([]);
   const [fileName, setFileName] = useState("");
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
   const file = metadata?.files.find((file) => file.fileId === props.fileId);
+  console.log(props.thumbnails);
   useEffect(() => {
     const body = document.body;
+    const thumbnails: Thumbnail[] = [];
+    props.thumbnails.forEach((element) => {
+      thumbnails.concat(element.thumbnails);
+    });
+    setThumbnails(thumbnails);
+
     if (props.visible) {
       body.style.height = "100vh";
       body.style.overflow = "hidden";
@@ -58,16 +69,6 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           if (!cancelled && reduced !== undefined) {
             setUrl(reduced.img);
             setFileName(reduced.fileName);
-          }
-
-          const origin = await imageDownloadService.getImg(
-            metadata.albumId,
-            file,
-            key,
-            "original",
-          );
-          if (!cancelled && origin !== undefined) {
-            setUrl(origin.img);
           }
 
           if (file.originalVideo !== undefined) {
