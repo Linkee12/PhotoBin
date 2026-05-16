@@ -9,7 +9,6 @@ import { useEffect, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { CryptoService } from "../services/CryptoService";
 import { Thumbnail, ThumbnailGroup } from "../Album";
-import { group } from "console";
 
 const imageDownloadService = new ImageQueryService(new CryptoService());
 
@@ -57,7 +56,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     // eslint-disable-next-line sonarjs/cognitive-complexity
     async function updateOriginalImageDataUrl() {
       if (!metadata || metadata.albumId === undefined || file === undefined) return;
-
+      const currnetThumb = thumbnails.find((thumb) => thumb.id === props.fileId);
+      setUrl(currnetThumb?.thumbnail);
       try {
         if (file.original !== undefined) {
           const reduced = await imageDownloadService.getImg(
@@ -139,7 +139,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           )}
         </>
       ) : // eslint-disable-next-line sonarjs/no-nested-conditional
-      file?.original ? (
+      file?.thumbnail ? (
         <FullScreenImg src={url} />
       ) : (
         <UnsupportedFile>
