@@ -91,6 +91,7 @@ const Images = styled("div", {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
+    alignItems: "center",
     margin: "1rem 1.28rem 1.28rem 1.28rem",
     gap: "10px",
   },
