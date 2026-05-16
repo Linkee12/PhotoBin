@@ -8,7 +8,7 @@ import { ImageQueryService } from "../services/ImageQueryService";
 import { useEffect, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { CryptoService } from "../services/CryptoService";
-import { Thumbnail, ThumbnailGroup } from "../Album";
+import { ThumbnailGroup } from "../Album";
 
 const imageDownloadService = new ImageQueryService(new CryptoService());
 
@@ -26,19 +26,12 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const [url, setUrl] = useState<string | undefined>(
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
-  const [thumbnails, setThumbnails] = useState<Thumbnail[]>([]);
   const [fileName, setFileName] = useState("");
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
   const file = metadata?.files.find((file) => file.fileId === props.fileId);
-  console.log(props.thumbnails);
   useEffect(() => {
     const body = document.body;
-    const thumbnails: Thumbnail[] = [];
-    props.thumbnails.forEach((element) => {
-      thumbnails.concat(element.thumbnails);
-    });
-    setThumbnails(thumbnails);
 
     if (props.visible) {
       body.style.height = "100vh";
@@ -56,7 +49,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     // eslint-disable-next-line sonarjs/cognitive-complexity
     async function updateOriginalImageDataUrl() {
       if (!metadata || metadata.albumId === undefined || file === undefined) return;
-      const currnetThumb = thumbnails.find((thumb) => thumb.id === props.fileId);
+      const currnetThumb = props.thumbnails
+        .flatMap((group) => group.thumbnails)
+        .find((thumb) => thumb.id === props.fileId);
       setUrl(currnetThumb?.thumbnail);
       try {
         if (file.original !== undefined) {
@@ -97,7 +92,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [props.fileId]);
+  }, [file, key, metadata, props.fileId, props.thumbnails]);
 
   return (
     <Container isVisible={props.visible}>
