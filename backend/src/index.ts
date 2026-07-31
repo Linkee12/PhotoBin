@@ -3,35 +3,47 @@ import dotenv from "dotenv";
 import { createBuilder, success, initRpc } from "@cuple/server";
 import { z } from "zod";
 import { AlbumService } from "./services/AlbumService";
-import { fileMetadataSchema, metadataSchema } from "./utils/zod";
+import {
+  fileMetadataSchema,
+  metadataSchema,
+  partNameSchema,
+  partTypeSchema,
+  uuidSchema,
+} from "./utils/zod";
 import { MetadataService } from "./services/MetadataService";
 import fs from "fs";
 dotenv.config();
+
+const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const albumTtlMs = Number(process.env["ALBUM_TTL_MS"]) || ONE_MONTH_MS;
+const cleanupIntervalMs = Number(process.env["CLEANUP_INTERVAL_MS"]) || ONE_HOUR_MS;
 
 const app = express();
 const port = 3001;
 app.use(express.json({ limit: "2mb" }));
 const builder = createBuilder(app);
 const metadataService = new MetadataService(fs);
-const albumService = new AlbumService(metadataService);
+const albumService = new AlbumService(metadataService, albumTtlMs);
 const routes = {
   getAlbumMetadata: builder
     .querySchema(
       z.object({
-        id: z.string(),
+        id: uuidSchema,
       }),
     )
     .get(async ({ data }) => {
       const metadata = albumService.getMetaData(data.query.id);
-      return success({ metadata });
+      const expiresAt = await albumService.getExpiresAt(data.query.id);
+      return success({ metadata, expiresAt });
     }),
   getPartOfImage: builder
     .querySchema(
       z.object({
-        albumId: z.string(),
-        id: z.string(),
-        type: z.string(),
-        name: z.string(),
+        albumId: uuidSchema,
+        id: uuidSchema,
+        type: partTypeSchema,
+        name: partNameSchema,
       }),
     )
     .get(async ({ data }) => {
@@ -46,10 +58,10 @@ const routes = {
   uploadFilePart: builder
     .bodySchema(
       z.object({
-        fileType: z.string(),
-        albumId: z.string(),
-        fileId: z.string(),
-        partName: z.string(),
+        fileType: partTypeSchema,
+        albumId: uuidSchema,
+        fileId: uuidSchema,
+        partName: partNameSchema,
         encryptedFile: z.string(),
       }),
     )
@@ -60,7 +72,7 @@ const routes = {
   editAlbumName: builder
     .bodySchema(
       z.object({
-        albumId: z.string(),
+        albumId: uuidSchema,
         albumName: metadataSchema.shape.albumName,
       }),
     )
@@ -73,7 +85,7 @@ const routes = {
   finalizeFile: builder
     .bodySchema(
       z.object({
-        albumId: z.string(),
+        albumId: uuidSchema,
         fileMetadata: fileMetadataSchema,
       }),
     )
@@ -84,16 +96,19 @@ const routes = {
       });
     }),
   deleteImages: builder
-    .bodySchema(z.object({ albumId: z.string(), ids: z.array(z.string()) }))
+    .bodySchema(z.object({ albumId: uuidSchema, ids: z.array(uuidSchema) }))
     .delete(async ({ data }) => {
-      albumService.deleteImages(data.body.albumId, data.body.ids);
+      await albumService.deleteImages(data.body.albumId, data.body.ids);
       return success({});
     }),
-  test: builder.path("/test").post(async () => {
-    console.log("delete");
-    await albumService.cleanStorage();
-    return success({ message: "Albums deleted" });
-  }),
+  ...(process.env["NODE_ENV"] === "production"
+    ? {}
+    : {
+        forceCleanup: builder.path("/dev/force-cleanup").post(async () => {
+          await albumService.cleanStorage();
+          return success({ message: "Expired albums deleted" });
+        }),
+      }),
 };
 
 initRpc(app, {
@@ -106,3 +121,12 @@ export type Routes = typeof routes;
 app.listen(port, () => {
   console.log(`Server is running at http://0.0.0.0:${port}`);
 });
+
+function runCleanup() {
+  albumService.cleanStorage(albumTtlMs).catch((err) => {
+    console.error("Scheduled cleanup failed:", err);
+  });
+}
+
+runCleanup();
+setInterval(runCleanup, cleanupIntervalMs).unref();

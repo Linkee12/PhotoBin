@@ -2,17 +2,21 @@ import { styled } from "../../../stitches.config";
 import { Cloud } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
 import { Panel, PushDown } from "./Panel";
 import { Menu } from "./Menu";
+import { toast } from "react-toastify";
+import { formatTimeLeft } from "../../../utils/formatTimeLeft";
 
 type AlbumContentProps = {
   showUploader: boolean;
   isUploading: boolean;
   isDownloading: boolean;
+  isLoadingThumbnails: boolean;
+  downloadProgress: number;
   thumbnailGroups: ThumbnailGroup[];
   uploadService: UploadService;
 
@@ -37,7 +41,15 @@ type AlbumContentProps = {
 export function AlbumContent(props: AlbumContentProps) {
   const [maskHeight, setMaskHeight] = useState(0);
   const ref = useRef<HTMLInputElement>(null);
-  const { metadata, refreshMetadata, key } = useAlbumContext();
+  const { metadata, refreshMetadata, key, expiresAt } = useAlbumContext();
+  const [timeLeft, setTimeLeft] = useState(() => formatTimeLeft(expiresAt));
+
+  useEffect(() => {
+    setTimeLeft(formatTimeLeft(expiresAt));
+    if (expiresAt === null) return;
+    const id = setInterval(() => setTimeLeft(formatTimeLeft(expiresAt)), 60_000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
 
   function setProgress(percentage: number) {
     const height = 445 * (percentage / 100);
@@ -45,23 +57,36 @@ export function AlbumContent(props: AlbumContentProps) {
   }
 
   async function uploadImages(files: File[]) {
-    if (!metadata) return;
+    if (!metadata) {
+      toast.error("Album is still loading, please try again");
+      return;
+    }
     props.onUploadStarted();
-    const results = upload({ uploadService: props.uploadService, files, key, metadata });
+    try {
+      const results = upload({
+        uploadService: props.uploadService,
+        files,
+        key,
+        metadata,
+      });
 
-    for await (const result of results) {
-      if (result.result === "progress") {
-        setProgress(result.progress);
-      } else {
-        if (result.thumbnail !== undefined) {
-          props.onAddThumbnail(result.thumbnail);
+      for await (const result of results) {
+        if (result.result === "progress") {
+          setProgress(result.progress);
+        } else {
+          if (result.thumbnail !== undefined) {
+            props.onAddThumbnail(result.thumbnail);
+          }
         }
       }
-
       refreshMetadata();
+    } catch (e) {
+      console.error(e);
+      toast.error("Upload failed");
+    } finally {
+      props.onUploadFinished();
+      setMaskHeight(0);
     }
-    props.onUploadFinished();
-    setMaskHeight(0);
   }
   function openFilePicker() {
     if (!ref.current) return;
@@ -74,10 +99,12 @@ export function AlbumContent(props: AlbumContentProps) {
   }
   return (
     <Panel variant={0} zIndex={1}>
-      <RemainingTimeContainer>
-        <PushDown />
-        <RemainingTime>2 days left</RemainingTime>
-      </RemainingTimeContainer>
+      {timeLeft && (
+        <RemainingTimeContainer>
+          <PushDown />
+          <RemainingTime>{timeLeft}</RemainingTime>
+        </RemainingTimeContainer>
+      )}
       {props.thumbnailGroups.length > 0 && (
         <Menu
           onDownloadAll={() => props.onDownloadAll(getAllId())}
@@ -107,9 +134,19 @@ export function AlbumContent(props: AlbumContentProps) {
               onOpen={props.onOpen}
             />
           ))}
+          {props.isLoadingThumbnails && (
+            <LoadingThumbnails>
+              <Spinner />
+            </LoadingThumbnails>
+          )}
         </AlbumSections>
         <UploadMask show={props.isUploading} />
-        <DownloadMask show={props.isDownloading}>Preparing your files </DownloadMask>
+        <DownloadMask show={props.isDownloading}>
+          <DownloadText>Preparing your files</DownloadText>
+          {props.downloadProgress > 0 && (
+            <DownloadPercent>{props.downloadProgress}%</DownloadPercent>
+          )}
+        </DownloadMask>
         <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
           <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
             <StyledUpload height={maskHeight} />
@@ -189,6 +226,22 @@ const AlbumSections = styled("div", {
   flexDirection: "column",
 });
 
+const LoadingThumbnails = styled("div", {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  padding: "4rem",
+});
+
+const Spinner = styled("div", {
+  width: "3rem",
+  height: "3rem",
+  border: "5px solid rgba(255, 255, 255, 0.2)",
+  borderTop: "5px solid #DBDCD9",
+  borderRadius: "50%",
+  animation: "spin 1s linear infinite",
+});
+
 const CloudContainer = styled("div", {
   flexDirection: "column",
   alignItems: "center",
@@ -247,8 +300,10 @@ const DownloadMask = styled("div", {
   position: "fixed",
   top: 0,
   display: "flex",
+  flexDirection: "column",
   justifyContent: "center",
   alignItems: "center",
+  gap: "0.5rem",
   fontSize: "2rem",
   fontWeight: "bold",
   fontFamily: "Open Sans",
@@ -265,6 +320,11 @@ const DownloadMask = styled("div", {
       },
     },
   },
+});
+const DownloadText = styled("div", {});
+const DownloadPercent = styled("div", {
+  fontSize: "1.5rem",
+  color: "#DBDCD9",
 });
 const RemainingTimeContainer = styled("div", {
   display: "flex",

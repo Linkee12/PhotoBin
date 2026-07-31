@@ -1,4 +1,15 @@
 import type fs from "fs";
+import path from "node:path";
+
+const ALBUMS_ROOT = path.resolve("./albums");
+
+function safeMetadataPath(albumId: string) {
+  const resolved = path.resolve(ALBUMS_ROOT, albumId, "metadata.json");
+  if (!resolved.startsWith(ALBUMS_ROOT + path.sep)) {
+    throw new Error("Path traversal blocked");
+  }
+  return resolved;
+}
 
 export type Metadata = {
   albumId: string;
@@ -27,22 +38,21 @@ const DEFAULT_METADATA = (albumId: string): Metadata => ({
   files: [],
 });
 
-const METADATA_PATH = (albumId: string) => `./albums/${albumId}/metadata.json`;
-
 export class MetadataService {
   constructor(
     private _fs: Pick<typeof fs, "existsSync" | "readFileSync" | "writeFileSync">,
   ) {}
   get(albumId: string): Metadata {
-    const fileExists = this._fs.existsSync(METADATA_PATH(albumId));
+    const metadataPath = safeMetadataPath(albumId);
+    const fileExists = this._fs.existsSync(metadataPath);
     if (fileExists) {
-      return JSON.parse(this._fs.readFileSync(METADATA_PATH(albumId), "utf8"));
+      return JSON.parse(this._fs.readFileSync(metadataPath, "utf8"));
     } else {
       return DEFAULT_METADATA(albumId);
     }
   }
   save(albumId: string, metadata: Metadata) {
-    this._fs.writeFileSync(METADATA_PATH(albumId), JSON.stringify(metadata));
+    this._fs.writeFileSync(safeMetadataPath(albumId), JSON.stringify(metadata));
   }
   addFile(albumId: string, file: Metadata["files"][0]) {
     const current = this.get(albumId);

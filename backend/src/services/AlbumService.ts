@@ -2,15 +2,38 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Metadata, MetadataService } from "./MetadataService";
 
+const ALBUMS_ROOT = path.resolve("./albums");
+const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+function safeAlbumPath(...segments: string[]) {
+  const resolved = path.resolve(ALBUMS_ROOT, ...segments);
+  if (resolved !== ALBUMS_ROOT && !resolved.startsWith(ALBUMS_ROOT + path.sep)) {
+    throw new Error("Path traversal blocked");
+  }
+  return resolved;
+}
+
 export class AlbumService {
-  constructor(private _metadataService: MetadataService) {}
+  constructor(
+    private _metadataService: MetadataService,
+    private _ttlMs: number = ONE_MONTH_MS,
+  ) {}
   getMetaData(albumId: string) {
     return this._metadataService.get(albumId);
   }
+  async getExpiresAt(albumId: string): Promise<number | null> {
+    try {
+      const s = await fs.stat(safeAlbumPath(albumId));
+      return Math.floor(s.birthtimeMs + this._ttlMs);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw err;
+    }
+  }
   async rename(albumId: string, newTitle: { value: string; iv: string }) {
-    const path = "./albums/" + albumId;
-    const isExist = await this._checkDirectoryExists(path);
-    if (!isExist) this._createDirectory(albumId);
+    const dir = safeAlbumPath(albumId);
+    const isExist = await this._checkDirectoryExists(dir);
+    if (!isExist) await fs.mkdir(dir, { recursive: true });
     this._metadataService.renameAlbum(albumId, newTitle);
   }
   finalizeFile(albumId: string, fileMetadata: Metadata["files"][0]) {
@@ -23,13 +46,18 @@ export class AlbumService {
     partName: string;
     encryptedFile: string;
   }) {
-    const dir = params.albumId + "/" + params.fileId + "/" + params.fileType;
-    await this._createDirectory(dir);
-    const path = "./albums/" + dir + "/" + params.partName;
-    await fs.writeFile(path, params.encryptedFile);
+    const dir = safeAlbumPath(params.albumId, params.fileId, params.fileType);
+    await fs.mkdir(dir, { recursive: true });
+    const filePath = safeAlbumPath(
+      params.albumId,
+      params.fileId,
+      params.fileType,
+      params.partName,
+    );
+    await fs.writeFile(filePath, params.encryptedFile);
   }
   async getFile(albumId: string, fileId: string, type: string, name: string) {
-    const filePath = path.join("./albums/", albumId, fileId, type, name);
+    const filePath = safeAlbumPath(albumId, fileId, type, name);
     return await fs.readFile(filePath, { encoding: "utf8" });
   }
 
@@ -38,46 +66,47 @@ export class AlbumService {
       await this._deleteImage(albumId, imageId);
     }
   }
-  async cleanStorage() {
-    const directions = await fs.readdir("./albums");
+  async cleanStorage(ttlMs: number = ONE_MONTH_MS) {
+    let directions: string[];
+    try {
+      directions = await fs.readdir(ALBUMS_ROOT);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
     const now = Date.now();
     for (const dir of directions) {
-      const s = await fs.stat("./albums/" + dir);
-      if (now - s.birthtimeMs > 600000) {
-        this._deleteDir(dir);
+      try {
+        const albumPath = safeAlbumPath(dir);
+        const s = await fs.stat(albumPath);
+        if (now - s.birthtimeMs > ttlMs) {
+          await this._deleteDir(dir);
+        }
+      } catch (err) {
+        console.error(`cleanStorage: failed to inspect ${dir}`, err);
       }
     }
   }
 
-  private async _createDirectory(folder: string) {
-    try {
-      const folderName = "./albums/" + folder;
-      await fs.mkdir(folderName, { recursive: true });
-    } catch (err) {
-      console.error(err);
-    }
-  }
   private async _deleteImage(albumId: string, imageId: string) {
-    await fs.rm(path.join("./albums/", albumId, imageId), {
+    await fs.rm(safeAlbumPath(albumId, imageId), {
       recursive: true,
       force: true,
     });
     this._metadataService.removeFile(albumId, imageId);
   }
   private async _deleteDir(albumId: string) {
-    await fs.rm(path.join("./albums/", albumId), {
+    await fs.rm(safeAlbumPath(albumId), {
       recursive: true,
       force: true,
     });
-    console.log("deleted");
   }
   private async _checkDirectoryExists(path: string) {
     try {
       const stat = await fs.stat(path);
       return stat.isDirectory();
-    } catch (err) {
+    } catch {
       return false;
-      throw err;
     }
   }
 }

@@ -5,6 +5,7 @@ import { AlbumContextType } from "../hooks/useAlbumContext";
 type DownloadProps = {
   selectedImages: string[];
   albumContext: AlbumContextType;
+  onProgress?: (percent: number) => void;
 };
 
 export class DownloadService {
@@ -87,9 +88,8 @@ export class DownloadService {
           }
         }
         ++count;
-        console.log(
-          "Progress...:" + Math.floor((count / props.selectedImages.length) * 100) + "%",
-        );
+        const percent = Math.floor((count / props.selectedImages.length) * 100);
+        props.onProgress?.(percent);
       }
 
       zip.end();

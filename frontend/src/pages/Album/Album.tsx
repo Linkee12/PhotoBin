@@ -14,6 +14,7 @@ import { CryptoService } from "./services/CryptoService";
 import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
 import { Metadata } from "../../../../backend/src/services/MetadataService";
 import { AlbumContent } from "./components/AlbumContent";
+import { toast } from "react-toastify";
 
 const imageResizeService = new CanvasService();
 const cryptoService = new CryptoService();
@@ -43,7 +44,9 @@ export default function Album() {
   const [showOrigin, setShowOrigin] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const [emptyAlbum, setEmptyAlbum] = useState(false);
+  const [isLoadingThumbnails, setIsLoadingThumbnails] = useState(false);
   const showUploader = (thumbnails.length === 0 && emptyAlbum) || isUploading;
 
   useEffect(() => {
@@ -85,37 +88,64 @@ export default function Album() {
       },
     });
 
-    if (responses.result !== "success") return;
+    if (responses.result !== "success") {
+      toast.error("Failed to delete");
+      return;
+    }
 
-    setThumbnails((prev) =>
-      prev
+    setThumbnails((prev) => {
+      const next = prev
         .map((group) => ({
           ...group,
           // eslint-disable-next-line sonarjs/no-nested-functions
           thumbnails: group.thumbnails.filter((element) => !ids.includes(element.id)),
         }))
-        .filter((group) => group.thumbnails.length > 0),
-    );
+        .filter((group) => group.thumbnails.length > 0);
+      if (next.length === 0) setEmptyAlbum(true);
+      return next;
+    });
     setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
-    setTimeout(() => refreshMetadata(), 1000);
+    refreshMetadata();
   }
 
   function onDeleteSelected() {
+    const count = selectedImages.length;
+    const message =
+      count === 1
+        ? "Delete this photo? This cannot be undone."
+        : `Delete ${count} photos? This cannot be undone.`;
+    if (!window.confirm(message)) return;
     deleteImages(selectedImages).catch((reason) => {
       console.error(reason);
+      toast.error("Failed to delete");
     });
   }
 
-  async function onDownloadSelected() {
+  async function runDownload(imageIds: string[]) {
     setIsDownloading(true);
-    if (metadata) await downloadService.download({ albumContext, selectedImages });
-    setIsDownloading(false);
+    setDownloadProgress(0);
+    try {
+      if (metadata) {
+        await downloadService.download({
+          albumContext,
+          selectedImages: imageIds,
+          onProgress: setDownloadProgress,
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Download failed");
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(0);
+    }
   }
-  // eslint-disable-next-line sonarjs/no-identical-functions
-  async function onDownloadAll(selectedImages: string[]) {
-    setIsDownloading(true);
-    if (metadata) await downloadService.download({ albumContext, selectedImages });
-    setIsDownloading(false);
+
+  function onDownloadSelected() {
+    runDownload(selectedImages).catch((e) => console.error(e));
+  }
+  function onDownloadAll(imageIds: string[]) {
+    runDownload(imageIds).catch((e) => console.error(e));
   }
 
   function onUncheckSelected() {
@@ -214,6 +244,8 @@ export default function Album() {
         showUploader={showUploader}
         isUploading={isUploading}
         isDownloading={isDownloading}
+        isLoadingThumbnails={isLoadingThumbnails && thumbnails.length === 0}
+        downloadProgress={downloadProgress}
         onUploadStarted={() => setIsUploading(true)}
         onUploadFinished={() => setIsUploading(false)}
         onDownloadAll={(files: string[]) => onDownloadAll(files)}

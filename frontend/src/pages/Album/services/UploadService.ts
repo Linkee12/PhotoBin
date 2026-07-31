@@ -37,6 +37,14 @@ export class UploadService {
     file: File,
     props: { key: string; albumId: string },
   ): AsyncGenerator<UploadYield> {
+    const profile = new URLSearchParams(window.location.search).has("profile");
+    const t0 = performance.now();
+    const log = (label: string, start: number) => {
+      if (profile)
+        console.log(
+          `[upload] ${file.name} ${label}: ${Math.round(performance.now() - start)}ms`,
+        );
+    };
     const uuid = crypto.randomUUID();
     const date = formatDate(file.lastModified);
     const cryptedFileName = await this._cryptoService.encrypString(file.name, props.key);
@@ -67,12 +75,16 @@ export class UploadService {
         for await (const bytes of videoRes) yield { result: "progress", bytes };
       }
       if (image === undefined) return;
+      const tResize = performance.now();
       thumbnail = await this._canvasService.resize(image, {
         targetSize: SIZE,
       });
       const reduce = await this._canvasService.resize(image, {
         quality: QUALITY,
       });
+      log("resize", tResize);
+
+      const tEncrypt = performance.now();
       const cryptedThumbnail = await this._cryptoService.encryptImage(
         await thumbnail.blob,
         props.key,
@@ -82,15 +94,22 @@ export class UploadService {
         await reduce.blob,
         props.key,
       );
+      log("encrypt(thumb+original+reduced)", tEncrypt);
+
       const slicedOriginImg = this._getChunks(cryptedOriginImage.cryptedImg);
       const slicedReducedImg = this._getChunks(cryptedReducedImage.cryptedImg);
 
+      const tOrigin = performance.now();
       const originRes = this._sendFile(slicedOriginImg, props.albumId, uuid, "original");
       for await (const bytes of originRes) yield { result: "progress", bytes };
+      log(`send original (${slicedOriginImg.length} chunks)`, tOrigin);
 
+      const tReduced = performance.now();
       const reducedRes = this._sendFile(slicedReducedImg, props.albumId, uuid, "reduced");
       for await (const bytes of reducedRes) yield { result: "progress", bytes };
+      log(`send reduced (${slicedReducedImg.length} chunks)`, tReduced);
 
+      const tThumb = performance.now();
       const thumbRes = this._sendFile(
         [cryptedThumbnail.cryptedImg],
         props.albumId,
@@ -98,6 +117,7 @@ export class UploadService {
         "thumbnail",
       );
       for await (const bytes of thumbRes) yield { result: "progress", bytes };
+      log("send thumbnail", tThumb);
       fileMetadata = {
         fileName: {
           iv: uint8ArrayToBase64(cryptedFileName.iv),
@@ -158,6 +178,7 @@ export class UploadService {
     }
 
     await this._finalize(props.albumId, fileMetadata);
+    log("TOTAL", t0);
     yield {
       result: "finish",
       thumbnail: thumbnail ? thumbnail.url : undefined,
@@ -207,10 +228,13 @@ export class UploadService {
     files: ArrayBuffer[],
     albumId: string,
     fileId: string,
-    fileType: string,
+    fileType: "original" | "reduced" | "thumbnail" | "originalVideo" | "unsupportedFile",
   ) {
+    const profile = new URLSearchParams(window.location.search).has("profile");
     for (let i = 0; i < files.length; i++) {
+      const t0 = performance.now();
       const objUrl = arrayBufferToBase64(files[i]);
+      const tEncoded = performance.now();
       const responses = await client.uploadFilePart.post({
         body: {
           albumId: albumId,
@@ -220,6 +244,12 @@ export class UploadService {
           encryptedFile: objUrl,
         },
       });
+      const tPosted = performance.now();
+      if (profile) {
+        console.log(
+          `[upload] ${fileType}[${i}] base64: ${Math.round(tEncoded - t0)}ms, post: ${Math.round(tPosted - tEncoded)}ms`,
+        );
+      }
       if (responses.result !== "success") throw new Error("Error while uploading");
       yield files[i].byteLength;
     }
