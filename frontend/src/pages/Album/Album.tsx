@@ -22,14 +22,15 @@ const uploadService = new UploadService(imageResizeService, cryptoService);
 const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
 
+export type Thumbnail = {
+  thumbnail: string | undefined;
+  id: string;
+  name: string;
+  isVideo: boolean;
+};
 export type ThumbnailGroup = {
   date: string;
-  thumbnails: {
-    thumbnail: string | undefined;
-    id: string;
-    name: string;
-    isVideo: boolean;
-  }[];
+  thumbnails: Thumbnail[];
 };
 
 export default function Album() {
@@ -49,6 +50,7 @@ export default function Album() {
   const showUploader = (thumbnails.length === 0 && emptyAlbum) || isUploading;
 
   useEffect(() => {
+    let cancelled = false;
     if (metadata !== undefined && albumId !== undefined) {
       setTitle(decodedValues.albumName);
       setEmptyAlbum(metadata?.files.length === 0);
@@ -60,17 +62,20 @@ export default function Album() {
       const newThumbnails = metadata.files.filter(
         (file) => !oldThumbnailIds.has(file.fileId),
       );
-      if (newThumbnails.length > 0) {
-        setIsLoadingThumbnails(true);
-        getThumbnails(newThumbnails)
-          .then((thumb) => {
-            if (thumb !== undefined) {
-              const thumbs = groupThumbnailsByDate(thumb);
-              setThumbnails((prev) => [...prev, ...thumbs]);
-            }
-          })
-          .finally(() => setIsLoadingThumbnails(false));
-      }
+      const loadThumbnails = async () => {
+        for await (const thumb of getThumbnails(newThumbnails)) {
+          if (cancelled) break;
+          setThumbnails((prev) => {
+            const grouped = groupThumbnailsByDate([thumb]);
+            return mergeThumbnailGroups(prev, grouped);
+          });
+        }
+      };
+
+      loadThumbnails();
+      return () => {
+        cancelled = true;
+      };
     }
   }, [metadata]);
 
@@ -152,15 +157,8 @@ export default function Album() {
     }
   }
 
-  async function getThumbnails(thumbnails: Metadata["files"]) {
+  async function* getThumbnails(thumbnails: Metadata["files"]) {
     if (albumId === undefined) return;
-    let thumbArr: {
-      thumbnail: string | undefined;
-      id: string;
-      name: string;
-      date: string;
-      isVideo: boolean;
-    }[] = [];
     for (const file of thumbnails) {
       const result = await imageQueryService.getImg(
         albumId,
@@ -169,18 +167,29 @@ export default function Album() {
         file.thumbnail !== undefined ? "thumbnail" : "unsupportedFile",
       );
       if (result === undefined) return;
-      const thumb = {
+      yield {
         thumbnail: result.img,
         id: result.id,
         date: result.date,
         name: result.fileName,
         isVideo: !!file.originalVideo,
       };
-      thumbArr = [...thumbArr, thumb];
     }
-    return thumbArr;
   }
+  function mergeThumbnailGroups(prev: ThumbnailGroup[], newGroups: ThumbnailGroup[]) {
+    const merged = [...prev];
 
+    for (const newGroup of newGroups) {
+      const existingGroup = merged.find((g) => g.date === newGroup.date);
+      if (existingGroup) {
+        existingGroup.thumbnails = [...existingGroup.thumbnails, ...newGroup.thumbnails];
+      } else {
+        merged.push(newGroup);
+      }
+    }
+
+    return merged;
+  }
   function nextOriginImgId(direction: number) {
     const ids: string[] = [];
     thumbnails.forEach((group) => group.thumbnails.forEach((i) => ids.push(i.id)));
@@ -208,6 +217,7 @@ export default function Album() {
         <ViewOriginalModal
           fileId={fullscreenImage.fileId}
           visible={showOrigin}
+          thumbnails={thumbnails}
           fileName={
             thumbnails.map((thumbnailsGroup) =>
               thumbnailsGroup.thumbnails.find(

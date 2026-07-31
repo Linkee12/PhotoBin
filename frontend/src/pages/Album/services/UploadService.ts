@@ -6,7 +6,7 @@ import { formatDate } from "../../../utils/formatDate";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 
 const SIZE = { width: 300, height: 200 };
-const QUALITY = 0.1;
+const QUALITY = 0.5;
 const VIDEOTYPES = ["video/mp4", "video/webm", "video/ogg"];
 const IMAGETYPES = [
   "image/jpeg",

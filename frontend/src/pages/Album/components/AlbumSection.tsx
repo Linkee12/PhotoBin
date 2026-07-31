@@ -3,16 +3,12 @@ import Check2 from "@assets/images/icons/check2.svg?react";
 import Check from "@assets/images/icons/check.svg?react";
 import { styled } from "../../../stitches.config";
 import { Panel, PanelHeader, PushDown } from "./Panel";
+import { Thumbnail } from "../Album";
 
 type AlbumSectionProps = {
   group: {
     date: string;
-    thumbnails: {
-      thumbnail: string | undefined;
-      name: string;
-      id: string;
-      isVideo: boolean;
-    }[];
+    thumbnails: Thumbnail[];
   };
   index: number;
   selectedImages: string[];
@@ -95,6 +91,7 @@ const Images = styled("div", {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
+    alignItems: "center",
     margin: "1rem 1.28rem 1.28rem 1.28rem",
     gap: "10px",
   },

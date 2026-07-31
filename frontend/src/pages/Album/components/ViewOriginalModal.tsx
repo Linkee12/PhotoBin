@@ -8,6 +8,7 @@ import { ImageQueryService } from "../services/ImageQueryService";
 import { useEffect, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { CryptoService } from "../services/CryptoService";
+import { ThumbnailGroup } from "../Album";
 
 const imageDownloadService = new ImageQueryService(new CryptoService());
 
@@ -15,6 +16,7 @@ type ViewOriginalModalProps = {
   fileId: string;
   visible: boolean;
   fileName: string;
+  thumbnails: ThumbnailGroup[];
   onNext: (direction: number) => void;
   onDelete: () => void;
   onShowChange: (visible: boolean) => void;
@@ -31,6 +33,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const file = metadata?.files.find((file) => file.fileId === props.fileId);
   useEffect(() => {
     const body = document.body;
+
     if (props.visible) {
       body.style.height = "100vh";
       body.style.overflow = "hidden";
@@ -65,7 +68,10 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     // eslint-disable-next-line sonarjs/cognitive-complexity
     async function updateOriginalImageDataUrl() {
       if (!metadata || metadata.albumId === undefined || file === undefined) return;
-
+      const currnetThumb = props.thumbnails
+        .flatMap((group) => group.thumbnails)
+        .find((thumb) => thumb.id === props.fileId);
+      setUrl(currnetThumb?.thumbnail);
       try {
         if (file.original !== undefined) {
           const reduced = await imageDownloadService.getImg(
@@ -77,18 +83,6 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           if (!cancelled && reduced !== undefined) {
             setUrl(reduced.img);
             setFileName(reduced.fileName);
-          }
-
-          const origin = await imageDownloadService.getImg(
-            metadata.albumId,
-            file,
-            key,
-            "original",
-          );
-          if (!cancelled && origin !== undefined) {
-            setUrl(origin.img);
-            setDownloadUrl(origin.img);
-            setFileName(origin.fileName);
           }
 
           if (file.originalVideo !== undefined) {
@@ -131,7 +125,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [props.fileId]);
+  }, [file, key, metadata, props.fileId, props.thumbnails]);
 
   useEffect(() => {
     return () => {
@@ -199,7 +193,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           )}
         </>
       ) : // eslint-disable-next-line sonarjs/no-nested-conditional
-      file?.original ? (
+      file?.thumbnail ? (
         <FullScreenImg src={url} />
       ) : (
         <UnsupportedFile>
