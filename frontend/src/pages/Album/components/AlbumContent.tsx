@@ -10,6 +10,8 @@ import { Panel, PushDown } from "./Panel";
 import { Menu } from "./Menu";
 import { toast } from "react-toastify";
 import { formatTimeLeft } from "../../../utils/formatTimeLeft";
+import { acquireWakeLock } from "../../../utils/wakeLock";
+import { isAbortError } from "../../../utils/retry";
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -40,6 +42,8 @@ type AlbumContentProps = {
 
 export function AlbumContent(props: AlbumContentProps) {
   const [maskHeight, setMaskHeight] = useState(0);
+  const [failedFiles, setFailedFiles] = useState<File[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const { metadata, refreshMetadata, key, expiresAt } = useAlbumContext();
   const [timeLeft, setTimeLeft] = useState(() => formatTimeLeft(expiresAt));
@@ -61,32 +65,59 @@ export function AlbumContent(props: AlbumContentProps) {
       toast.error("Album is still loading, please try again");
       return;
     }
+    if (props.isUploading || files.length === 0) return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const releaseWakeLock = acquireWakeLock();
+    window.addEventListener("beforeunload", warnBeforeUnload);
     props.onUploadStarted();
+    setFailedFiles([]);
+    const failed: File[] = [];
+    let cancelled = false;
     try {
       const results = upload({
         uploadService: props.uploadService,
         files,
         key,
         metadata,
+        signal: controller.signal,
       });
 
       for await (const result of results) {
         if (result.result === "progress") {
           setProgress(result.progress);
-        } else {
-          if (result.thumbnail !== undefined) {
-            props.onAddThumbnail(result.thumbnail);
-          }
+        } else if (result.result === "failed") {
+          failed.push(result.file);
+        } else if (result.result === "cancelled") {
+          cancelled = true;
+          failed.push(...result.remaining);
+        } else if (result.thumbnail !== undefined) {
+          props.onAddThumbnail(result.thumbnail);
         }
       }
-      refreshMetadata();
+      if (cancelled) {
+        toast.info("Upload cancelled");
+      } else if (failed.length > 0) {
+        toast.error(`${failed.length} of ${files.length} files failed`);
+      }
     } catch (e) {
       console.error(e);
       toast.error("Upload failed");
     } finally {
+      abortRef.current = null;
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+      releaseWakeLock();
+      setFailedFiles(failed);
+      refreshMetadata();
       props.onUploadFinished();
       setMaskHeight(0);
     }
+  }
+  function cancelUpload() {
+    abortRef.current?.abort();
+  }
+  function retryFailedUploads() {
+    uploadImages(failedFiles).catch((e) => console.error(e));
   }
   function openFilePicker() {
     if (!ref.current) return;
@@ -141,6 +172,18 @@ export function AlbumContent(props: AlbumContentProps) {
           )}
         </AlbumSections>
         <UploadMask show={props.isUploading} />
+        {props.isUploading && (
+          <UploadActions>
+            <UploadButton onClick={cancelUpload}>Cancel upload</UploadButton>
+          </UploadActions>
+        )}
+        {!props.isUploading && failedFiles.length > 0 && (
+          <UploadActions>
+            <UploadButton onClick={retryFailedUploads}>
+              Retry failed uploads ({failedFiles.length})
+            </UploadButton>
+          </UploadActions>
+        )}
         <DownloadMask show={props.isDownloading}>
           <DownloadText>Preparing your files</DownloadText>
           {props.downloadProgress > 0 && (
@@ -170,39 +213,110 @@ export function AlbumContent(props: AlbumContentProps) {
   );
 }
 
+function warnBeforeUnload(e: BeforeUnloadEvent) {
+  e.preventDefault();
+  // Legacy browsers only show the prompt when returnValue is set.
+  e.returnValue = "";
+}
+
+type BatchYield =
+  | { result: "progress"; progress: number; uploadedBytes: number; totalBytes: number }
+  | { result: "failed"; file: File }
+  | { result: "cancelled"; remaining: File[] }
+  | {
+      result: "finish";
+      thumbnail: {
+        result: "thumbnail";
+        thumbnail: string | undefined;
+        id: string;
+        name: string;
+        date: string;
+        isVideo: boolean;
+      };
+    };
+
+/**
+ * Uploads files one after another. A file that fails after retries is reported
+ * and the batch continues; an abort stops the batch and reports what is left.
+ */
 async function* upload(params: {
   uploadService: UploadService;
   files: File[];
   key: string;
   metadata: { albumId: string };
-}) {
+  signal: AbortSignal;
+}): AsyncGenerator<BatchYield> {
   const arrLength = params.files.length;
   const totalSize = params.files.reduce((acc, file) => file.size + acc, 0);
   let currentSize = 0;
   for (let i = 0; i < arrLength; ++i) {
-    const uploadData = params.uploadService.upload(params.files[i], {
-      albumId: params.metadata.albumId,
-      key: params.key,
-    });
-    for await (const response of uploadData) {
-      if (response.result === "progress") {
-        currentSize += response.bytes;
-        yield { result: "progress", progress: (currentSize / totalSize) * 100 };
-      } else {
-        yield {
-          thumbnail: {
-            result: "thumbnail",
-            thumbnail: response.thumbnail,
-            id: response.fileId,
-            name: response.name,
-            date: response.date,
-            isVideo: response.isVideo,
-          },
-        };
+    const file = params.files[i];
+    try {
+      const uploadData = params.uploadService.upload(file, {
+        albumId: params.metadata.albumId,
+        key: params.key,
+        signal: params.signal,
+      });
+      for await (const response of uploadData) {
+        if (response.result === "progress") {
+          currentSize += response.bytes;
+          yield {
+            result: "progress",
+            progress: Math.min(100, (currentSize / totalSize) * 100),
+            uploadedBytes: currentSize,
+            totalBytes: totalSize,
+          };
+        } else {
+          yield {
+            result: "finish",
+            thumbnail: {
+              result: "thumbnail",
+              thumbnail: response.thumbnail,
+              id: response.fileId,
+              name: response.name,
+              date: response.date,
+              isVideo: response.isVideo,
+            },
+          };
+        }
       }
+    } catch (e) {
+      if (isAbortError(e)) {
+        yield { result: "cancelled", remaining: params.files.slice(i) };
+        return;
+      }
+      console.error(`Upload of ${file.name} failed`, e);
+      yield { result: "failed", file };
     }
   }
 }
+
+// Plain placement/styling on purpose: the upload indicator area is being
+// redesigned separately and these buttons are meant to be easy to move.
+const UploadActions = styled("div", {
+  position: "fixed",
+  bottom: "2rem",
+  left: 0,
+  width: "100%",
+  display: "flex",
+  justifyContent: "center",
+  pointerEvents: "none",
+});
+
+const UploadButton = styled("button", {
+  pointerEvents: "auto",
+  padding: "0.6rem 1.2rem",
+  borderRadius: "0.5rem",
+  border: "1px solid #8B8B8B",
+  background: "#333333",
+  color: "#DBDCD9",
+  fontFamily: "Open Sans",
+  fontSize: "0.9rem",
+  cursor: "pointer",
+  "&:hover": {
+    background: "#444444",
+  },
+});
 
 const UploadSection = styled("div", {
   flex: 1,

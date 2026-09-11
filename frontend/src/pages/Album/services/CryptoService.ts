@@ -1,6 +1,10 @@
 import { base64ToArrayBuffer, base64toUint8Array } from "../../../utils/base64";
 import { importKey } from "../../../utils/key";
 
+function randomIv() {
+  return crypto.getRandomValues(new Uint8Array(12));
+}
+
 export class CryptoService {
   async decryptImage(cryptedImg: ArrayBuffer, key: string, base64Iv: string) {
     const iv = base64toUint8Array(base64Iv);
@@ -23,8 +27,11 @@ export class CryptoService {
     );
     return decoder.decode(arraybuffer);
   }
-  async encryptImage(file: File | Blob, key: string) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+  /**
+   * Encrypts a file with AES-GCM. Pass `iv` to reproduce the exact ciphertext
+   * of an earlier run (resumed uploads); omit it to get a fresh random IV.
+   */
+  async encryptImage(file: File | Blob, key: string, iv: Uint8Array = randomIv()) {
     const buffer = await file.arrayBuffer();
     const cryptedImg = await window.crypto.subtle.encrypt(
       { name: "AES-GCM", iv },
@@ -33,8 +40,7 @@ export class CryptoService {
     );
     return { cryptedImg, iv };
   }
-  async encrypString(text: string, key: string) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+  async encrypString(text: string, key: string, iv: Uint8Array = randomIv()) {
     const encoder = new TextEncoder();
     const encodedText = encoder.encode(text);
     const encryptedText = await window.crypto.subtle.encrypt(
