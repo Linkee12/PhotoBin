@@ -1,13 +1,17 @@
-export class CanvasService {
-  async resize(
-    file: Blob,
-    options: { quality?: number; targetSize?: { width: number; height: number } } = {},
-  ): Promise<ResizedImage> {
-    const imageObj = await this._loadImage(file);
-    const canvas = this._getCanvasFromImage(imageObj, options.targetSize ?? imageObj);
-    URL.revokeObjectURL(imageObj.src);
+export type ResizeOptions = {
+  quality?: number;
+  /** Exact output size; the image is letterboxed into it. */
+  targetSize?: { width: number; height: number };
+  /** Cap the longer edge, keeping the aspect ratio. Ignored when `targetSize` is set. */
+  maxEdge?: number;
+  mimeType?: "image/webp" | "image/jpeg";
+};
 
-    return new ResizedImage(canvas, options.quality ?? 0.9);
+export class CanvasService {
+  /** Decodes `file` once so several renditions can be drawn from it. */
+  async load(file: Blob): Promise<LoadedImage> {
+    const imageObj = await this._loadImage(file);
+    return new LoadedImage(imageObj, this);
   }
 
   async getImageFromVideo(file: File): Promise<Blob> {
@@ -42,10 +46,7 @@ export class CanvasService {
     });
   }
 
-  private _getCanvasFromImage(
-    imageObj: HTMLImageElement,
-    target: { width: number; height: number },
-  ) {
+  drawToCanvas(imageObj: HTMLImageElement, target: { width: number; height: number }) {
     const { canvas, ctx } = this._initCanvas(target);
     const transform = this._getTransform(imageObj, canvas);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -99,10 +100,43 @@ export class CanvasService {
   }
 }
 
+export class LoadedImage {
+  constructor(
+    private _image: HTMLImageElement,
+    private _canvasService: CanvasService,
+  ) {}
+  get width() {
+    return this._image.naturalWidth;
+  }
+  get height() {
+    return this._image.naturalHeight;
+  }
+  resize(options: ResizeOptions = {}): ResizedImage {
+    const target = options.targetSize ?? this._fitWithin(options.maxEdge);
+    const canvas = this._canvasService.drawToCanvas(this._image, target);
+    return new ResizedImage(
+      canvas,
+      options.quality ?? 0.9,
+      options.mimeType ?? "image/webp",
+    );
+  }
+  release() {
+    URL.revokeObjectURL(this._image.src);
+  }
+  private _fitWithin(maxEdge: number | undefined) {
+    const { width, height } = this;
+    const longest = Math.max(width, height);
+    if (maxEdge === undefined || longest <= maxEdge) return { width, height };
+    const scale = maxEdge / longest;
+    return { width: Math.round(width * scale), height: Math.round(height * scale) };
+  }
+}
+
 class ResizedImage {
   constructor(
     private canvas: HTMLCanvasElement,
     private quality: number,
+    private mimeType: "image/webp" | "image/jpeg",
   ) {}
   get url() {
     return this.canvas.toDataURL();
@@ -119,7 +153,7 @@ class ResizedImage {
           }
           resolve(blob);
         },
-        "image/webp",
+        this.mimeType,
         quality,
       );
     });

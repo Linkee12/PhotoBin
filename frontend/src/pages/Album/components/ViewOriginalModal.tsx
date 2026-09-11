@@ -74,11 +74,12 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       setUrl(currnetThumb?.thumbnail);
       try {
         if (file.original !== undefined) {
+          // Small originals are uploaded without a reduced rendition.
           const reduced = await imageDownloadService.getImg(
             metadata.albumId,
             file,
             key,
-            "reduced",
+            file.reduced !== undefined ? "reduced" : "original",
           );
           if (!cancelled && reduced !== undefined) {
             setUrl(reduced.img);

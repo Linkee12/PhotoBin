@@ -46,7 +46,8 @@ export class CryptoService {
   }
   async encrypString(text: string, key: string | null) {
     const encoder = new TextEncoder();
-    const encodedText = encoder.encode(text);
+    // Copy into a fresh Uint8Array so the buffer is typed as a plain ArrayBuffer.
+    const encodedText = new Uint8Array(encoder.encode(text));
     if (key === null) {
       return { encryptedText: encodedText.buffer, iv: new Uint8Array(0) };
     }

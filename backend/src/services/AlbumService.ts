@@ -4,6 +4,8 @@ import { Metadata, MetadataService } from "./MetadataService";
 
 const ALBUMS_ROOT = path.resolve("./albums");
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+/** Parts uploaded through the binary route are stored as raw bytes with this suffix. */
+const RAW_SUFFIX = ".bin";
 
 function safeAlbumPath(...segments: string[]) {
   const resolved = path.resolve(ALBUMS_ROOT, ...segments);
@@ -39,6 +41,10 @@ export class AlbumService {
   finalizeFile(albumId: string, fileMetadata: Metadata["files"][0]) {
     this._metadataService.addFile(albumId, fileMetadata);
   }
+  /**
+   * Legacy JSON transport: the part arrives base64-encoded and is stored as
+   * base64 text under `<partName>`. Kept for clients that still use the RPC route.
+   */
   async uploadFilePart(params: {
     fileType: string;
     albumId: string;
@@ -46,9 +52,7 @@ export class AlbumService {
     partName: string;
     encryptedFile: string;
   }) {
-    const dir = safeAlbumPath(params.albumId, params.fileId, params.fileType);
-    await fs.mkdir(dir, { recursive: true });
-    const filePath = safeAlbumPath(
+    const filePath = await this._preparePartPath(
       params.albumId,
       params.fileId,
       params.fileType,
@@ -56,9 +60,41 @@ export class AlbumService {
     );
     await fs.writeFile(filePath, params.encryptedFile);
   }
+  /**
+   * Binary transport: raw bytes are stored as-is under `<partName>.bin`.
+   * The suffix lets the read path tell the two on-disk formats apart.
+   */
+  async uploadFilePartRaw(params: {
+    fileType: string;
+    albumId: string;
+    fileId: string;
+    partName: string;
+    bytes: Buffer;
+  }) {
+    const filePath = await this._preparePartPath(
+      params.albumId,
+      params.fileId,
+      params.fileType,
+      params.partName + RAW_SUFFIX,
+    );
+    await fs.writeFile(filePath, params.bytes);
+  }
+  /** Returns the part as base64 text regardless of how it is stored. */
   async getFile(albumId: string, fileId: string, type: string, name: string) {
-    const filePath = safeAlbumPath(albumId, fileId, type, name);
-    return await fs.readFile(filePath, { encoding: "utf8" });
+    const raw = await this._readRawPart(albumId, fileId, type, name);
+    if (raw !== undefined) return raw.toString("base64");
+    return await fs.readFile(safeAlbumPath(albumId, fileId, type, name), {
+      encoding: "utf8",
+    });
+  }
+  /** Returns the part as raw bytes regardless of how it is stored. */
+  async getFileBytes(albumId: string, fileId: string, type: string, name: string) {
+    const raw = await this._readRawPart(albumId, fileId, type, name);
+    if (raw !== undefined) return raw;
+    const base64 = await fs.readFile(safeAlbumPath(albumId, fileId, type, name), {
+      encoding: "utf8",
+    });
+    return Buffer.from(base64, "base64");
   }
 
   async deleteImages(albumId: string, imageIds: string[]) {
@@ -88,6 +124,28 @@ export class AlbumService {
     }
   }
 
+  private async _preparePartPath(
+    albumId: string,
+    fileId: string,
+    fileType: string,
+    name: string,
+  ) {
+    await fs.mkdir(safeAlbumPath(albumId, fileId, fileType), { recursive: true });
+    return safeAlbumPath(albumId, fileId, fileType, name);
+  }
+  private async _readRawPart(
+    albumId: string,
+    fileId: string,
+    type: string,
+    name: string,
+  ) {
+    try {
+      return await fs.readFile(safeAlbumPath(albumId, fileId, type, name + RAW_SUFFIX));
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw err;
+    }
+  }
   private async _deleteImage(albumId: string, imageId: string) {
     await fs.rm(safeAlbumPath(albumId, imageId), {
       recursive: true,

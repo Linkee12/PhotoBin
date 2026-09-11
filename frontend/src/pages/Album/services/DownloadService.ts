@@ -49,10 +49,11 @@ export class DownloadService {
 
         if (!file) continue;
         let type: "original" | "originalVideo" | "unsupportedFile";
-        if (file.original) {
-          type = "original";
-        } else if (file.originalVideo) {
+        // Videos also carry an `original` (their poster frame), so check the video first.
+        if (file.originalVideo) {
           type = "originalVideo";
+        } else if (file.original) {
+          type = "original";
         } else {
           type = "unsupportedFile";
         }
@@ -73,18 +74,20 @@ export class DownloadService {
 
         zip.add(passThrough);
 
-        const chunkSize = 64 * 1024;
+        // ZipPassThrough only copies, so large pushes are cheap; yield to the
+        // event loop between them so progress/UI can update.
+        const chunkSize = 4 * 1024 * 1024;
         let offset = 0;
 
         while (offset < uint8.length) {
           const end = Math.min(offset + chunkSize, uint8.length);
-          const chunk = uint8.slice(offset, end);
+          const chunk = uint8.subarray(offset, end);
           const isLastChunk = end === uint8.length;
 
           passThrough.push(chunk, isLastChunk);
           offset = end;
           if (!isLastChunk) {
-            await new Promise((resolve) => setTimeout(resolve, 1));
+            await new Promise((resolve) => setTimeout(resolve, 0));
           }
         }
         ++count;

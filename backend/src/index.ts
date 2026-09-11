@@ -22,9 +22,75 @@ const cleanupIntervalMs = Number(process.env["CLEANUP_INTERVAL_MS"]) || ONE_HOUR
 const app = express();
 const port = 3001;
 app.use(express.json({ limit: "2mb" }));
+
 const builder = createBuilder(app);
 const metadataService = new MetadataService(fs);
 const albumService = new AlbumService(metadataService, albumTtlMs);
+
+// Binary part transport: chunks travel as application/octet-stream instead of
+// base64 inside JSON (no +33% wire bytes, no base64/JSON CPU on either side).
+// Ciphertext is bytes too, so encrypted albums use it as well.
+const partParamsSchema = z.object({
+  albumId: uuidSchema,
+  fileId: uuidSchema,
+  type: partTypeSchema,
+  part: partNameSchema,
+});
+const PART_ROUTE = "/parts/:albumId/:fileId/:type/:part";
+const MAX_PART_BYTES = 8 * 1024 * 1024;
+function parsePartParams(params: unknown) {
+  const parsed = partParamsSchema.safeParse(params);
+  return parsed.success ? parsed.data : undefined;
+}
+app.put(
+  PART_ROUTE,
+  express.raw({ type: "application/octet-stream", limit: MAX_PART_BYTES }),
+  async (req, res, next) => {
+    try {
+      const params = parsePartParams(req.params);
+      if (params === undefined) {
+        res.status(400).json({ message: "Invalid part path" });
+        return;
+      }
+      if (!Buffer.isBuffer(req.body)) {
+        res.status(415).json({ message: "Expected application/octet-stream body" });
+        return;
+      }
+      await albumService.uploadFilePartRaw({
+        albumId: params.albumId,
+        fileId: params.fileId,
+        fileType: params.type,
+        partName: params.part,
+        bytes: req.body,
+      });
+      res.status(204).end();
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+app.get(PART_ROUTE, async (req, res, next) => {
+  try {
+    const params = parsePartParams(req.params);
+    if (params === undefined) {
+      res.status(400).json({ message: "Invalid part path" });
+      return;
+    }
+    const bytes = await albumService.getFileBytes(
+      params.albumId,
+      params.fileId,
+      params.type,
+      params.part,
+    );
+    res.type("application/octet-stream").send(bytes);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      res.status(404).end();
+      return;
+    }
+    next(err);
+  }
+});
 const routes = {
   getAlbumMetadata: builder
     .querySchema(

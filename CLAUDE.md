@@ -56,20 +56,30 @@ This means the frontend also directly imports the `Metadata` type from `backend/
 ### E2E encryption flow
 1. On album creation the frontend generates a 256-bit AES-GCM key (`utils/key.ts: genKey`).
 2. The key is stored only in the URL hash (`/bin/:albumId#<base64key>`), never transmitted to the server.
-3. Before upload, `CryptoService` encrypts each file (and its filename/date) using `window.crypto.subtle`.
-4. Encrypted bytes are base64-encoded and sent to the backend as JSON.
-5. On download, `ImageQueryService` reassembles chunks, then `CryptoService` decrypts client-side.
+3. Before upload, `CryptoService` encrypts each file (and its filename/date) using `window.crypto.subtle`. In plain mode (`key === null`, album URL without a hash) every `CryptoService` method is a passthrough.
+4. Encrypted bytes are split into 2 MB chunks and sent as raw `application/octet-stream` bodies (`PartTransport.ts`), up to 4 chunks in flight per file. Only the small metadata (encrypted name/date, ivs, chunk counts) goes through the cuple JSON RPC.
+5. On download, `ImageQueryService` fetches chunks as raw bytes (in parallel), reassembles them, then `CryptoService` decrypts client-side.
+
+### Binary part transport
+Chunks do not go through cuple. `backend/src/index.ts` registers two plain express routes, validated with the shared zod schemas:
+- `PUT /parts/:albumId/:fileId/:type/:part` — `express.raw` body (limit `MAX_PART_BYTES`, 8 MB), stored as raw bytes.
+- `GET /parts/:albumId/:fileId/:type/:part` — serves the part as raw bytes, whatever its on-disk format.
+
+The frontend reaches them at `/api/parts/...` (same `/api` → backend prefix as the RPC). The old cuple routes `uploadFilePart` / `getPartOfImage` (base64 inside JSON) still work and read/write both on-disk formats; they exist only for backward compatibility.
+
+Performance notes (measured with `?profile`, which logs per-stage timings to the console): AES-GCM is a small share of upload time. The big costs were full-resolution WebP encoding of the "reduced" rendition (now capped at 2560 px, JPEG for JPEG sources, skipped for small originals), base64 + JSON transport, and — in Chromium — `fetch` with an `ArrayBuffer` body, which uploads at ~10 MB/s while a `Blob` body is near-instant. Always send chunks as `Blob`s.
 
 ### File storage on the backend
 Files live under `backend/albums/` (gitignored in prod, mounted as a PVC in k8s):
 ```
-albums/<albumId>/metadata.json          ← album name + file list (all values encrypted)
-albums/<albumId>/<fileId>/thumbnail/0   ← single encrypted chunk
-albums/<albumId>/<fileId>/reduced/0..N  ← 1 MB chunks
-albums/<albumId>/<fileId>/original/0..N
-albums/<albumId>/<fileId>/originalVideo/0..N   ← video only
-albums/<albumId>/<fileId>/unsupportedFile/0..N ← non-image/video files
+albums/<albumId>/metadata.json              ← album name + file list (values encrypted unless plain mode)
+albums/<albumId>/<fileId>/thumbnail/0.bin   ← single chunk
+albums/<albumId>/<fileId>/reduced/0.bin..N.bin   ← 2 MB chunks; absent for small originals
+albums/<albumId>/<fileId>/original/0.bin..N.bin
+albums/<albumId>/<fileId>/originalVideo/0.bin..N.bin   ← video only (its `original` is the poster frame)
+albums/<albumId>/<fileId>/unsupportedFile/0.bin..N.bin ← non-image/video files
 ```
+Parts written through the binary route are raw bytes named `<part>.bin`. Albums uploaded before that route existed have base64 text files named `<part>` (no suffix); `AlbumService` checks for `<part>.bin` first and falls back to decoding `<part>`, so both layouts stay readable. Do not write both names for the same part.
 
 ### Frontend page structure
 - `/` → `pages/Home` — landing page, album creation
