@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { CryptoService } from "../services/CryptoService";
 import { ThumbnailGroup } from "../Album";
+import { useZoomPan } from "../hooks/useZoomPan";
 
 const imageDownloadService = new ImageQueryService(new CryptoService());
 
@@ -27,10 +28,15 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
   const [downloadUrl, setDownloadUrl] = useState<string | undefined>(undefined);
+  // Which quality the photo viewer currently shows; the thumbnail is blurred until
+  // the reduced image is swapped in (in place, inside the same box).
+  const [stage, setStage] = useState<"thumbnail" | "reduced">("thumbnail");
   const [fileName, setFileName] = useState("");
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
   const file = metadata?.files.find((file) => file.fileId === props.fileId);
+  const zoom = useZoomPan({ resetKey: props.fileId, enabled: props.visible });
+  const isZoomed = zoom.isZoomed;
   useEffect(() => {
     const body = document.body;
 
@@ -49,6 +55,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         props.onShowChange(false);
+      } else if (isZoomed) {
+        // The user is panning a zoomed image, leave the arrow keys alone.
+        return;
       } else if (e.key === "ArrowRight") {
         props.onNext(1);
         setIsVideoReady(false);
@@ -59,7 +68,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [props.visible, props.onShowChange, props.onNext]);
+  }, [props.visible, props.onShowChange, props.onNext, isZoomed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +81,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         .flatMap((group) => group.thumbnails)
         .find((thumb) => thumb.id === props.fileId);
       setUrl(currnetThumb?.thumbnail);
+      setStage("thumbnail");
       try {
         if (file.original !== undefined) {
           // Small originals are uploaded without a reduced rendition.
@@ -83,6 +93,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           );
           if (!cancelled && reduced !== undefined) {
             setUrl(reduced.img);
+            setStage("reduced");
             setFileName(reduced.fileName);
           }
 
@@ -173,6 +184,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       </ButtonBar>
       <NextButton
         style={{ left: "0px" }}
+        isZoomed={isZoomed}
         onClick={(e) => {
           e.stopPropagation();
           props.onNext(-1);
@@ -195,7 +207,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         </>
       ) : // eslint-disable-next-line sonarjs/no-nested-conditional
       file?.thumbnail ? (
-        <FullScreenImg src={url} />
+        <ZoomWrapper ref={zoom.wrapperRef} isZoomed={isZoomed} {...zoom.handlers}>
+          <ZoomableImg ref={zoom.imageRef} src={url} draggable={false} stage={stage} />
+        </ZoomWrapper>
       ) : (
         <UnsupportedFile>
           <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
@@ -203,6 +217,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       )}
       <NextButton
         style={{ right: "0px" }}
+        isZoomed={isZoomed}
         onClick={(e) => {
           e.stopPropagation();
           props.onNext(1);
@@ -244,6 +259,43 @@ const FullScreenImg = styled("img", {
   height: "100vh",
   objectFit: "contain",
   backgroundColor: "#000",
+});
+const ZoomWrapper = styled("div", {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100vh",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  overflow: "hidden",
+  backgroundColor: "#000",
+  touchAction: "none",
+  userSelect: "none",
+  variants: {
+    isZoomed: {
+      true: { cursor: "grab" },
+      false: { cursor: "default" },
+    },
+  },
+});
+// The image box is constant (the whole viewport) so the thumbnail is drawn into
+// the same box the reduced image will occupy and the swap causes no layout jump.
+const ZoomableImg = styled("img", {
+  display: "block",
+  width: "100%",
+  height: "100vh",
+  objectFit: "contain",
+  transformOrigin: "center",
+  willChange: "transform",
+  transition: "filter 0.3s ease-out",
+  variants: {
+    stage: {
+      thumbnail: { filter: "blur(6px)" },
+      reduced: { filter: "none" },
+    },
+  },
 });
 const FullScreenVideo = styled("video", {
   display: "block",
@@ -309,6 +361,13 @@ const NextButton = styled("button", {
     opacity: "1",
   },
   transition: "opacity 0.5s",
+  variants: {
+    isZoomed: {
+      // While zoomed the whole screen is used for panning.
+      true: { pointerEvents: "none" },
+      false: {},
+    },
+  },
 });
 
 const Spinner = styled("div", {
