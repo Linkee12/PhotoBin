@@ -20,8 +20,8 @@ type UploadProgress = { percent: number; uploadedBytes: number; totalBytes: numb
 /**
  * idle      → nothing running
  * uploading → batch in flight; the indicator never shows 100 % here
- * done      → batch succeeded: fill snaps to 100 %, then new tiles pulse
- * outro     → indicator fades out
+ * done      → batch succeeded: fill snaps to 100 % on the still-dimmed album
+ * outro     → indicator and mask fade out while the new tiles pulse
  */
 type UploadPhase = "idle" | "uploading" | "done" | "outro";
 const DONE_MS = 500;
@@ -137,16 +137,16 @@ export function AlbumContent(props: AlbumContentProps) {
       props.onUploadFinished();
     }
   }
-  /** 100 % flash → new tiles scroll into view and pulse → indicator fades out. */
+  /**
+   * 100 % flash on the dimmed album → indicator and mask fade out while the
+   * new tiles scroll into view and pulse. Unlocks ~1.3 s after the batch ends.
+   */
   async function playOutro(fileIds: string[]) {
     setPhase("done");
     await wait(DONE_MS);
-    setNewFileIds(fileIds);
-    // The fade-out overlaps the tail of the pulse, so the UI is unlocked
-    // again ~1.3 s after the batch ends.
-    await wait(PULSE_MS - OUTRO_MS);
     setPhase("outro");
-    await wait(OUTRO_MS);
+    setNewFileIds(fileIds);
+    await wait(PULSE_MS);
     setNewFileIds([]);
   }
   function cancelUpload() {
@@ -209,7 +209,7 @@ export function AlbumContent(props: AlbumContentProps) {
             </LoadingThumbnails>
           )}
         </AlbumSections>
-        <UploadMask show={phase === "uploading"} />
+        <UploadMask show={phase === "uploading" || phase === "done"} />
         {phase === "uploading" && (
           <UploadActions>
             <UploadButton onClick={cancelUpload}>Cancel upload</UploadButton>
