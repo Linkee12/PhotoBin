@@ -115,10 +115,13 @@ export class UploadService {
     }
     store.save(this._toRecord(prepared));
 
-    yield* this._send(prepared, props.albumId, props.signal);
+    const alreadyFinalized = yield* this._send(prepared, props.albumId, props.signal);
 
     this._failed.delete(fingerprint);
     store.remove(prepared.fileId);
+    // An already finalized file is listed via metadata; announcing it again
+    // would show it twice.
+    if (alreadyFinalized) return;
     yield {
       result: "finish",
       thumbnail: prepared.thumbnailUrl,
@@ -248,6 +251,7 @@ export class UploadService {
         { signal },
       );
     }
+    return uploaded.finalized;
   }
 
   private async *_sendPart(
