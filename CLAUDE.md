@@ -80,5 +80,5 @@ albums/<albumId>/<fileId>/unsupportedFile/0..N ← non-image/video files
   - Service classes (`UploadService`, `ImageQueryService`, `DownloadService`, `CanvasService`, `CryptoService`) handle all media logic; they are plain classes instantiated in components/hooks, not singletons.
 
 ### Styling
-CSS-in-JS via `@stitches/react`. The config (`stitches.config.ts`) defines two breakpoints: `portrait` and `landscape` (orientation-based, not width-based). Use the exported `styled` from there rather than importing from `@stitches/react` directly.
+CSS-in-JS via `@stitches/react`. The config (`stitches.config.ts`) defines two complementary breakpoints: `narrow` (≤699px wide AND portrait — phones held upright) and `wide` (everything else, including tall desktop monitors). Use the exported `styled` and `keyframes` from there rather than importing from `@stitches/react` directly.
 
