@@ -28,16 +28,6 @@ export class RotateService {
     private _imageQueryService: ImageQueryService,
   ) {}
 
-  /** Rotates by one quarter turn clockwise relative to the current rotation. */
-  async rotateClockwise(
-    albumId: string,
-    file: AlbumFile,
-    key: string,
-  ): Promise<RotateResult> {
-    const rotation = (((file.rotation ?? 0) + 1) % 4) as Rotation;
-    return this.rotateTo(albumId, file, key, rotation);
-  }
-
   async rotateTo(
     albumId: string,
     file: AlbumFile,
