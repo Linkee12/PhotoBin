@@ -1,5 +1,5 @@
 import { styled } from "../../../stitches.config";
-import { Cloud } from "@assets/images/cloud";
+import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
 import { useEffect, useRef, useState } from "react";
@@ -10,6 +10,9 @@ import { Panel, PushDown } from "./Panel";
 import { Menu } from "./Menu";
 import { toast } from "react-toastify";
 import { formatTimeLeft } from "../../../utils/formatTimeLeft";
+import { formatBytesPair } from "../../../utils/formatBytes";
+
+type UploadProgress = { percent: number; uploadedBytes: number; totalBytes: number };
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -39,7 +42,7 @@ type AlbumContentProps = {
 };
 
 export function AlbumContent(props: AlbumContentProps) {
-  const [maskHeight, setMaskHeight] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const { metadata, refreshMetadata, key, expiresAt } = useAlbumContext();
   const [timeLeft, setTimeLeft] = useState(() => formatTimeLeft(expiresAt));
@@ -51,9 +54,8 @@ export function AlbumContent(props: AlbumContentProps) {
     return () => clearInterval(id);
   }, [expiresAt]);
 
-  function setProgress(percentage: number) {
-    const height = 445 * (percentage / 100);
-    setMaskHeight(height);
+  function setProgress(percent: number, uploadedBytes: number, totalBytes: number) {
+    setUploadProgress({ percent, uploadedBytes, totalBytes });
   }
 
   async function uploadImages(files: File[]) {
@@ -72,7 +74,7 @@ export function AlbumContent(props: AlbumContentProps) {
 
       for await (const result of results) {
         if (result.result === "progress") {
-          setProgress(result.progress);
+          setProgress(result.progress, result.uploadedBytes, result.totalBytes);
         } else {
           if (result.thumbnail !== undefined) {
             props.onAddThumbnail(result.thumbnail);
@@ -85,7 +87,7 @@ export function AlbumContent(props: AlbumContentProps) {
       toast.error("Upload failed");
     } finally {
       props.onUploadFinished();
-      setMaskHeight(0);
+      setUploadProgress(null);
     }
   }
   function openFilePicker() {
@@ -149,8 +151,26 @@ export function AlbumContent(props: AlbumContentProps) {
         </DownloadMask>
         <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
           <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
-            <StyledUpload height={maskHeight} />
-            <Text>Drop your photos here to upload</Text>
+            <StyledUpload
+              progress={uploadProgress?.percent ?? 0}
+              active={props.isUploading}
+            />
+            {uploadProgress ? (
+              <UploadStats>
+                <Percent>{Math.floor(uploadProgress.percent)}%</Percent>
+                <Bytes>
+                  {formatBytesPair(
+                    uploadProgress.uploadedBytes,
+                    uploadProgress.totalBytes,
+                  )}
+                </Bytes>
+              </UploadStats>
+            ) : (
+              <Text>
+                {props.isUploading ? "Preparing your photos" : "Drop photos here"}
+                {!props.isUploading && <TextHint>or click to browse</TextHint>}
+              </Text>
+            )}
           </CloudContainer>
           <input
             type="file"
@@ -187,7 +207,12 @@ async function* upload(params: {
     for await (const response of uploadData) {
       if (response.result === "progress") {
         currentSize += response.bytes;
-        yield { result: "progress", progress: (currentSize / totalSize) * 100 };
+        yield {
+          result: "progress",
+          progress: (currentSize / totalSize) * 100,
+          uploadedBytes: currentSize,
+          totalBytes: totalSize,
+        };
       } else {
         yield {
           thumbnail: {
@@ -262,10 +287,40 @@ const CloudContainer = styled("div", {
 
 const Text = styled("div", {
   textAlign: "center",
-  width: "12rem",
+  width: "14rem",
+  fontFamily: "Open Sans",
   fontSize: "1rem",
-  marginTop: "0.5rem",
+  marginTop: "0.75rem",
   color: "#DBDCD9",
+});
+
+const TextHint = styled("div", {
+  fontSize: "0.8rem",
+  color: "#8B8B8B",
+  marginTop: "0.15rem",
+});
+
+const UploadStats = styled("div", {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  marginTop: "0.75rem",
+  fontFamily: "Open Sans",
+  fontVariantNumeric: "tabular-nums",
+});
+
+const Percent = styled("div", {
+  fontSize: "1.6rem",
+  fontWeight: 600,
+  lineHeight: 1.1,
+  color: "#F2F2F0",
+});
+
+const Bytes = styled("div", {
+  fontSize: "0.8rem",
+  color: "#8B8B8B",
+  marginTop: "0.25rem",
+  whiteSpace: "nowrap",
 });
 
 const StyledUpload = styled(Cloud, {
@@ -274,8 +329,11 @@ const StyledUpload = styled(Cloud, {
   color: "#333333",
   cursor: "pointer",
   transition: "color 300ms",
+  [`&:hover ${DropHint}`]: {
+    strokeOpacity: 0.55,
+  },
   "&:hover": {
-    color: "#444444",
+    color: "#3d3d3d",
   },
 });
 
