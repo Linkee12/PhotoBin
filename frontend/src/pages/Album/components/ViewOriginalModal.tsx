@@ -28,6 +28,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
   const [downloadUrl, setDownloadUrl] = useState<string | undefined>(undefined);
+  // Which quality the photo viewer currently shows; the thumbnail is blurred until
+  // the reduced image is swapped in (in place, inside the same box).
+  const [stage, setStage] = useState<"thumbnail" | "reduced">("thumbnail");
   const [fileName, setFileName] = useState("");
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
@@ -78,6 +81,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         .flatMap((group) => group.thumbnails)
         .find((thumb) => thumb.id === props.fileId);
       setUrl(currnetThumb?.thumbnail);
+      setStage("thumbnail");
       try {
         if (file.original !== undefined) {
           const reduced = await imageDownloadService.getImg(
@@ -88,6 +92,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           );
           if (!cancelled && reduced !== undefined) {
             setUrl(reduced.img);
+            setStage("reduced");
             setFileName(reduced.fileName);
           }
 
@@ -202,14 +207,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       ) : // eslint-disable-next-line sonarjs/no-nested-conditional
       file?.thumbnail ? (
         <ZoomWrapper ref={zoom.wrapperRef} isZoomed={isZoomed} {...zoom.handlers}>
-          <ZoomableImg
-            ref={zoom.imageRef}
-            src={url}
-            draggable={false}
-            style={{
-              transform: `translate(${zoom.transform.tx}px, ${zoom.transform.ty}px) scale(${zoom.transform.scale})`,
-            }}
-          />
+          <ZoomableImg ref={zoom.imageRef} src={url} draggable={false} stage={stage} />
         </ZoomWrapper>
       ) : (
         <UnsupportedFile>
@@ -281,13 +279,22 @@ const ZoomWrapper = styled("div", {
     },
   },
 });
+// The image box is constant (the whole viewport) so the thumbnail is drawn into
+// the same box the reduced image will occupy and the swap causes no layout jump.
 const ZoomableImg = styled("img", {
   display: "block",
-  maxWidth: "100%",
-  maxHeight: "100vh",
+  width: "100%",
+  height: "100vh",
   objectFit: "contain",
   transformOrigin: "center",
   willChange: "transform",
+  transition: "filter 0.3s ease-out",
+  variants: {
+    stage: {
+      thumbnail: { filter: "blur(6px)" },
+      reduced: { filter: "none" },
+    },
+  },
 });
 const FullScreenVideo = styled("video", {
   display: "block",
