@@ -145,6 +145,9 @@ const sheenSweep = keyframes({
 
 const Waterline = styled("g", {
   transition: "transform 320ms linear",
+  "@media (prefers-reduced-motion: reduce)": {
+    transition: "none",
+  },
 });
 
 const Wave = styled("path", {

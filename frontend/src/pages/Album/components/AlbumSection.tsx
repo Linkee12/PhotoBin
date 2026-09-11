@@ -13,6 +13,8 @@ type AlbumSectionProps = {
   index: number;
   selectedImages: string[];
   isUploading: boolean;
+  /** ids uploaded in the batch that just finished; their tiles pulse and the first one is scrolled to */
+  newFileIds: string[];
   isSelected: (imageId: string) => boolean;
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
@@ -55,6 +57,8 @@ export function AlbumSection(props: AlbumSectionProps) {
                 imageSrc={image.thumbnail}
                 fileName={image.name}
                 isSelected={props.isSelected(image.id)}
+                isNew={props.newFileIds.includes(image.id)}
+                scrollIntoView={props.newFileIds[0] === image.id}
                 onSelect={() => props.onSelect([image.id])}
                 onDeselect={() => props.onDeSelect([image.id])}
                 onOpen={() => props.onOpen(image.id)}

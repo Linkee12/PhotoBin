@@ -2,6 +2,7 @@ import { styled } from "../../../stitches.config";
 import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
+import { PULSE_MS } from "./AlbumItem";
 import { useEffect, useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { UploadService } from "../services/UploadService";
@@ -15,6 +16,16 @@ import { isAbortError } from "../../../utils/retry";
 import { formatBytesPair } from "../../../utils/formatBytes";
 
 type UploadProgress = { percent: number; uploadedBytes: number; totalBytes: number };
+
+/**
+ * idle      → nothing running
+ * uploading → batch in flight; the indicator never shows 100 % here
+ * done      → batch succeeded: fill snaps to 100 %, then new tiles pulse
+ * outro     → indicator fades out
+ */
+type UploadPhase = "idle" | "uploading" | "done" | "outro";
+const DONE_MS = 500;
+const OUTRO_MS = 300;
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -45,6 +56,8 @@ type AlbumContentProps = {
 
 export function AlbumContent(props: AlbumContentProps) {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [phase, setPhase] = useState<UploadPhase>("idle");
+  const [newFileIds, setNewFileIds] = useState<string[]>([]);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const ref = useRef<HTMLInputElement>(null);
@@ -67,15 +80,18 @@ export function AlbumContent(props: AlbumContentProps) {
       toast.error("Album is still loading, please try again");
       return;
     }
-    if (props.isUploading || files.length === 0) return;
+    if (props.isUploading || phase !== "idle" || files.length === 0) return;
     const controller = new AbortController();
     abortRef.current = controller;
     const releaseWakeLock = acquireWakeLock();
     window.addEventListener("beforeunload", warnBeforeUnload);
     props.onUploadStarted();
+    setPhase("uploading");
     setFailedFiles([]);
     const failed: File[] = [];
+    const uploaded: string[] = [];
     let cancelled = false;
+    let completed = false;
     try {
       const results = upload({
         uploadService: props.uploadService,
@@ -93,10 +109,12 @@ export function AlbumContent(props: AlbumContentProps) {
         } else if (result.result === "cancelled") {
           cancelled = true;
           failed.push(...result.remaining);
-        } else if (result.thumbnail !== undefined) {
+        } else {
+          uploaded.push(result.thumbnail.id);
           props.onAddThumbnail(result.thumbnail);
         }
       }
+      completed = true;
       if (cancelled) {
         toast.info("Upload cancelled");
       } else if (failed.length > 0) {
@@ -111,9 +129,25 @@ export function AlbumContent(props: AlbumContentProps) {
       releaseWakeLock();
       setFailedFiles(failed);
       refreshMetadata();
-      props.onUploadFinished();
+      if (completed && !cancelled && uploaded.length > 0) {
+        await playOutro(uploaded);
+      }
+      setPhase("idle");
       setUploadProgress(null);
+      props.onUploadFinished();
     }
+  }
+  /** 100 % flash → new tiles scroll into view and pulse → indicator fades out. */
+  async function playOutro(fileIds: string[]) {
+    setPhase("done");
+    await wait(DONE_MS);
+    setNewFileIds(fileIds);
+    // The fade-out overlaps the tail of the pulse, so the UI is unlocked
+    // again ~1.3 s after the batch ends.
+    await wait(PULSE_MS - OUTRO_MS);
+    setPhase("outro");
+    await wait(OUTRO_MS);
+    setNewFileIds([]);
   }
   function cancelUpload() {
     abortRef.current?.abort();
@@ -125,6 +159,7 @@ export function AlbumContent(props: AlbumContentProps) {
     if (!ref.current) return;
     ref.current.click();
   }
+  const shownPercent = displayedPercent(phase, uploadProgress?.percent ?? 0);
   function getAllId(): string[] {
     return props.thumbnailGroups.flatMap((group) =>
       group.thumbnails.map((file) => file.id),
@@ -160,6 +195,7 @@ export function AlbumContent(props: AlbumContentProps) {
               group={group}
               index={i}
               isUploading={props.isUploading}
+              newFileIds={newFileIds}
               selectedImages={props.selectedImages}
               isSelected={props.isSelected}
               onSelect={props.onSelect}
@@ -173,13 +209,13 @@ export function AlbumContent(props: AlbumContentProps) {
             </LoadingThumbnails>
           )}
         </AlbumSections>
-        <UploadMask show={props.isUploading} />
-        {props.isUploading && (
+        <UploadMask show={phase === "uploading"} />
+        {phase === "uploading" && (
           <UploadActions>
             <UploadButton onClick={cancelUpload}>Cancel upload</UploadButton>
           </UploadActions>
         )}
-        {!props.isUploading && failedFiles.length > 0 && (
+        {phase === "idle" && failedFiles.length > 0 && (
           <UploadActions>
             <UploadButton onClick={retryFailedUploads}>
               Retry failed uploads ({failedFiles.length})
@@ -193,14 +229,15 @@ export function AlbumContent(props: AlbumContentProps) {
           )}
         </DownloadMask>
         <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
-          <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
-            <StyledUpload
-              progress={uploadProgress?.percent ?? 0}
-              active={props.isUploading}
-            />
+          <CloudContainer
+            isVisible={props.showUploader}
+            isFadingOut={phase === "outro"}
+            onClick={openFilePicker}
+          >
+            <StyledUpload progress={shownPercent} active={phase !== "idle"} />
             {uploadProgress ? (
               <UploadStats>
-                <Percent>{Math.floor(uploadProgress.percent)}%</Percent>
+                <Percent>{shownPercent}%</Percent>
                 <Bytes>
                   {formatBytesPair(
                     uploadProgress.uploadedBytes,
@@ -233,6 +270,20 @@ export function AlbumContent(props: AlbumContentProps) {
       </DragNdrop>
     </Panel>
   );
+}
+
+/**
+ * Never shows 100 % while the batch is still running: the last steps
+ * (finalize, metadata refresh) happen after the bytes are sent.
+ */
+function displayedPercent(phase: UploadPhase, percent: number): number {
+  if (phase === "idle") return 0;
+  if (phase === "uploading") return Math.min(Math.floor(percent), 99);
+  return 100;
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 function warnBeforeUnload(e: BeforeUnloadEvent) {
@@ -383,7 +434,10 @@ const CloudContainer = styled("div", {
   alignItems: "center",
   position: "absolute",
   top: "18rem",
-  transition: "display 0.3s",
+  transition: `opacity ${OUTRO_MS}ms ease-out`,
+  "@media (prefers-reduced-motion: reduce)": {
+    transition: "none",
+  },
   variants: {
     isVisible: {
       true: {
@@ -391,6 +445,15 @@ const CloudContainer = styled("div", {
       },
       false: {
         display: "none",
+      },
+    },
+    isFadingOut: {
+      true: {
+        opacity: 0,
+        pointerEvents: "none",
+      },
+      false: {
+        opacity: 1,
       },
     },
   },
@@ -454,13 +517,18 @@ const UploadMask = styled("div", {
   width: "100%",
   height: "100%",
   backgroundColor: "rgba(0, 0, 0,0.5)",
+  transition: `opacity ${OUTRO_MS}ms ease-out`,
+  "@media (prefers-reduced-motion: reduce)": {
+    transition: "none",
+  },
   variants: {
     show: {
       true: {
-        display: "flex",
+        opacity: 1,
       },
       false: {
-        display: "none",
+        opacity: 0,
+        pointerEvents: "none",
       },
     },
   },
