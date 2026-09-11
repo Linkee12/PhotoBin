@@ -1,6 +1,7 @@
 import { Zip, ZipPassThrough } from "fflate";
 import { ImageQueryService } from "./ImageQueryService";
 import { AlbumContextType } from "../hooks/useAlbumContext";
+import { editedFileName } from "./RotateService";
 
 type DownloadProps = {
   selectedImages: string[];
@@ -48,9 +49,10 @@ export class DownloadService {
         const file = props.albumContext.metadata.files.find((f) => f.fileId === imgID);
 
         if (!file) continue;
-        let type: "original" | "originalVideo" | "unsupportedFile";
+        let type: "original" | "edited" | "originalVideo" | "unsupportedFile";
         if (file.original) {
-          type = "original";
+          // A rotated photo downloads as its full-res re-encode; original/ is never touched.
+          type = file.rotation && file.edited ? "edited" : "original";
         } else if (file.originalVideo) {
           type = "originalVideo";
         } else {
@@ -69,7 +71,9 @@ export class DownloadService {
         const buffer = await blob.arrayBuffer();
         const uint8 = new Uint8Array(buffer);
 
-        const passThrough = new ZipPassThrough(origin.fileName);
+        const passThrough = new ZipPassThrough(
+          type === "edited" ? editedFileName(origin.fileName) : origin.fileName,
+        );
 
         zip.add(passThrough);
 

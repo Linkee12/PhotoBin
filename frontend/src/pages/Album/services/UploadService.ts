@@ -4,9 +4,13 @@ import { CanvasService } from "./CanvasService";
 import { CryptoService } from "./CryptoService";
 import { formatDate } from "../../../utils/formatDate";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
+import { getChunks, sendFileParts } from "./ChunkUploader";
+import { PartType } from "./ImageQueryService";
 
-const SIZE = { width: 300, height: 200 };
-const QUALITY = 0.5;
+export const THUMBNAIL_SIZE = { width: 300, height: 200 };
+export const REDUCED_QUALITY = 0.5;
+const SIZE = THUMBNAIL_SIZE;
+const QUALITY = REDUCED_QUALITY;
 const VIDEOTYPES = ["video/mp4", "video/webm", "video/ogg"];
 const IMAGETYPES = [
   "image/jpeg",
@@ -214,44 +218,15 @@ export class UploadService {
     if (res.result !== "success") return { isSuccess: false };
   }
   private _getChunks(file: ArrayBuffer) {
-    const SIZE = 1000000; //byte
-    const partsOfFile = [];
-
-    for (let i = 0; i < file.byteLength; i += SIZE) {
-      const part = file.slice(i, i + SIZE);
-      partsOfFile.push(part);
-    }
-    return partsOfFile;
+    return getChunks(file);
   }
 
-  private async *_sendFile(
+  private _sendFile(
     files: ArrayBuffer[],
     albumId: string,
     fileId: string,
-    fileType: "original" | "reduced" | "thumbnail" | "originalVideo" | "unsupportedFile",
+    fileType: PartType,
   ) {
-    const profile = new URLSearchParams(window.location.search).has("profile");
-    for (let i = 0; i < files.length; i++) {
-      const t0 = performance.now();
-      const objUrl = arrayBufferToBase64(files[i]);
-      const tEncoded = performance.now();
-      const responses = await client.uploadFilePart.post({
-        body: {
-          albumId: albumId,
-          fileId: fileId,
-          partName: i.toString(),
-          fileType: fileType,
-          encryptedFile: objUrl,
-        },
-      });
-      const tPosted = performance.now();
-      if (profile) {
-        console.log(
-          `[upload] ${fileType}[${i}] base64: ${Math.round(tEncoded - t0)}ms, post: ${Math.round(tPosted - tEncoded)}ms`,
-        );
-      }
-      if (responses.result !== "success") throw new Error("Error while uploading");
-      yield files[i].byteLength;
-    }
+    return sendFileParts(files, albumId, fileId, fileType);
   }
 }

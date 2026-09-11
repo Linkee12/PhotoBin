@@ -1,13 +1,36 @@
+type ImageSource = HTMLImageElement | HTMLCanvasElement;
+
 export class CanvasService {
   async resize(
-    file: Blob,
+    file: Blob | HTMLCanvasElement,
     options: { quality?: number; targetSize?: { width: number; height: number } } = {},
   ): Promise<ResizedImage> {
-    const imageObj = await this._loadImage(file);
+    const imageObj =
+      file instanceof HTMLCanvasElement ? file : await this._loadImage(file);
     const canvas = this._getCanvasFromImage(imageObj, options.targetSize ?? imageObj);
-    URL.revokeObjectURL(imageObj.src);
+    if (imageObj instanceof HTMLImageElement) URL.revokeObjectURL(imageObj.src);
 
     return new ResizedImage(canvas, options.quality ?? 0.9);
+  }
+
+  /** Draws `file` rotated by `quarterTurns` * 90° clockwise onto a new full-resolution canvas. */
+  async rotate(file: Blob, quarterTurns: number): Promise<HTMLCanvasElement> {
+    const imageObj = await this._loadImage(file);
+    const turns = ((quarterTurns % 4) + 4) % 4;
+    const swap = turns % 2 === 1;
+    const { canvas, ctx } = this._initCanvas({
+      width: swap ? imageObj.height : imageObj.width,
+      height: swap ? imageObj.width : imageObj.height,
+    });
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((turns * Math.PI) / 2);
+    ctx.drawImage(imageObj, -imageObj.width / 2, -imageObj.height / 2);
+    URL.revokeObjectURL(imageObj.src);
+    return canvas;
+  }
+
+  encode(canvas: HTMLCanvasElement, mimeType: string, quality: number): Promise<Blob> {
+    return canvasToBlob(canvas, mimeType, quality);
   }
 
   async getImageFromVideo(file: File): Promise<Blob> {
@@ -43,7 +66,7 @@ export class CanvasService {
   }
 
   private _getCanvasFromImage(
-    imageObj: HTMLImageElement,
+    imageObj: ImageSource,
     target: { width: number; height: number },
   ) {
     const { canvas, ctx } = this._initCanvas(target);
@@ -108,20 +131,26 @@ class ResizedImage {
     return this.canvas.toDataURL();
   }
   get blob() {
-    return this._getBlobFromCanvas(this.canvas, this.quality);
+    return canvasToBlob(this.canvas, "image/webp", this.quality);
   }
-  private _getBlobFromCanvas(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
-    return new Promise((resolve) => {
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            throw new Error("Canvas to blob failed");
-          }
-          resolve(blob);
-        },
-        "image/webp",
-        quality,
-      );
-    });
-  }
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mimeType: string,
+  quality: number,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          reject(new Error("Canvas to blob failed"));
+          return;
+        }
+        resolve(blob);
+      },
+      mimeType,
+      quality,
+    );
+  });
 }

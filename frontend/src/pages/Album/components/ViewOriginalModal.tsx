@@ -4,13 +4,24 @@ import Trash from "@assets/images/icons/trash.svg?react";
 import Exit from "@assets/images/icons/exit.svg?react";
 import Next from "@assets/images/icons/next.svg?react";
 import Prev from "@assets/images/icons/prev.svg?react";
+import Rotate from "@assets/images/icons/rotate.svg?react";
 import { ImageQueryService } from "../services/ImageQueryService";
 import { useEffect, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { CryptoService } from "../services/CryptoService";
+import { CanvasService } from "../services/CanvasService";
+import { editedFileName, RotateService } from "../services/RotateService";
 import { ThumbnailGroup } from "../Album";
 
-const imageDownloadService = new ImageQueryService(new CryptoService());
+const cryptoService = new CryptoService();
+const canvasService = new CanvasService();
+const imageDownloadService = new ImageQueryService(cryptoService);
+const rotateService = new RotateService(
+  canvasService,
+  cryptoService,
+  imageDownloadService,
+);
+const NOTICE_TIMEOUT_MS = 4000;
 
 type ViewOriginalModalProps = {
   fileId: string;
@@ -22,7 +33,7 @@ type ViewOriginalModalProps = {
   onShowChange: (visible: boolean) => void;
 };
 export function ViewOriginalModal(props: ViewOriginalModalProps) {
-  const { metadata, key } = useAlbumContext();
+  const { metadata, key, refreshMetadata } = useAlbumContext();
   const [url, setUrl] = useState<string | undefined>(
     "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=",
   );
@@ -30,7 +41,60 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const [fileName, setFileName] = useState("");
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
+  const [isRotating, setIsRotating] = useState(false);
+  const [isPreparingDownload, setIsPreparingDownload] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const file = metadata?.files.find((file) => file.fileId === props.fileId);
+  const isImage = file?.original !== undefined && file.originalVideo === undefined;
+  const isRotated = isImage && (file.rotation ?? 0) !== 0 && file.edited !== undefined;
+
+  useEffect(() => {
+    if (notice === null) return;
+    const id = setTimeout(() => setNotice(null), NOTICE_TIMEOUT_MS);
+    return () => clearTimeout(id);
+  }, [notice]);
+
+  async function rotate() {
+    if (!metadata || !file || !isImage || isRotating) return;
+    setIsRotating(true);
+    try {
+      const res = await rotateService.rotateClockwise(metadata.albumId, file, key);
+      if (res.result === "edit-in-progress") {
+        setNotice("Someone is editing this photo, try again shortly");
+      } else {
+        refreshMetadata();
+      }
+    } catch (e) {
+      console.error(e);
+      setNotice("Rotation failed, please try again");
+    } finally {
+      setIsRotating(false);
+    }
+  }
+
+  /** Images are fetched on demand: `edited` when rotated (unless `untouched`), else `original`. */
+  async function downloadImage(untouched: boolean) {
+    if (!metadata || !file || isPreparingDownload) return;
+    setIsPreparingDownload(true);
+    try {
+      const type = isRotated && !untouched ? "edited" : "original";
+      const result = await imageDownloadService.getImg(metadata.albumId, file, key, type);
+      if (!result) return;
+      const url = URL.createObjectURL(result.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = type === "edited" ? editedFileName(result.fileName) : result.fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      setNotice("Download failed, please try again");
+    } finally {
+      setIsPreparingDownload(false);
+    }
+  }
   useEffect(() => {
     const body = document.body;
 
@@ -150,7 +214,17 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           >
             <Icons as={Trash} />
           </Button>
-          {downloadUrl ? (
+          {isImage ? (
+            <ImageActions
+              fileName={fileName}
+              isRotated={isRotated}
+              isRotating={isRotating}
+              isPreparingDownload={isPreparingDownload}
+              onDownload={downloadImage}
+              onRotate={rotate}
+            />
+          ) : // eslint-disable-next-line sonarjs/no-nested-conditional
+          downloadUrl ? (
             <Button
               as="a"
               style={{ padding: "0px" }}
@@ -166,6 +240,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
             </Button>
           )}
         </ButtonGroup>
+        {notice && <Notice role="status">{notice}</Notice>}
         <Button onClick={() => props.onShowChange(!props.visible)}>
           <Icons as={Exit} />
         </Button>
@@ -211,6 +286,50 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         <Icons as={Next} />
       </NextButton>
     </Container>
+  );
+}
+
+function ImageActions(props: {
+  fileName: string;
+  isRotated: boolean;
+  isRotating: boolean;
+  isPreparingDownload: boolean;
+  onDownload: (untouched: boolean) => void;
+  onRotate: () => void;
+}) {
+  const iconStyle = { opacity: props.isPreparingDownload ? 0.4 : 1 };
+  return (
+    <>
+      <Button
+        disabled={props.isPreparingDownload}
+        onClick={() => props.onDownload(false)}
+        title={
+          props.isRotated
+            ? `Download rotated ${props.fileName}`
+            : `Download ${props.fileName}`
+        }
+      >
+        <Icons as={SimpleCloud} style={iconStyle} />
+      </Button>
+      {props.isRotated && (
+        <Button
+          style={{ width: "auto" }}
+          disabled={props.isPreparingDownload}
+          onClick={() => props.onDownload(true)}
+          title="Download untouched original"
+        >
+          <Icons as={SimpleCloud} style={iconStyle} />
+          <ButtonLabel>original</ButtonLabel>
+        </Button>
+      )}
+      <Button
+        disabled={props.isRotating}
+        onClick={() => props.onRotate()}
+        title="Rotate 90° clockwise"
+      >
+        {props.isRotating ? <ButtonSpinner /> : <Icons as={Rotate} />}
+      </Button>
+    </>
   );
 }
 
@@ -290,6 +409,33 @@ const ButtonBar = styled("div", {
 });
 const ButtonGroup = styled("div", {
   display: "flex",
+});
+const ButtonLabel = styled("span", {
+  fontFamily: "Open Sans",
+  fontSize: "0.7rem",
+  color: "#fff",
+  marginLeft: "0.25rem",
+});
+const ButtonSpinner = styled("div", {
+  width: "1.25rem",
+  height: "1.25rem",
+  border: "3px solid rgba(255, 255, 255, 0.3)",
+  borderTop: "3px solid white",
+  borderRadius: "50%",
+  animation: "spin 1s linear infinite",
+});
+const Notice = styled("div", {
+  position: "absolute",
+  top: "3.5rem",
+  left: "50%",
+  transform: "translateX(-50%)",
+  padding: "0.5rem 1rem",
+  borderRadius: "0.5rem",
+  backgroundColor: "rgba(26, 26, 26, 0.95)",
+  color: "#fff",
+  fontFamily: "Open Sans",
+  fontSize: "0.9rem",
+  whiteSpace: "nowrap",
 });
 const NextButton = styled("button", {
   display: "flex",

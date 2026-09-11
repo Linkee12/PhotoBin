@@ -3,6 +3,11 @@ import { client } from "../../../cuple";
 import { base64ToArrayBuffer } from "../../../utils/base64";
 import { CryptoService } from "./CryptoService";
 
+export type PartType = Exclude<
+  keyof Metadata["files"][number],
+  "fileName" | "date" | "fileId" | "rotation"
+>;
+
 export class ImageQueryService {
   constructor(private _cryptoService: CryptoService) {}
 
@@ -10,7 +15,7 @@ export class ImageQueryService {
     albumId: string,
     file: Metadata["files"][number],
     key: string,
-    type: "original" | "reduced" | "thumbnail" | "originalVideo" | "unsupportedFile",
+    type: PartType,
   ) {
     let parts: ArrayBuffer[] = [];
     if (!file[type]) return;
@@ -53,7 +58,7 @@ export class ImageQueryService {
   private async _getPartsOfImage(
     albumId: string,
     id: string,
-    type: "original" | "reduced" | "thumbnail" | "originalVideo" | "unsupportedFile",
+    type: PartType,
     name: string,
   ) {
     const response = await client.getPartOfImage.get({
