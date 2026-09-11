@@ -31,7 +31,7 @@ export class CryptoService {
    * Encrypts a file with AES-GCM. Pass `iv` to reproduce the exact ciphertext
    * of an earlier run (resumed uploads); omit it to get a fresh random IV.
    */
-  async encryptImage(file: File | Blob, key: string, iv: Uint8Array = randomIv()) {
+  async encryptImage(file: File | Blob, key: string, iv: Uint8Array<ArrayBuffer> = randomIv()) {
     const buffer = await file.arrayBuffer();
     const cryptedImg = await window.crypto.subtle.encrypt(
       { name: "AES-GCM", iv },
@@ -40,7 +40,7 @@ export class CryptoService {
     );
     return { cryptedImg, iv };
   }
-  async encrypString(text: string, key: string, iv: Uint8Array = randomIv()) {
+  async encrypString(text: string, key: string, iv: Uint8Array<ArrayBuffer> = randomIv()) {
     const encoder = new TextEncoder();
     const encodedText = encoder.encode(text);
     const encryptedText = await window.crypto.subtle.encrypt(
