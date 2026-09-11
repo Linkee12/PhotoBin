@@ -83,11 +83,11 @@ const UnsupportedFileName = styled("p", {
 });
 
 const Preview = styled("div", {
-  "@landscape": {
+  "@wide": {
     minWidth: "150px",
     maxWidth: "300px",
   },
-  "@portrait": {
+  "@narrow": {
     width: "90vw",
   },
   width: "100%",
