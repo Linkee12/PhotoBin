@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-PhotoBin is a temporary, E2E-encrypted photo album sharing app. Users create an album, share the link, and all participants can upload/download photos. The encryption key lives only in the URL hash fragment — the server never sees plaintext data. Albums auto-expire after 30 days (configurable via `ALBUM_TTL_MS`); `AlbumService.cleanStorage` is invoked on backend startup and every `CLEANUP_INTERVAL_MS` (default 1 hour) by a `setInterval` registered in `backend/src/index.ts`.
+PhotoBin is a temporary, E2E-encrypted photo album sharing app. Users create an album, share the link, and all participants can upload/download photos. The encryption key lives only in the URL hash fragment — the server never sees plaintext data. Albums auto-expire after 30 days (configurable via `ALBUM_TTL_MS`); `AlbumService.cleanStorage` is invoked on backend startup and every `CLEANUP_INTERVAL_MS` (default 1 hour) by a `setInterval` registered in `backend/src/index.ts`. The same pass also deletes unfinalized file directories (not referenced in `metadata.json`) that have not been written to for `ORPHAN_TTL_MS` (default 24 hours).
 
 ## Development
 
@@ -59,6 +59,8 @@ This means the frontend also directly imports the `Metadata` type from `backend/
 3. Before upload, `CryptoService` encrypts each file (and its filename/date) using `window.crypto.subtle`.
 4. Encrypted bytes are base64-encoded and sent to the backend as JSON.
 5. On download, `ImageQueryService` reassembles chunks, then `CryptoService` decrypts client-side.
+
+Uploads are resumable: `UploadService` asks `getUploadedParts` which chunks the server already has and sends only the missing ones. Across reloads, `PendingUploadStore` keeps a small localStorage record per album (fingerprint, fileId, IVs, chunk counts, encrypted name/date, never file bytes) so re-picking the same file re-encrypts with the stored IV (AES-GCM is deterministic for the same key + IV + plaintext). Only `original` / `originalVideo` / `unsupportedFile` are resumed; canvas-derived `thumbnail` / `reduced` are always re-uploaded with fresh IVs.
 
 ### File storage on the backend
 Files live under `backend/albums/` (gitignored in prod, mounted as a PVC in k8s):

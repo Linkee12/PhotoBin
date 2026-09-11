@@ -203,6 +203,8 @@ export function AlbumContent(props: AlbumContentProps) {
             onChange={(e) => {
               if (e.target.files != null) {
                 const array = Array.from(e.target.files);
+                // Reset so picking the same file again (to resume it) fires onChange.
+                e.target.value = "";
                 uploadImages(array).catch((e) => console.error(e));
               }
             }}
@@ -215,8 +217,8 @@ export function AlbumContent(props: AlbumContentProps) {
 
 function warnBeforeUnload(e: BeforeUnloadEvent) {
   e.preventDefault();
-  // Legacy browsers only show the prompt when returnValue is set.
-  e.returnValue = "";
+  // Legacy browsers (e.g. Chrome < 119) only show the prompt when returnValue is set.
+  e.returnValue = true;
 }
 
 type BatchYield =
