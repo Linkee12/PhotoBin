@@ -35,7 +35,7 @@ export class UploadService {
   // eslint-disable-next-line sonarjs/cognitive-complexity
   async *upload(
     file: File,
-    props: { key: string; albumId: string },
+    props: { key: string | null; albumId: string },
   ): AsyncGenerator<UploadYield> {
     const profile = new URLSearchParams(window.location.search).has("profile");
     const t0 = performance.now();
@@ -189,7 +189,7 @@ export class UploadService {
     };
   }
 
-  async saveName(albumId: string, name: string, key: string) {
+  async saveName(albumId: string, name: string, key: string | null) {
     const cryptedName = await this._cryptoService.encrypString(name, key);
     const iv = uint8ArrayToBase64(cryptedName.iv);
     const value = arrayBufferToBase64(cryptedName.encryptedText);

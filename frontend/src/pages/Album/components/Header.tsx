@@ -6,6 +6,7 @@ import UnselectAll from "@assets/images/icons/unselectAll.svg?react";
 import { styled } from "../../../stitches.config";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
+import { useAlbumContext } from "../hooks/useAlbumContext";
 
 type HeaderProps = {
   isEmptyAlbum: boolean;
@@ -18,6 +19,7 @@ type HeaderProps = {
 };
 
 export function Header(props: HeaderProps) {
+  const { isEncrypted } = useAlbumContext();
   const [isEdit, setIsEdit] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const inputRef = useRef<any>(null);
@@ -58,18 +60,25 @@ export function Header(props: HeaderProps) {
             </Text>
           )}
         </TextContainer>
-        <SelectAllContainer
-          onClick={props.selectedAll ? props.onUnselectAll : props.onSelectAll}
-        >
-          {props.isEmptyAlbum ? (
-            <></>
-          ) : (
-            <>
-              <Icons as={props.selectedAll ? SelectAll : UnselectAll} />
-              <p>SELECT ALL</p>
-            </>
+        <BottomRow>
+          <SelectAllContainer
+            onClick={props.selectedAll ? props.onUnselectAll : props.onSelectAll}
+          >
+            {props.isEmptyAlbum ? (
+              <></>
+            ) : (
+              <>
+                <Icons as={props.selectedAll ? SelectAll : UnselectAll} />
+                <p>SELECT ALL</p>
+              </>
+            )}
+          </SelectAllContainer>
+          {!isEncrypted && (
+            <Badge title="This album is stored unencrypted and is readable by the server">
+              NOT ENCRYPTED
+            </Badge>
           )}
-        </SelectAllContainer>
+        </BottomRow>
       </StartContainer>
       <Tools>
         <Button
@@ -167,6 +176,22 @@ const StartContainer = styled("div", {
   height: "7.5rem",
   flexDirection: "column",
   justifyContent: "space-between",
+});
+const BottomRow = styled("div", {
+  display: "flex",
+  alignItems: "center",
+  gap: "1rem",
+  zIndex: 1,
+});
+const Badge = styled("span", {
+  fontSize: "0.7rem",
+  fontWeight: "700",
+  letterSpacing: "0.05em",
+  color: "#ffa021",
+  border: "1px solid #ffa021",
+  borderRadius: "1em",
+  padding: "0.15em 0.6em",
+  whiteSpace: "nowrap",
 });
 const SelectAllContainer = styled("div", {
   cursor: "pointer",

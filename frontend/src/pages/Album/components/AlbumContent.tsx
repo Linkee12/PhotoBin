@@ -173,7 +173,7 @@ export function AlbumContent(props: AlbumContentProps) {
 async function* upload(params: {
   uploadService: UploadService;
   files: File[];
-  key: string;
+  key: string | null;
   metadata: { albumId: string };
 }) {
   const arrLength = params.files.length;

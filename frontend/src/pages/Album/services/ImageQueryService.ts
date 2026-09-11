@@ -9,7 +9,7 @@ export class ImageQueryService {
   async getImg(
     albumId: string,
     file: Metadata["files"][number],
-    key: string,
+    key: string | null,
     type: "original" | "reduced" | "thumbnail" | "originalVideo" | "unsupportedFile",
   ) {
     let parts: ArrayBuffer[] = [];

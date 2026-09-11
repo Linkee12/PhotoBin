@@ -4,11 +4,28 @@ import { styled } from "../../stitches.config";
 import Header from "./components/Header";
 import Intro from "./components/Intro";
 import { useNavigate } from "react-router";
+import { useState } from "react";
 import { genKey } from "../../utils/key";
 import { Panel, PanelHeader, PushDown } from "../Album/components/Panel";
 
 export default function Home() {
   const navigate = useNavigate();
+  const [encrypt, setEncrypt] = useState(true);
+
+  function createAlbum() {
+    const albumId = crypto.randomUUID();
+    if (!encrypt) {
+      navigate(`/bin/${albumId}`);
+      return;
+    }
+    genKey()
+      .then((albumKey) => {
+        navigate(`/bin/${albumId}#${albumKey}`);
+      })
+      .catch((e) => {
+        console.error(e);
+      });
+  }
 
   return (
     <Container>
@@ -32,28 +49,31 @@ export default function Home() {
             doesn't send the key to the server because everything after "#" is ignored in
             an http request.
           </Text>
+          <Text>
+            You can also create an <b>unencrypted</b> album. Its photos are stored as-is,
+            so the server (and anyone with access to it) can read them. Only do this when
+            you don't need privacy from the server.
+          </Text>
           <Text css={{ "--size": "1.2em", "--weight": "bold" }}>
             Photobin is free and open-source!
           </Text>
         </P>
-        <PushDown style={{ height: "8em" }} />
+        <PushDown style={{ height: "10em" }} />
       </Panel>
 
       <FloatingFooter>
-        <Text css={{ "--color": "#808080" }}>Start your E2E encrypted album</Text>
-        <Button
-          onClick={() => {
-            genKey()
-              .then((key) => {
-                const albumId = crypto.randomUUID();
-                const albumKey = key;
-                navigate(`/bin/${albumId}#${albumKey}`);
-              })
-              .catch((e) => {
-                console.error(e);
-              });
-          }}
-        >
+        <Text css={{ "--color": "#808080" }}>
+          {encrypt ? "Start your E2E encrypted album" : "Start your unencrypted album"}
+        </Text>
+        <EncryptToggle>
+          <input
+            type="checkbox"
+            checked={encrypt}
+            onChange={(e) => setEncrypt(e.target.checked)}
+          />
+          Encrypt album (recommended)
+        </EncryptToggle>
+        <Button onClick={createAlbum}>
           <Text css={{ "--weight": "bold" }}>NEW ALBUM</Text>
         </Button>
       </FloatingFooter>
@@ -97,6 +117,20 @@ const Button = styled("div", {
   },
 });
 
+const EncryptToggle = styled("label", {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5em",
+  cursor: "pointer",
+  fontSize: "0.9em",
+  color: "#c0c0c0",
+  marginBottom: "0.75em",
+  "& input": {
+    accentColor: "#ffa021",
+    cursor: "pointer",
+  },
+});
+
 const FloatingFooter = styled("div", {
   position: "fixed",
   bottom: 0,
@@ -111,7 +145,7 @@ const FloatingFooter = styled("div", {
   backgroundColor: "#333333",
   borderRadius: "50vw 50vw 0 0 / 5vw 5vw 0 0",
   paddingBottom: "1em",
-  height: "8em",
+  height: "9.5em",
 });
 
 const Text = styled("p", {
