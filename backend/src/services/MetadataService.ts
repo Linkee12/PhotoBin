@@ -1,15 +1,17 @@
 import type fs from "fs";
 import path from "node:path";
 
-const ALBUMS_ROOT = path.resolve("./albums");
+const DEFAULT_ALBUMS_ROOT = path.resolve("./albums");
 
-function safeMetadataPath(albumId: string) {
-  const resolved = path.resolve(ALBUMS_ROOT, albumId, "metadata.json");
-  if (!resolved.startsWith(ALBUMS_ROOT + path.sep)) {
+function safeMetadataPath(albumsRoot: string, albumId: string) {
+  const resolved = path.resolve(albumsRoot, albumId, "metadata.json");
+  if (!resolved.startsWith(albumsRoot + path.sep)) {
     throw new Error("Path traversal blocked");
   }
   return resolved;
 }
+
+export type FilePart = { iv: string; chunkCount: number };
 
 export type Metadata = {
   albumId: string;
@@ -24,11 +26,15 @@ export type Metadata = {
       iv: string;
     };
     fileId: string;
-    original?: { iv: string; chunkCount: number } | undefined;
-    reduced?: { iv: string; chunkCount: number } | undefined;
-    thumbnail?: { iv: string; chunkCount: number } | undefined;
-    originalVideo?: { iv: string; chunkCount: number } | undefined;
-    unsupportedFile?: { iv: string; chunkCount: number } | undefined;
+    original?: FilePart | undefined;
+    reduced?: FilePart | undefined;
+    thumbnail?: FilePart | undefined;
+    originalVideo?: FilePart | undefined;
+    unsupportedFile?: FilePart | undefined;
+    /** Quarter turns clockwise applied to `original`; undefined means 0. Stored in plaintext. */
+    rotation?: 0 | 1 | 2 | 3 | undefined;
+    /** Full-resolution rotated re-encode of `original`; present only when rotation !== 0. */
+    edited?: FilePart | undefined;
   }[];
 };
 
@@ -41,9 +47,10 @@ const DEFAULT_METADATA = (albumId: string): Metadata => ({
 export class MetadataService {
   constructor(
     private _fs: Pick<typeof fs, "existsSync" | "readFileSync" | "writeFileSync">,
+    private _albumsRoot: string = DEFAULT_ALBUMS_ROOT,
   ) {}
   get(albumId: string): Metadata {
-    const metadataPath = safeMetadataPath(albumId);
+    const metadataPath = safeMetadataPath(this._albumsRoot, albumId);
     const fileExists = this._fs.existsSync(metadataPath);
     if (fileExists) {
       return JSON.parse(this._fs.readFileSync(metadataPath, "utf8"));
@@ -52,11 +59,29 @@ export class MetadataService {
     }
   }
   save(albumId: string, metadata: Metadata) {
-    this._fs.writeFileSync(safeMetadataPath(albumId), JSON.stringify(metadata));
+    this._fs.writeFileSync(
+      safeMetadataPath(this._albumsRoot, albumId),
+      JSON.stringify(metadata),
+    );
   }
   addFile(albumId: string, file: Metadata["files"][0]) {
     const current = this.get(albumId);
     current.files.push(file);
+    this.save(albumId, current);
+  }
+  /**
+   * Merges `patch` into the file entry. Keys explicitly set to `undefined`
+   * are removed from the entry (e.g. dropping `edited`).
+   */
+  updateFile(albumId: string, fileId: string, patch: Partial<Metadata["files"][0]>) {
+    const current = this.get(albumId);
+    const file = current.files.find((f) => f.fileId === fileId);
+    if (!file) throw new Error("File not found in metadata");
+    for (const [k, v] of Object.entries(patch)) {
+      const key = k as keyof Metadata["files"][0];
+      if (v === undefined) delete file[key];
+      else (file as Record<string, unknown>)[key] = v;
+    }
     this.save(albumId, current);
   }
   removeFile(albumId: string, fileId: string) {

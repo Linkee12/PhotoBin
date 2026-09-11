@@ -1,12 +1,10 @@
-export type PartType =
-  | "original"
-  | "reduced"
-  | "thumbnail"
-  | "originalVideo"
-  | "unsupportedFile";
+import type { PartType } from "../../../../../backend/src/utils/zod";
+
+export type { PartType };
 
 /** Must stay below `MAX_PART_BYTES` on the backend. Progress is reported per chunk,
- * so this is a compromise between request count and progress-bar granularity. */
+ * so this is a compromise between request count and progress-bar granularity.
+ * Resume records store chunk counts, so every upload path must slice with this. */
 export const CHUNK_SIZE = 2 * 1024 * 1024;
 /** Chunk requests in flight at once for a single file. */
 export const UPLOAD_CONCURRENCY = 4;
@@ -14,8 +12,15 @@ export const DOWNLOAD_CONCURRENCY = 4;
 
 const PARTS_PATH = "/api/parts";
 
-function partUrl(albumId: string, fileId: string, type: PartType, part: number) {
-  return `${PARTS_PATH}/${albumId}/${fileId}/${type}/${part}`;
+function partUrl(
+  albumId: string,
+  fileId: string,
+  type: PartType,
+  part: number,
+  editId?: string,
+) {
+  const url = `${PARTS_PATH}/${albumId}/${fileId}/${type}/${part}`;
+  return editId === undefined ? url : `${url}?editId=${encodeURIComponent(editId)}`;
 }
 
 /**
@@ -24,19 +29,25 @@ function partUrl(albumId: string, fileId: string, type: PartType, part: number) 
  * inflation and no JSON parsing of multi-megabyte strings on either side.
  */
 export class PartTransport {
+  /**
+   * Stores one chunk. With `editId` it lands in the file's edit staging dir
+   * (see `AlbumService.beginEdit`). `signal` aborts the request in flight.
+   */
   async put(
     albumId: string,
     fileId: string,
     type: PartType,
     part: number,
     bytes: ArrayBuffer,
+    options: { editId?: string; signal?: AbortSignal } = {},
   ) {
-    const response = await fetch(partUrl(albumId, fileId, type, part), {
+    const response = await fetch(partUrl(albumId, fileId, type, part, options.editId), {
       method: "PUT",
       headers: { "Content-Type": "application/octet-stream" },
       // Chromium streams Blob bodies straight from the browser process, while
       // ArrayBuffer bodies are copied through the renderer at ~10 MB/s.
       body: new Blob([bytes]),
+      signal: options.signal,
     });
     if (!response.ok)
       throw new Error(`Upload of ${type}[${part}] failed: ${response.status}`);

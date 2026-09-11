@@ -17,6 +17,12 @@ type UseZoomPanOptions = {
   resetKey: unknown;
   /** While false the zoom is reset to 1x (e.g. modal closed). */
   enabled: boolean;
+  /**
+   * Size of the picture as drawn at 1x, when it differs from the plain
+   * `object-fit: contain` box of the image (e.g. the image is rotated by an
+   * inner transform of its own). Defaults to `drawnSize(image)`.
+   */
+  pictureSize?: (image: HTMLImageElement) => { width: number; height: number };
 };
 
 const IDENTITY: ZoomTransform = { scale: 1, tx: 0, ty: 0 };
@@ -42,7 +48,7 @@ function toCss({ scale, tx, ty }: ZoomTransform) {
  * `offsetWidth/Height` is the layout box (which may be larger than the picture),
  * so the drawn size is derived from the intrinsic aspect ratio instead.
  */
-function drawnSize(image: HTMLImageElement) {
+export function drawnSize(image: HTMLImageElement) {
   const boxWidth = image.offsetWidth;
   const boxHeight = image.offsetHeight;
   const { naturalWidth, naturalHeight } = image;
@@ -56,15 +62,27 @@ function drawnSize(image: HTMLImageElement) {
 /**
  * Zoom / pan behaviour for a full screen image.
  *
- * The transform is written straight to the image element's `style.transform`
+ * The transform is written straight to the target element's `style.transform`
  * (as `translate(tx, ty) scale(scale)` with the default, centered, transform
  * origin) from a single coalesced animation frame, so pointer / wheel events never
  * go through React state. Only `isZoomed` is React state and it changes only when
  * the scale crosses 1x. The pointer handlers are meant for a full screen wrapper.
+ *
+ * `imageRef` is the `<img>` that is measured; `targetRef` is the element that
+ * receives the transform. Leave `targetRef` unattached to transform the image
+ * itself, or attach it to a layer around the image when the image carries a
+ * transform of its own (rotation) that must not be overwritten.
  */
-export function useZoomPan({ resetKey, enabled }: UseZoomPanOptions) {
+export function useZoomPan({ resetKey, enabled, pictureSize }: UseZoomPanOptions) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const targetRef = useRef<HTMLDivElement | null>(null);
+  const pictureSizeRef = useRef(pictureSize);
+  pictureSizeRef.current = pictureSize;
+  const measure = useCallback(
+    (image: HTMLImageElement) => (pictureSizeRef.current ?? drawnSize)(image),
+    [],
+  );
   const transformRef = useRef<ZoomTransform>(IDENTITY);
   const frame = useRef<number | null>(null);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -78,10 +96,10 @@ export function useZoomPan({ resetKey, enabled }: UseZoomPanOptions) {
 
   const paint = useCallback(() => {
     frame.current = null;
-    const image = imageRef.current;
-    if (!image) return;
+    const target = targetRef.current ?? imageRef.current;
+    if (!target) return;
     const css = toCss(transformRef.current);
-    if (image.style.transform !== css) image.style.transform = css;
+    if (target.style.transform !== css) target.style.transform = css;
   }, []);
 
   const schedulePaint = useCallback(() => {
@@ -100,20 +118,23 @@ export function useZoomPan({ resetKey, enabled }: UseZoomPanOptions) {
     [schedulePaint],
   );
 
-  const clampTransform = useCallback((next: ZoomTransform): ZoomTransform => {
-    const scale = clamp(next.scale, MIN_SCALE, MAX_SCALE);
-    const wrapper = wrapperRef.current;
-    const image = imageRef.current;
-    if (!wrapper || !image) return { scale, tx: 0, ty: 0 };
-    const picture = drawnSize(image);
-    const maxTx = Math.max(0, (picture.width * scale - wrapper.clientWidth) / 2);
-    const maxTy = Math.max(0, (picture.height * scale - wrapper.clientHeight) / 2);
-    return {
-      scale,
-      tx: clamp(next.tx, -maxTx, maxTx),
-      ty: clamp(next.ty, -maxTy, maxTy),
-    };
-  }, []);
+  const clampTransform = useCallback(
+    (next: ZoomTransform): ZoomTransform => {
+      const scale = clamp(next.scale, MIN_SCALE, MAX_SCALE);
+      const wrapper = wrapperRef.current;
+      const image = imageRef.current;
+      if (!wrapper || !image) return { scale, tx: 0, ty: 0 };
+      const picture = measure(image);
+      const maxTx = Math.max(0, (picture.width * scale - wrapper.clientWidth) / 2);
+      const maxTy = Math.max(0, (picture.height * scale - wrapper.clientHeight) / 2);
+      return {
+        scale,
+        tx: clamp(next.tx, -maxTx, maxTx),
+        ty: clamp(next.ty, -maxTy, maxTy),
+      };
+    },
+    [measure],
+  );
 
   /** Zooms to `nextScale` keeping the image point under `point` fixed on screen. */
   const zoomAround = useCallback(
@@ -171,21 +192,24 @@ export function useZoomPan({ resetKey, enabled }: UseZoomPanOptions) {
    * covers the whole wrapper (letterbox included), so the element under the pointer
    * says nothing about that.
    */
-  const isOnPicture = useCallback((point: Point) => {
-    const wrapper = wrapperRef.current;
-    const image = imageRef.current;
-    if (!wrapper || !image) return false;
-    const { scale, tx, ty } = transformRef.current;
-    const picture = drawnSize(image);
-    const halfWidth = (picture.width * scale) / 2;
-    const halfHeight = (picture.height * scale) / 2;
-    const centerX = wrapper.clientWidth / 2 + tx;
-    const centerY = wrapper.clientHeight / 2 + ty;
-    return (
-      Math.abs(point.x - centerX) <= halfWidth &&
-      Math.abs(point.y - centerY) <= halfHeight
-    );
-  }, []);
+  const isOnPicture = useCallback(
+    (point: Point) => {
+      const wrapper = wrapperRef.current;
+      const image = imageRef.current;
+      if (!wrapper || !image) return false;
+      const { scale, tx, ty } = transformRef.current;
+      const picture = measure(image);
+      const halfWidth = (picture.width * scale) / 2;
+      const halfHeight = (picture.height * scale) / 2;
+      const centerX = wrapper.clientWidth / 2 + tx;
+      const centerY = wrapper.clientHeight / 2 + ty;
+      return (
+        Math.abs(point.x - centerX) <= halfWidth &&
+        Math.abs(point.y - centerY) <= halfHeight
+      );
+    },
+    [measure],
+  );
 
   // React registers wheel listeners as passive, so preventDefault has to go through
   // a native, non-passive listener.
@@ -301,6 +325,7 @@ export function useZoomPan({ resetKey, enabled }: UseZoomPanOptions) {
 
   return {
     wrapperRef,
+    targetRef,
     imageRef,
     isZoomed,
     reset,

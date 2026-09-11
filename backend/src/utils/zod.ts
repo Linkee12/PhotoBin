@@ -7,8 +7,22 @@ export const partTypeSchema = z.enum([
   "thumbnail",
   "originalVideo",
   "unsupportedFile",
+  "edited",
 ]);
+/** Part types that may be replaced through the edit lifecycle. */
+export const editablePartTypeSchema = z.enum(["edited", "reduced", "thumbnail"]);
+export const rotationSchema = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+]);
+export const filePartSchema = z.object({
+  iv: z.string(),
+  chunkCount: z.number(),
+});
 export const partNameSchema = z.string().regex(/^\d+$/, "partName must be numeric");
+export type PartType = z.infer<typeof partTypeSchema>;
 
 export const fileMetadataSchema = z.object({
   fileId: uuidSchema,
@@ -50,6 +64,15 @@ export const fileMetadataSchema = z.object({
       chunkCount: z.number(),
     })
     .optional(),
+  rotation: rotationSchema.optional(),
+  edited: filePartSchema.optional(),
+});
+
+export const editPatchSchema = z.object({
+  rotation: rotationSchema,
+  edited: filePartSchema.optional(),
+  reduced: filePartSchema,
+  thumbnail: filePartSchema,
 });
 
 export const metadataSchema = z.object({

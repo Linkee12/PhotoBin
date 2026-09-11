@@ -12,10 +12,10 @@ import {
   UPLOAD_CONCURRENCY,
 } from "./PartTransport";
 
-const THUMBNAIL_SIZE = { width: 300, height: 200 };
+export const THUMBNAIL_SIZE = { width: 300, height: 200 };
 /** The reduced rendition only feeds the fullscreen viewer, so cap it at screen-ish size. */
-const REDUCED_MAX_EDGE = 2560;
-const REDUCED_QUALITY = 0.8;
+export const REDUCED_MAX_EDGE = 2560;
+export const REDUCED_QUALITY = 0.8;
 /** Originals at most this big (bytes) and within `REDUCED_MAX_EDGE` are shown as-is. */
 const SKIP_REDUCED_BELOW_BYTES = 2 * 1024 * 1024;
 const VIDEOTYPES = ["video/mp4", "video/webm", "video/ogg"];

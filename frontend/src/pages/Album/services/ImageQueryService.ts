@@ -7,6 +7,8 @@ import {
   PartType,
 } from "./PartTransport";
 
+export type { PartType };
+
 export class ImageQueryService {
   private _transport = new PartTransport();
 

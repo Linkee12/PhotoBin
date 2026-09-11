@@ -1,5 +1,5 @@
 import { styled } from "../../stitches.config";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CanvasService } from "./services/CanvasService";
 import { UploadService } from "./services/UploadService";
 import { useParams } from "react-router";
@@ -47,6 +47,9 @@ export default function Album() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [emptyAlbum, setEmptyAlbum] = useState(false);
   const [isLoadingThumbnails, setIsLoadingThumbnails] = useState(false);
+  // thumbnail.iv per fileId as last seen in metadata; a changed iv means the
+  // thumbnail was replaced server-side (e.g. rotation) and must be refetched.
+  const thumbnailVersions = useRef(new Map<string, string | undefined>());
   const showUploader = (thumbnails.length === 0 && emptyAlbum) || isUploading;
 
   useEffect(() => {
@@ -59,13 +62,18 @@ export default function Album() {
         thumb.thumbnails.forEach((t) => oldThumbnailIds.add(t.id)),
       );
 
+      const versions = thumbnailVersions.current;
       const newThumbnails = metadata.files.filter(
-        (file) => !oldThumbnailIds.has(file.fileId),
+        (file) =>
+          !oldThumbnailIds.has(file.fileId) ||
+          (versions.has(file.fileId) && versions.get(file.fileId) !== file.thumbnail?.iv),
       );
+      metadata.files.forEach((file) => versions.set(file.fileId, file.thumbnail?.iv));
       const loadThumbnails = async () => {
         for await (const thumb of getThumbnails(newThumbnails)) {
           if (cancelled) break;
           setThumbnails((prev) => {
+            if (oldThumbnailIds.has(thumb.id)) return replaceThumbnail(prev, thumb);
             const grouped = groupThumbnailsByDate([thumb]);
             return mergeThumbnailGroups(prev, grouped);
           });
@@ -189,6 +197,16 @@ export default function Album() {
     }
 
     return merged;
+  }
+  function replaceThumbnail(prev: ThumbnailGroup[], next: Thumbnail) {
+    return prev.map((group) => ({
+      ...group,
+      thumbnails: group.thumbnails.map((thumb) => {
+        if (thumb.id !== next.id) return thumb;
+        if (thumb.thumbnail?.startsWith("blob:")) URL.revokeObjectURL(thumb.thumbnail);
+        return { ...thumb, thumbnail: next.thumbnail };
+      }),
+    }));
   }
   function nextOriginImgId(direction: number) {
     const ids: string[] = [];
