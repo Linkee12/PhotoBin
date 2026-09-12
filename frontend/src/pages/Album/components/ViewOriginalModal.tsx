@@ -31,6 +31,7 @@ const NOTICE_TIMEOUT_MS = 4000;
 /** Clicks within this window are coalesced into a single rotation request. */
 const ROTATE_DEBOUNCE_MS = 700;
 const ROTATE_ANIMATION_MS = 200;
+const REVOKE_DELAY_MS = 60_000;
 const PLACEHOLDER_GIF =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=";
 
@@ -123,6 +124,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const serverRotationsRef = useRef(new Map<string, Rotation>());
   const shownFileIdRef = useRef<string | undefined>(undefined);
   const flushRotationRef = useRef<() => void>(() => undefined);
+  /** Object URLs created here (reduced/edited/video/unsupported blobs), revoked when replaced. */
+  const ownedUrlsRef = useRef(new Set<string>());
 
   // --- Zoom / pan ------------------------------------------------------------
   // The zoom transform goes on a layer around the image (`targetRef`), the
@@ -252,7 +255,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Chromium starts the download asynchronously; revoking right away can
+      // make the blob fetch fail. Revoke once the download has certainly begun.
+      setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
     } catch (e) {
       console.error(e);
       setNotice("Download failed, please try again");
@@ -331,7 +336,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
             key,
             part.type,
           );
+          if (reduced?.img !== undefined && cancelled) URL.revokeObjectURL(reduced.img);
           if (!cancelled && reduced?.img !== undefined) {
+            ownedUrlsRef.current.add(reduced.img);
             await showImage(reduced.img, part.rotation);
             if (!cancelled) setStage("reduced");
             setFileName(reduced.fileName);
@@ -345,7 +352,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
               key,
               "originalVideo",
             );
-            if (!cancelled && video !== undefined) {
+            if (video?.img !== undefined && cancelled) URL.revokeObjectURL(video.img);
+            if (!cancelled && video?.img !== undefined) {
+              ownedUrlsRef.current.add(video.img);
               setUrl(video.img);
               setDownloadUrl(video.img);
               setFileName(video.fileName);
@@ -363,7 +372,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           if (!cancelled && unsupported !== undefined) {
             setUrl("");
             setFileName(unsupported.fileName);
-            setDownloadUrl(URL.createObjectURL(unsupported.blob));
+            const unsupportedUrl = URL.createObjectURL(unsupported.blob);
+            ownedUrlsRef.current.add(unsupportedUrl);
+            setDownloadUrl(unsupportedUrl);
           }
         } else {
           if (!cancelled) setUrl("");
@@ -389,9 +400,27 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     metadata?.albumId,
   ]);
 
+  // Object URLs are revoked once they stop being displayed. The displayed
+  // `url` is revoked only when it is replaced (a video's `downloadUrl` aliases
+  // it, and the <img> may be remounted with the old src for one render when
+  // switching between the video and the photo layouts).
+  // Only URLs this modal created are revoked; thumbnails belong to the grid.
+  const urlRef = useRef(url);
+  urlRef.current = url;
   useEffect(() => {
     return () => {
-      if (downloadUrl?.startsWith("blob:")) URL.revokeObjectURL(downloadUrl);
+      if (url !== undefined && ownedUrlsRef.current.delete(url)) URL.revokeObjectURL(url);
+    };
+  }, [url]);
+  useEffect(() => {
+    return () => {
+      if (
+        downloadUrl !== undefined &&
+        downloadUrl !== urlRef.current &&
+        ownedUrlsRef.current.delete(downloadUrl)
+      ) {
+        URL.revokeObjectURL(downloadUrl);
+      }
     };
   }, [downloadUrl]);
 
@@ -746,7 +775,8 @@ const ButtonBar = styled("div", {
   flex: 1,
   position: "absolute",
   top: "0px",
-  zIndex: "3",
+  // Above the (invisible) prev/next buttons so the download menu stays clickable.
+  zIndex: "4",
 });
 const ButtonGroup = styled("div", {
   display: "flex",

@@ -212,18 +212,24 @@ export function useZoomPan({ resetKey, enabled, pictureSize }: UseZoomPanOptions
   );
 
   // React registers wheel listeners as passive, so preventDefault has to go through
-  // a native, non-passive listener.
+  // a native, non-passive listener. The wrapper can be remounted (e.g. after a
+  // video was shown in between), so the element is tracked in state and the
+  // listener follows it.
+  const [wrapperEl, setWrapperEl] = useState<HTMLDivElement | null>(null);
+  const wrapperRefCallback = useCallback((el: HTMLDivElement | null) => {
+    wrapperRef.current = el;
+    setWrapperEl(el);
+  }, []);
   useEffect(() => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper || !enabled) return;
+    if (!wrapperEl || !enabled) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const factor = Math.exp(-e.deltaY * WHEEL_SENSITIVITY);
       zoomAround(toLocal(e), transformRef.current.scale * factor);
     };
-    wrapper.addEventListener("wheel", onWheel, { passive: false });
-    return () => wrapper.removeEventListener("wheel", onWheel);
-  }, [enabled, toLocal, zoomAround]);
+    wrapperEl.addEventListener("wheel", onWheel, { passive: false });
+    return () => wrapperEl.removeEventListener("wheel", onWheel);
+  }, [wrapperEl, enabled, toLocal, zoomAround]);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -324,7 +330,7 @@ export function useZoomPan({ resetKey, enabled, pictureSize }: UseZoomPanOptions
   }, []);
 
   return {
-    wrapperRef,
+    wrapperRef: wrapperRefCallback,
     targetRef,
     imageRef,
     isZoomed,
