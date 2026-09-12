@@ -101,6 +101,15 @@ app.get(PART_ROUTE, async (req, res, next) => {
       params.type,
       params.part,
     );
+    // A `?v=<iv>` URL identifies the exact ciphertext (a replaced part gets a
+    // new iv, hence a new URL), so the browser may cache it for good. Without
+    // it (plain albums) the response must be revalidated; express's ETag turns
+    // an unchanged part into a bodiless 304.
+    const versioned = typeof req.query["v"] === "string" && req.query["v"].length > 0;
+    res.set(
+      "Cache-Control",
+      versioned ? "private, max-age=31536000, immutable" : "private, no-cache",
+    );
     res.type("application/octet-stream").send(bytes);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {

@@ -1,5 +1,12 @@
 import { styled } from "../../stitches.config";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { CanvasService } from "./services/CanvasService";
 import { UploadService } from "./services/UploadService";
 import { useParams } from "react-router";
@@ -17,9 +24,13 @@ import {
   DEFAULT_ALBUM_VIEW,
   groupFiles,
 } from "../../utils/groupFiles";
-import { Metadata } from "../../../../backend/src/services/MetadataService";
 import { AlbumContent } from "./components/AlbumContent";
 import { toast } from "react-toastify";
+import { LoadedThumbnail, ThumbnailLoader } from "./services/ThumbnailLoader";
+import {
+  ThumbnailVisibilityProvider,
+  useThumbnailVisibility,
+} from "./hooks/useThumbnailVisibility";
 
 export type { Thumbnail, ThumbnailGroup } from "../../utils/groupFiles";
 
@@ -30,9 +41,10 @@ const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
 
 const VIEW_STORAGE_KEY = "photobin:albumView";
-
-/** A loaded thumbnail: its object URL and the iv of the part it was made from. */
-type LoadedThumbnail = { url: string | undefined; iv: string | undefined };
+/** Thumbnail downloads in flight at once (browsers allow ~6 per host on HTTP/1.1). */
+const THUMBNAIL_CONCURRENCY = 6;
+/** Tiles requested as soon as the album opens, before the grid is laid out. */
+const EAGER_THUMBNAILS = 12;
 
 function readStoredView(): AlbumView {
   try {
@@ -96,29 +108,104 @@ export default function Album() {
     setTitle(decodedValues.albumName);
   }, [decodedValues.albumName]);
 
-  useEffect(() => {
-    if (metadata === undefined || albumId === undefined) return;
-    let cancelled = false;
-    // A changed thumbnail iv means the part was replaced server-side (e.g.
-    // rotation) and must be refetched.
-    const stale = metadata.files.filter((file) => {
-      const loaded = thumbnails.get(file.fileId);
-      return loaded === undefined || loaded.iv !== file.thumbnail?.iv;
-    });
-    const loadThumbnails = async () => {
-      for await (const thumb of getThumbnails(stale)) {
-        if (cancelled) {
-          revokeIfBlob(thumb.url);
-          break;
-        }
-        setLoadedThumbnail(thumb.id, thumb);
+  // The loader reads the latest file list and loaded set through refs so it is
+  // created once per album and survives metadata refreshes.
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const thumbnailsRef = useRef(thumbnails);
+  thumbnailsRef.current = thumbnails;
+  // Loaded thumbnails are collected here and committed once per frame so a
+  // burst of arrivals costs one render instead of one per thumbnail.
+  const pendingRef = useRef(new Map<string, LoadedThumbnail>());
+  const flushRef = useRef<number | null>(null);
+  const flushThumbnails = useCallback(() => {
+    flushRef.current = null;
+    const arrived = pendingRef.current;
+    if (arrived.size === 0) return;
+    pendingRef.current = new Map();
+    setThumbnails((prev) => {
+      const next = new Map(prev);
+      for (const [fileId, thumb] of arrived) {
+        const current = next.get(fileId);
+        if (current?.url !== thumb.url) revokeIfBlob(current?.url);
+        next.set(fileId, thumb);
       }
-    };
-    loadThumbnails().catch((e) => console.error(e));
-    return () => {
-      cancelled = true;
-    };
-  }, [metadata]);
+      return next;
+    });
+  }, []);
+  const queueLoadedThumbnail = useCallback(
+    (fileId: string, thumb: LoadedThumbnail) => {
+      const superseded = pendingRef.current.get(fileId);
+      if (superseded !== undefined && superseded.url !== thumb.url) {
+        revokeIfBlob(superseded.url);
+      }
+      pendingRef.current.set(fileId, thumb);
+      flushRef.current ??= requestAnimationFrame(flushThumbnails);
+    },
+    [flushThumbnails],
+  );
+  const loader = useMemo(
+    () =>
+      new ThumbnailLoader({
+        concurrency: THUMBNAIL_CONCURRENCY,
+        load: async (fileId) => {
+          if (albumId === undefined) return undefined;
+          const file = filesRef.current.find((f) => f.fileId === fileId);
+          if (file?.thumbnail === undefined) return undefined;
+          // The eager request and the IntersectionObserver may both ask for a
+          // tile; whichever comes second finds it already loaded (or about to
+          // be committed) and is a no-op unless the part was replaced since.
+          const loaded =
+            pendingRef.current.get(fileId) ?? thumbnailsRef.current.get(fileId);
+          if (loaded !== undefined && loaded.iv === file.thumbnail.iv) return undefined;
+          const result = await imageQueryService.getImg(albumId, file, key, "thumbnail", {
+            withText: false,
+          });
+          return result && { url: result.img, iv: file.thumbnail.iv };
+        },
+        onLoaded: queueLoadedThumbnail,
+        onError: (fileId, error) => console.error(`Thumbnail ${fileId} failed`, error),
+      }),
+    [albumId, key, queueLoadedThumbnail],
+  );
+  const visibility = useThumbnailVisibility(loader);
+  useEffect(
+    () => () => {
+      loader.dispose();
+      if (flushRef.current !== null) cancelAnimationFrame(flushRef.current);
+      for (const thumb of pendingRef.current.values()) revokeIfBlob(thumb.url);
+      pendingRef.current = new Map();
+    },
+    [loader],
+  );
+
+  useEffect(() => {
+    if (metadata === undefined) return;
+    // A changed thumbnail iv means the part was replaced server-side (e.g.
+    // rotation): refetch it right away, ahead of tiles that are merely
+    // scrolling into view. The stale image stays up until the new one lands.
+    for (const file of metadata.files) {
+      const loaded = thumbnails.get(file.fileId);
+      if (loaded !== undefined && loaded.iv !== file.thumbnail?.iv) {
+        loader.request(file.fileId, "front");
+      }
+    }
+  }, [metadata, loader]);
+
+  // The first tiles of a freshly opened album are on screen in any layout; ask
+  // for them as soon as the file list is known instead of after the whole
+  // grid has been laid out and observed. Everything else (including later
+  // metadata refreshes) waits for the IntersectionObserver.
+  const eagerRequested = useRef(false);
+  useLayoutEffect(() => {
+    if (eagerRequested.current || files.length === 0) return;
+    eagerRequested.current = true;
+    const eager = thumbnailGroups
+      .flatMap((group) => group.thumbnails)
+      .filter((thumb) => thumb.isLoading)
+      .slice(0, EAGER_THUMBNAILS);
+    for (const thumb of eager) loader.request(thumb.id);
+  }, [files, loader]);
 
   function setLoadedThumbnail(fileId: string, next: LoadedThumbnail) {
     setThumbnails((prev) => {
@@ -208,21 +295,18 @@ export default function Album() {
     }
   }
 
-  async function* getThumbnails(
-    files: Metadata["files"],
-  ): AsyncGenerator<LoadedThumbnail & { id: string }> {
-    if (albumId === undefined) return;
-    for (const file of files) {
-      const result = await imageQueryService.getImg(
-        albumId,
-        file,
-        key,
-        file.thumbnail !== undefined ? "thumbnail" : "unsupportedFile",
-      );
-      if (result === undefined) return;
-      yield { id: result.id, url: result.img, iv: file.thumbnail?.iv };
-    }
-  }
+  // Stable handlers: AlbumItem is memoised, so these must not change per render.
+  const onSelect = useCallback((ids: string[]) => {
+    setSelectedImages((prev) => [...prev, ...ids]);
+  }, []);
+  const onDeSelect = useCallback((ids: string[]) => {
+    setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
+  }, []);
+  const onOpen = useCallback((id: string) => {
+    setFullscreenImage({ fileId: id });
+    setShowOrigin(true);
+  }, []);
+
   function nextOriginImgId(direction: number) {
     const ids = thumbnailGroups.flatMap((group) => group.thumbnails.map((i) => i.id));
     const currentIdx = ids.findIndex((id) => id === fullscreenImage?.fileId);
@@ -254,68 +338,63 @@ export default function Album() {
     refreshMetadata();
   }
   return (
-    <Container isEmptyAlbum={isEmptyAlbum}>
-      {fullscreenImage && (
-        <ViewOriginalModal
-          fileId={fullscreenImage.fileId}
-          visible={showOrigin}
-          thumbnails={thumbnailGroups}
-          fileName={decodedValues.files[fullscreenImage.fileId]?.name ?? ""}
-          onShowChange={setShowOrigin}
-          onNext={(direction) => nextOriginImgId(direction)}
-          onDelete={() => deleteImages([fullscreenImage.fileId])}
+    <ThumbnailVisibilityProvider value={visibility}>
+      <Container isEmptyAlbum={isEmptyAlbum}>
+        {fullscreenImage && (
+          <ViewOriginalModal
+            fileId={fullscreenImage.fileId}
+            visible={showOrigin}
+            thumbnails={thumbnailGroups}
+            fileName={decodedValues.files[fullscreenImage.fileId]?.name ?? ""}
+            onShowChange={setShowOrigin}
+            onNext={(direction) => nextOriginImgId(direction)}
+            onDelete={() => deleteImages([fullscreenImage.fileId])}
+          />
+        )}
+        <Header
+          isEmptyAlbum={isEmptyAlbum}
+          title={title}
+          onChangeTitle={setTitle}
+          onSaveName={saveAlbumName}
+          onSelectAll={onSelectAll}
+          onUnselectAll={onUncheckSelected}
+          selectedAll={selectedImages.length === metadata?.files.length}
         />
-      )}
-      <Header
-        isEmptyAlbum={isEmptyAlbum}
-        title={title}
-        onChangeTitle={setTitle}
-        onSaveName={saveAlbumName}
-        onSelectAll={onSelectAll}
-        onUnselectAll={onUncheckSelected}
-        selectedAll={selectedImages.length === metadata?.files.length}
-      />
-      <AlbumContent
-        uploadService={uploadService}
-        showUploader={showUploader}
-        isUploading={isUploading}
-        isDownloading={isDownloading}
-        isLoadingThumbnails={isLoadingThumbnails}
-        downloadProgress={downloadProgress}
-        onUploadStarted={() => setIsUploading(true)}
-        onUploadFinished={() => setIsUploading(false)}
-        onDownloadAll={(files: string[]) => onDownloadAll(files)}
-        thumbnailGroups={thumbnailGroups}
-        view={view}
-        onChangeView={changeView}
-        onRenameBatch={(batchId, name) => renameBatch(batchId, name)}
-        onUploaded={(uploaded) =>
-          setLoadedThumbnail(uploaded.fileId, {
-            url: uploaded.thumbnail,
-            iv: uploaded.thumbnailIv,
-          })
-        }
-        selectedImages={selectedImages}
-        isSelected={(id) => selectedImages.includes(id)}
-        onSelect={(id: string[]) => setSelectedImages([...selectedImages, ...id])}
-        onDeSelect={(id: string[]) => {
-          if (id) {
-            setSelectedImages(selectedImages.filter((imgId) => !id.includes(imgId)));
+        <AlbumContent
+          uploadService={uploadService}
+          showUploader={showUploader}
+          isUploading={isUploading}
+          isDownloading={isDownloading}
+          isLoadingThumbnails={isLoadingThumbnails}
+          downloadProgress={downloadProgress}
+          onUploadStarted={() => setIsUploading(true)}
+          onUploadFinished={() => setIsUploading(false)}
+          onDownloadAll={(files: string[]) => onDownloadAll(files)}
+          thumbnailGroups={thumbnailGroups}
+          view={view}
+          onChangeView={changeView}
+          onRenameBatch={(batchId, name) => renameBatch(batchId, name)}
+          onUploaded={(uploaded) =>
+            setLoadedThumbnail(uploaded.fileId, {
+              url: uploaded.thumbnail,
+              iv: uploaded.thumbnailIv,
+            })
           }
-        }}
-        onOpen={(id) => {
-          setFullscreenImage({ fileId: id });
-          setShowOrigin(true);
-        }}
-      />
-      <Toolbar
-        isBusy={isDownloading || isUploading}
-        selectedImages={selectedImages}
-        onDeleteSelected={onDeleteSelected}
-        onUncheckSelected={onUncheckSelected}
-        onDownloadSelected={onDownloadSelected}
-      />
-    </Container>
+          selectedImages={selectedImages}
+          isSelected={(id) => selectedImages.includes(id)}
+          onSelect={onSelect}
+          onDeSelect={onDeSelect}
+          onOpen={onOpen}
+        />
+        <Toolbar
+          isBusy={isDownloading || isUploading}
+          selectedImages={selectedImages}
+          onDeleteSelected={onDeleteSelected}
+          onUncheckSelected={onUncheckSelected}
+          onDownloadSelected={onDownloadSelected}
+        />
+      </Container>
+    </ThumbnailVisibilityProvider>
   );
 }
 

@@ -3,13 +3,17 @@ import Circle from "@assets/images/icons/circle.svg?react";
 import Zoom from "@assets/images/icons/zoom.svg?react";
 import Play from "@assets/images/icons/play.svg?react";
 import { keyframes, styled } from "../../../stitches.config";
-import { MouseEvent, useEffect, useRef } from "react";
+import { memo, MouseEvent, useEffect, useRef } from "react";
+import { useThumbnailRequest } from "../hooks/useThumbnailVisibility";
 
 /** Length of the "just uploaded" highlight pulse. */
 export const PULSE_MS = 800;
 
 type AlbumItemProps = {
+  id: string;
   imageSrc: string | undefined;
+  /** thumbnail not fetched yet: show the placeholder and request it when near the viewport */
+  isLoading: boolean;
   fileName: string;
   isSelected: boolean;
   /** at least one photo is selected: tapping toggles selection instead of opening */
@@ -19,13 +23,16 @@ type AlbumItemProps = {
   isNew: boolean;
   /** just uploaded and first of its batch: bring it on screen */
   scrollIntoView: boolean;
-  onSelect: () => void;
-  onDeselect: () => void;
-  onOpen: () => void;
+  onSelect: (id: string) => void;
+  onDeselect: (id: string) => void;
+  onOpen: (id: string) => void;
 };
 
-export function AlbumItem(props: AlbumItemProps) {
+// Memoised so a thumbnail arriving for one tile does not re-render the others;
+// every callback prop must therefore be referentially stable.
+export const AlbumItem = memo(function AlbumItem(props: AlbumItemProps) {
   const ref = useRef<HTMLDivElement>(null);
+  useThumbnailRequest(ref, props.id, props.isLoading);
   useEffect(() => {
     if (!props.scrollIntoView) return;
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -35,14 +42,16 @@ export function AlbumItem(props: AlbumItemProps) {
     });
   }, [props.scrollIntoView]);
 
-  const toggleSelect = () => (props.isSelected ? props.onDeselect() : props.onSelect());
+  const toggleSelect = () =>
+    props.isSelected ? props.onDeselect(props.id) : props.onSelect(props.id);
 
   return (
     <Preview
       ref={ref}
       isNew={props.isNew}
       isSelectionMode={props.isSelectionMode}
-      onClick={() => (props.isSelectionMode ? toggleSelect() : props.onOpen())}
+      data-thumb-placeholder={props.isLoading ? "" : undefined}
+      onClick={() => (props.isSelectionMode ? toggleSelect() : props.onOpen(props.id))}
     >
       {props.isSelected ? (
         <SelectIcon as={Check} data-select-icon isSelectionMode={props.isSelectionMode} />
@@ -58,9 +67,10 @@ export function AlbumItem(props: AlbumItemProps) {
         />
       )}
       {props.isVideo === true ? <PlayIcon /> : <></>}
-      {props.imageSrc !== undefined ? (
-        <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
-      ) : (
+      {props.imageSrc !== undefined && (
+        <Image src={props.imageSrc} decoding="async" isSelected={props.isSelected} />
+      )}
+      {props.imageSrc === undefined && !props.isLoading && (
         <UnsupportedFile isSelected={props.isSelected}>
           <UnsupportedFileName>{formatFilename(props.fileName)}</UnsupportedFileName>
         </UnsupportedFile>
@@ -69,13 +79,13 @@ export function AlbumItem(props: AlbumItemProps) {
         <ZoomIcon
           onClick={(e) => {
             e.stopPropagation();
-            props.onOpen();
+            props.onOpen(props.id);
           }}
         />
       )}
     </Preview>
   );
-}
+});
 
 const Image = styled("img", {
   display: "block",

@@ -6,7 +6,10 @@ export const ALBUM_VIEWS: AlbumView[] = ["history", "date"];
 export const DEFAULT_ALBUM_VIEW: AlbumView = "history";
 
 export type Thumbnail = {
+  /** Object URL of the thumbnail; undefined while loading and for unsupported files. */
   thumbnail: string | undefined;
+  /** The file has a thumbnail part that has not been fetched yet. */
+  isLoading: boolean;
   id: string;
   name: string;
   isVideo: boolean;
@@ -31,7 +34,7 @@ type GroupInput = {
   files: Metadata["files"];
   decodedFiles: DecodedFiles;
   decodedBatches: DecodedBatches;
-  /** Loaded thumbnail URLs by fileId. Files without an entry are not shown yet. */
+  /** Loaded thumbnail URLs by fileId. Files without an entry show a placeholder. */
   thumbnails: ReadonlyMap<string, string | undefined>;
   view: AlbumView;
 };
@@ -40,14 +43,14 @@ const EARLIER_KEY = "batch:earlier";
 const EARLIER_TITLE = "Earlier uploads";
 
 /**
- * Pure grouping of the album's files for one view. Only files whose thumbnail
- * has been loaded are included, so the grid fills in progressively; the order
- * inside a group is the upload order (metadata order).
+ * Pure grouping of the album's files for one view. Every file gets a tile;
+ * the ones whose thumbnail has not been fetched yet are marked `isLoading`
+ * so the grid shows placeholders that fill in as thumbnails arrive. The
+ * order inside a group is the upload order (metadata order).
  */
 export function groupFiles(input: GroupInput): ThumbnailGroup[] {
   const groups = new Map<string, ThumbnailGroup>();
   for (const file of input.files) {
-    if (!input.thumbnails.has(file.fileId)) continue;
     const slot = groupOf(file, input);
     let group = groups.get(slot.key);
     if (group === undefined) {
@@ -57,6 +60,7 @@ export function groupFiles(input: GroupInput): ThumbnailGroup[] {
     group.thumbnails.push({
       id: file.fileId,
       thumbnail: input.thumbnails.get(file.fileId),
+      isLoading: file.thumbnail !== undefined && !input.thumbnails.has(file.fileId),
       name: input.decodedFiles[file.fileId]?.name ?? "",
       isVideo: file.originalVideo !== undefined,
     });

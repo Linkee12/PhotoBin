@@ -4,7 +4,7 @@ import Check from "@assets/images/icons/check.svg?react";
 import { styled } from "../../../stitches.config";
 import { Panel, PanelHeader, PushDown } from "./Panel";
 import { ThumbnailGroup } from "../Album";
-import { KeyboardEvent, useEffect, useRef, useState } from "react";
+import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type AlbumSectionProps = {
   group: ThumbnailGroup;
@@ -25,6 +25,11 @@ type AlbumSectionProps = {
 export function AlbumSection(props: AlbumSectionProps) {
   const ids = props.group.thumbnails.map((thumb) => thumb.id);
   const includeAllImages = ids.every((id) => props.selectedImages.includes(id));
+  // Stable per-tile callbacks so memoised AlbumItems only re-render when their
+  // own thumbnail or selection changes.
+  const { onSelect, onDeSelect } = props;
+  const selectOne = useCallback((id: string) => onSelect([id]), [onSelect]);
+  const deselectOne = useCallback((id: string) => onDeSelect([id]), [onDeSelect]);
 
   return (
     <Panel zIndex={0} variant={props.index % 2 == 0 ? 1 : 2}>
@@ -58,16 +63,18 @@ export function AlbumSection(props: AlbumSectionProps) {
           {props.group.thumbnails.map((image) => (
             <AlbumItem
               key={image.id}
+              id={image.id}
               isVideo={image.isVideo}
               imageSrc={image.thumbnail}
+              isLoading={image.isLoading}
               fileName={image.name}
               isSelected={props.isSelected(image.id)}
               isSelectionMode={props.selectedImages.length > 0}
               isNew={props.newFileIds.includes(image.id)}
               scrollIntoView={props.newFileIds[0] === image.id}
-              onSelect={() => props.onSelect([image.id])}
-              onDeselect={() => props.onDeSelect([image.id])}
-              onOpen={() => props.onOpen(image.id)}
+              onSelect={selectOne}
+              onDeselect={deselectOne}
+              onOpen={props.onOpen}
             />
           ))}
         </Images>
