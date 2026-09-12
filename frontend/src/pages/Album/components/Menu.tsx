@@ -59,12 +59,18 @@ export function Menu(props: MenuProps) {
   return (
     <>
       <LandscapeButtonsBg>
-        <ViewToggle view={props.view} onChangeView={props.onChangeView} />
-        <Button disabled={props.isBusy} onClick={props.onDownloadAll}>
+        <div data-toolbar-control>
+          <ViewToggle view={props.view} onChangeView={props.onChangeView} />
+        </div>
+        <Button
+          disabled={props.isBusy}
+          onClick={props.onDownloadAll}
+          data-toolbar-control
+        >
           <ButtonText>DOWNLOAD ALL</ButtonText>
           <LandscapeDownloadIcon />
         </Button>
-        <Button onClick={props.onAddPhoto}>
+        <Button onClick={props.onAddPhoto} data-toolbar-control>
           <ButtonText>ADD PHOTO</ButtonText>
           <AddIcon />
         </Button>
