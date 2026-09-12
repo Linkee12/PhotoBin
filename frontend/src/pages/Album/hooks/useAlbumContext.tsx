@@ -77,15 +77,22 @@ async function decodeMetadata(metadata: Metadata, key: string | null) {
     ),
     Promise.all(
       Object.entries(metadata.batches ?? {}).map(async ([batchId, batch]) => {
-        const name = await decrypt(batch.name);
-        return [batchId, { name, createdAt: batch.createdAt }] as const;
+        try {
+          const name = await decrypt(batch.name);
+          return [batchId, { name, createdAt: batch.createdAt }] as const;
+        } catch (error) {
+          // A batch whose name cannot be decoded still groups its files
+          // (under a placeholder title); it must not take the album down.
+          console.warn(`[album] could not decode the name of batch ${batchId}`, error);
+          return undefined;
+        }
       }),
     ),
   ]);
   return {
     albumName,
     files: Object.fromEntries(files),
-    batches: Object.fromEntries(batches),
+    batches: Object.fromEntries(batches.filter((b) => b !== undefined)),
   };
 }
 

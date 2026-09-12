@@ -7,7 +7,8 @@
     "serve": "vite preview",
     "lint": "eslint ./src",
     "lint:fix": "eslint ./src --fix",
-    "type-check": "tsc"
+    "type-check": "tsc",
+    "test": "vitest run"
   },
   "dependencies": {
     "@cuple/client": "^1.2.1",
@@ -44,6 +45,7 @@
     "typescript-eslint": "^8.59.3",
     "vite": "^8.0.13",
     "vite-plugin-compression": "^0.5.1",
-    "vite-plugin-svgr": "^5.2.0"
+    "vite-plugin-svgr": "^5.2.0",
+    "vitest": "^5.0.0"
   }
 }

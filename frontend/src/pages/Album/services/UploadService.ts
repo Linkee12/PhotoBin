@@ -301,7 +301,7 @@ export class UploadService {
     }
 
     if (!uploaded.finalized) {
-      await withRetry(
+      const finalized = await withRetry(
         () =>
           this._rpc(() =>
             client.finalizeFile.post({
@@ -314,6 +314,11 @@ export class UploadService {
           ),
         { signal },
       );
+      if (finalized.batchId !== prepared.batch.batchId) {
+        console.warn(
+          "[upload] the server did not record the upload batch; it is probably running an older version",
+        );
+      }
     }
     return uploaded.finalized;
   }
