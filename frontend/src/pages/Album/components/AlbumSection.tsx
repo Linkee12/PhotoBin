@@ -57,6 +57,7 @@ export function AlbumSection(props: AlbumSectionProps) {
                 imageSrc={image.thumbnail}
                 fileName={image.name}
                 isSelected={props.isSelected(image.id)}
+                isSelectionMode={props.selectedImages.length > 0}
                 isNew={props.newFileIds.includes(image.id)}
                 scrollIntoView={props.newFileIds[0] === image.id}
                 onSelect={() => props.onSelect([image.id])}

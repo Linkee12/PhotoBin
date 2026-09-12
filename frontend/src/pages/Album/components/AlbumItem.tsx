@@ -1,8 +1,9 @@
 import Check from "@assets/images/icons/check.svg?react";
+import Circle from "@assets/images/icons/circle.svg?react";
 import Zoom from "@assets/images/icons/zoom.svg?react";
 import Play from "@assets/images/icons/play.svg?react";
 import { keyframes, styled } from "../../../stitches.config";
-import { useEffect, useRef } from "react";
+import { MouseEvent, useEffect, useRef } from "react";
 
 /** Length of the "just uploaded" highlight pulse. */
 export const PULSE_MS = 800;
@@ -11,6 +12,8 @@ type AlbumItemProps = {
   imageSrc: string | undefined;
   fileName: string;
   isSelected: boolean;
+  /** at least one photo is selected: tapping toggles selection instead of opening */
+  isSelectionMode: boolean;
   isVideo: boolean;
   /** just uploaded: play the highlight pulse */
   isNew: boolean;
@@ -32,13 +35,28 @@ export function AlbumItem(props: AlbumItemProps) {
     });
   }, [props.scrollIntoView]);
 
+  const toggleSelect = () => (props.isSelected ? props.onDeselect() : props.onSelect());
+
   return (
     <Preview
       ref={ref}
       isNew={props.isNew}
-      onClick={() => (props.isSelected ? props.onDeselect() : props.onSelect())}
+      isSelectionMode={props.isSelectionMode}
+      onClick={() => (props.isSelectionMode ? toggleSelect() : props.onOpen())}
     >
-      <CheckIcon isVisible={props.isSelected} />
+      {props.isSelected ? (
+        <SelectIcon as={Check} data-select-icon isSelectionMode={props.isSelectionMode} />
+      ) : (
+        <SelectIcon
+          as={Circle}
+          data-select-icon
+          isSelectionMode={props.isSelectionMode}
+          onClick={(e: MouseEvent) => {
+            e.stopPropagation();
+            toggleSelect();
+          }}
+        />
+      )}
       {props.isVideo === true ? <PlayIcon /> : <></>}
       {props.imageSrc !== undefined ? (
         <Image src={props.imageSrc} isSelected={props.isSelected}></Image>
@@ -47,12 +65,14 @@ export function AlbumItem(props: AlbumItemProps) {
           <UnsupportedFileName>{formatFilename(props.fileName)}</UnsupportedFileName>
         </UnsupportedFile>
       )}
-      <ZoomIcon
-        onClick={(e) => {
-          e.stopPropagation();
-          props.onOpen();
-        }}
-      />
+      {props.isSelectionMode && (
+        <ZoomIcon
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onOpen();
+          }}
+        />
+      )}
     </Preview>
   );
 }
@@ -113,7 +133,13 @@ const highlightPulse = keyframes({
 });
 
 const Preview = styled("div", {
+  cursor: "pointer",
   variants: {
+    isSelectionMode: {
+      true: {},
+      // In viewing mode the select ring only shows up on hover.
+      false: { "&:hover [data-select-icon]": { opacity: 1 } },
+    },
     isNew: {
       true: {
         animation: `${highlightPulse} ${PULSE_MS}ms ease-in-out`,
@@ -144,18 +170,19 @@ const Preview = styled("div", {
   position: "relative",
 });
 
-const CheckIcon = styled(Check, {
+const SelectIcon = styled("svg", {
   position: "absolute",
   top: "5px",
   left: "5px",
+  width: "26px",
+  height: "26px",
+  cursor: "pointer",
+  filter: "drop-shadow(0 0 2px rgba(0, 0, 0, 0.8))",
+  transition: "opacity 0.15s",
   variants: {
-    isVisible: {
-      true: {
-        visibility: "visible",
-      },
-      false: {
-        visibility: "hidden",
-      },
+    isSelectionMode: {
+      true: { opacity: 1 },
+      false: { opacity: 0, "@media (hover: none)": { opacity: 0.7 } },
     },
   },
 });
@@ -170,10 +197,12 @@ const ZoomIcon = styled(Zoom, {
 
 const PlayIcon = styled(Play, {
   position: "absolute",
-  width: "60px",
-  height: "60px",
-  alignItems: "center",
-  cursor: "pointer",
+  width: "48px",
+  height: "48px",
+  color: "#fff",
+  opacity: 0.9,
+  filter: "drop-shadow(0 0 3px rgba(0, 0, 0, 0.8))",
+  pointerEvents: "none",
 });
 function formatFilename(filename: string): string {
   if (filename.length <= 20) {
