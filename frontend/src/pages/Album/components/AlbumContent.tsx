@@ -4,6 +4,7 @@ import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
 import { PULSE_MS } from "./AlbumItem";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useGridPinch } from "../hooks/useGridPinch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -74,7 +75,9 @@ export function AlbumContent(props: AlbumContentProps) {
   const pendingScrollTop = useRef<number | null>(null);
   const onPinchCommit = useCallback((next: number, scrollTop: number) => {
     pendingScrollTop.current = scrollTop;
-    setColumns(next);
+    // Called from an animation frame, where React would otherwise render in a
+    // later task and the browser could paint the plain grid in between.
+    flushSync(() => setColumns(next));
   }, []);
   useLayoutEffect(() => {
     if (pendingScrollTop.current === null) return;
