@@ -3,8 +3,9 @@ import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
 import { PULSE_MS } from "./AlbumItem";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
+import { useGridPinch } from "../hooks/useGridPinch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
@@ -66,6 +67,26 @@ export function AlbumContent(props: AlbumContentProps) {
   const [newFileIds, setNewFileIds] = useState<string[]>([]);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  // Tiles per row, once the user has pinched the grid; `null` is the CSS auto
+  // layout. The scroll position that keeps the pinched tile in place is applied
+  // after the grid has been relaid with the new count.
+  const [columns, setColumns] = useState<number | null>(null);
+  const pendingScrollTop = useRef<number | null>(null);
+  const onPinchCommit = useCallback((next: number, scrollTop: number) => {
+    pendingScrollTop.current = scrollTop;
+    setColumns(next);
+  }, []);
+  useLayoutEffect(() => {
+    if (pendingScrollTop.current === null) return;
+    window.scrollTo({ top: pendingScrollTop.current, behavior: "auto" });
+    pendingScrollTop.current = null;
+  }, [columns]);
+  const pinch = useGridPinch({
+    enabled: props.thumbnailGroups.length > 0,
+    columns,
+    onCommit: onPinchCommit,
+    onOpen: props.onOpen,
+  });
   // Where the toolbar is the wide shelf, the first group's header shares its
   // row (rendered into this slot); otherwise it heads its own band.
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
@@ -288,7 +309,8 @@ export function AlbumContent(props: AlbumContentProps) {
             onChangeView={props.onChangeView}
           />
         )}
-        <AlbumSections>
+        <AlbumSections ref={pinch.ref} {...pinch.handlers}>
+          <PinchOverlay ref={pinch.overlayRef} aria-hidden="true" />
           {props.thumbnailGroups.map((group, i) => (
             <AlbumSection
               key={group.key}
@@ -304,6 +326,7 @@ export function AlbumContent(props: AlbumContentProps) {
               onSelect={props.onSelect}
               onDeSelect={props.onDeSelect}
               onOpen={props.onOpen}
+              columns={columns}
             />
           ))}
           {props.isLoadingThumbnails && (
@@ -472,6 +495,18 @@ const UploadSection = styled("div", {
 const AlbumSections = styled("div", {
   display: "flex",
   flexDirection: "column",
+  // Two fingers pinch the grid (useGridPinch); one still scrolls the page.
+  touchAction: "pan-y",
+});
+
+/** Darkens the album under the tile growing to full screen; opacity is driven by the pinch. */
+const PinchOverlay = styled("div", {
+  position: "fixed",
+  inset: 0,
+  background: "#000",
+  opacity: 0,
+  pointerEvents: "none",
+  zIndex: 5,
 });
 
 const LoadingThumbnails = styled("div", {
@@ -653,7 +688,7 @@ const RemainingTime = styled("div", {
   alignItems: "center",
   paddingRight: "2rem",
   color: "#8B8B8B",
+  fontFamily: "SourceCodeVF",
   fontSize: "0.8rem",
-  fontWeight: "bold",
   whiteSpace: "nowrap",
 });

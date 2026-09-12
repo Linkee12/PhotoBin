@@ -51,6 +51,7 @@ export const AlbumItem = memo(function AlbumItem(props: AlbumItemProps) {
       isNew={props.isNew}
       isSelectionMode={props.isSelectionMode}
       data-thumb-placeholder={props.isLoading ? "" : undefined}
+      data-tile={props.id}
       onClick={() => (props.isSelectionMode ? toggleSelect() : props.onOpen(props.id))}
     >
       {props.isSelected ? (
@@ -163,7 +164,7 @@ const Preview = styled("div", {
   },
   "@wide": {
     minWidth: "150px",
-    maxWidth: "300px",
+    maxWidth: "280px",
   },
   "@narrow": {
     width: "90vw",
@@ -171,6 +172,9 @@ const Preview = styled("div", {
   width: "100%",
   aspectRatio: "3/2",
   margin: "0.5rem",
+  // The pinch gesture (useGridPinch) draws the tile elsewhere with a transform
+  // measured from its top-left corner.
+  transformOrigin: "0 0",
   borderRadius: "10px",
   backgroundColor: "#232323",
   boxSizing: "border-box",

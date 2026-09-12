@@ -22,6 +22,8 @@ type AlbumSectionProps = {
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
   onOpen: (imageId: string) => void;
+  /** Column count chosen by pinching; `null` leaves the CSS auto layout in charge. */
+  columns: number | null;
 };
 
 export function AlbumSection(props: AlbumSectionProps) {
@@ -72,7 +74,15 @@ export function AlbumSection(props: AlbumSectionProps) {
       }
     >
       {!props.isCollapsed && (
-        <Images>
+        <Images
+          data-images
+          explicit={props.columns !== null}
+          style={
+            props.columns === null
+              ? undefined
+              : { gridTemplateColumns: `repeat(${props.columns}, 1fr)` }
+          }
+        >
           {props.group.thumbnails.map((image) => (
             <AlbumItem
               key={image.id}
@@ -174,15 +184,11 @@ const Header = styled("div", {
   columnGap: "0.5rem",
   rowGap: "0.1rem",
   alignItems: "center",
-  overflowWrap: "anywhere",
-  "@narrow": {
-    paddingLeft: "1.28rem",
-    fontSize: "1.1rem",
-  },
-  "@wide": {
-    paddingLeft: "5rem",
-    fontSize: "1.42rem",
-  },
+  overflowWrap: "break-word",
+  fontSize: "1.1rem",
+  "@narrow": { paddingLeft: "1.28rem" },
+  // Flush with the tiles' left edge (see `Images`).
+  "@wide": { paddingLeft: "1.9rem" },
   "@toolbarInline": {
     gridTemplateColumns: "auto auto minmax(0, 1fr)",
     paddingTop: "2rem",
@@ -201,9 +207,9 @@ const Header = styled("div", {
 const Chevron = styled("span", {
   display: "inline-block",
   flexShrink: 0,
-  fontSize: "1em",
+  fontSize: "0.8em",
   lineHeight: 1,
-  color: "#9A9A9A",
+  color: "#7A7A7A",
   transition: "transform 200ms",
   "@media (prefers-reduced-motion: reduce)": { transition: "none" },
   variants: {
@@ -244,7 +250,7 @@ const NameInput = styled("input", {
 
 const Meta = styled("span", {
   color: "#9A9A9A",
-  fontSize: "0.7em",
+  fontSize: "0.8rem",
   whiteSpace: "nowrap",
   gridColumn: "3 / -1",
   gridRow: 2,
@@ -253,18 +259,42 @@ const Meta = styled("span", {
 const SelectAll = styled("div", {
   cursor: "pointer",
   flexShrink: 0,
-  width: "1.4rem",
-  height: "1.4rem",
+  width: "1.2rem",
+  height: "1.2rem",
   display: "flex",
   alignItems: "center",
 });
 
 const Images = styled("div", {
   maxWidth: "100%",
+  // The pinch gesture animates the grid's height: the rows must not stretch
+  // into it, and as a flex item it must be allowed below its content height.
+  alignContent: "start",
+  minHeight: 0,
+  variants: {
+    explicit: {
+      // Column count set by pinching (inline `gridTemplateColumns`): a grid on
+      // every width, the tiles filling their cells rather than the CSS caps.
+      true: {
+        display: "grid",
+        justifyItems: "stretch",
+        "& > [data-tile]": { width: "100%", maxWidth: "none" },
+        "@narrow": {
+          display: "grid",
+          gap: "10px",
+          margin: "1rem 1.28rem 1.28rem 1.28rem",
+        },
+        "@wide": { gap: "20px", margin: "1.9rem" },
+      },
+      false: {},
+    },
+  },
   "@narrow": {
     display: "flex",
     flexDirection: "column",
-    justifyContent: "center",
+    // Not `center`: the pinch gesture shrinks the height below the content,
+    // which must then overflow at the bottom, not around both ends.
+    justifyContent: "flex-start",
     alignItems: "center",
     margin: "1rem 1.28rem 1.28rem 1.28rem",
     gap: "10px",
@@ -273,9 +303,9 @@ const Images = styled("div", {
     display: "grid",
     gap: "20px",
     justifyItems: "center",
-    // As many columns as fit; each tile is at least 230px and grows up to the
-    // 300px cap set on the tile itself (see AlbumItem's Preview).
-    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 230px), 1fr))",
+    // As many columns as fit; each tile is at least 200px and grows up to the
+    // cap set on the tile itself (see AlbumItem's Preview).
+    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))",
     margin: "1.9rem 1.9rem 1.9rem 1.9rem",
   },
 });
