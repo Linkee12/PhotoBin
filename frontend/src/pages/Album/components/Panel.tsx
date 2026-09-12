@@ -142,6 +142,8 @@ const Band = styled("div", {
           marginTop: `-${TOOLBAR_HEIGHT}`,
           minHeight: TOOLBAR_HEIGHT,
           paddingRight: TOOLBAR_RESERVED_WIDTH,
+          // Clear the shelf's curve, which is highest at the left.
+          paddingTop: "1.25rem",
         },
         // Continues the bottom sheet's (empty) bar, which it sits on.
         "@narrow": {

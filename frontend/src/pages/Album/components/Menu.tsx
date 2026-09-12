@@ -123,9 +123,12 @@ const LandscapeButtonsBg = styled("div", {
   minHeight: TOOLBAR_HEIGHT,
   padding: "0.6rem 0.6rem 0.6rem 8rem",
   backgroundColor: SHELF_COLOR,
-  maskImage: `url(${landscapeButtonsBg})`,
-  maskRepeat: "no-repeat",
-  maskSize: "cover",
+  // The curve only spans the part left of the buttons; the reserved part under
+  // the buttons is solid, so the curve never crosses them however wide they get.
+  maskImage: `url(${landscapeButtonsBg}), linear-gradient(#000, #000)`,
+  maskRepeat: "no-repeat, no-repeat",
+  maskSize: `calc(100% - ${TOOLBAR_RESERVED_WIDTH}) 100%, ${TOOLBAR_RESERVED_WIDTH} 100%`,
+  maskPosition: "left top, right top",
 });
 
 const PortraitButtonsContainer = styled("div", {
