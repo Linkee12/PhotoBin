@@ -155,15 +155,20 @@ const Band = styled("div", {
   },
 });
 
-/** The header row, painted above the curve. */
+/** Height of the curved strip at the bottom of a band. */
+const WAVE_HEIGHT = "3rem";
+
+/** The header row, painted above the curve and kept clear of it. */
 const BandContent = styled("div", {
   position: "relative",
   width: "100%",
+  paddingBottom: WAVE_HEIGHT,
 });
 
 /**
  * Curved edge of the body colour rising from the bottom-left of the band over
- * the band colour; the mask stretches to whatever height the band has.
+ * the band colour. It only occupies the bottom strip of the band, so the
+ * header row above it always sits on solid band colour.
  */
 const WaveEdge = styled("div", {
   position: "absolute",
@@ -171,11 +176,12 @@ const WaveEdge = styled("div", {
   pointerEvents: "none",
   maskImage: `url(${albumItemsBg})`,
   maskRepeat: "no-repeat",
+  maskPosition: "left bottom",
   "@narrow": {
-    maskSize: "100% 100%",
+    maskSize: `100% ${WAVE_HEIGHT}`,
   },
   "@wide": {
-    maskSize: "min(800px, 100%) 100%",
+    maskSize: `min(800px, 100%) ${WAVE_HEIGHT}`,
   },
   transition: "background-color 0.3s",
   variants: { body: bandColors },
