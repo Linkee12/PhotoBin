@@ -98,9 +98,6 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const [isRotating, setIsRotating] = useState(false);
   const [isPreparingDownload, setIsPreparingDownload] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  // Which quality the photo viewer currently shows; the thumbnail is blurred until
-  // the reduced image is swapped in (in place, inside the same box).
-  const [stage, setStage] = useState<"thumbnail" | "reduced">("thumbnail");
   const file = metadata?.files.find((file) => file.fileId === props.fileId);
   const isImage = file?.original !== undefined && file.originalVideo === undefined;
   const isRotated = isImage && (file.rotation ?? 0) !== 0 && file.edited !== undefined;
@@ -323,7 +320,6 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         const currentThumb = thumbnailsRef.current
           .flatMap((group) => group.thumbnails)
           .find((thumb) => thumb.id === props.fileId);
-        setStage("thumbnail");
         await showImage(currentThumb?.thumbnail ?? PLACEHOLDER_GIF, serverRotation(file));
         if (cancelled) return;
       }
@@ -340,7 +336,6 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           if (!cancelled && reduced?.img !== undefined) {
             ownedUrlsRef.current.add(reduced.img);
             await showImage(reduced.img, part.rotation);
-            if (!cancelled) setStage("reduced");
             setFileName(reduced.fileName);
           }
 
@@ -431,10 +426,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       viewport,
       cssTurns,
     )})`,
-    // Keep the blur transition of the stage swap alongside the turn animation.
-    transition: animateTurn
-      ? `filter 0.3s ease-out, transform ${ROTATE_ANIMATION_MS}ms ease`
-      : "filter 0.3s ease-out",
+    transition: animateTurn ? `transform ${ROTATE_ANIMATION_MS}ms ease` : "none",
   };
 
   return (
@@ -513,7 +505,6 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
               ref={zoom.imageRef}
               src={url}
               draggable={false}
-              stage={stage}
               style={imageTransform}
             />
           </ZoomLayer>
@@ -725,13 +716,6 @@ const ZoomableImg = styled("img", {
   height: "100vh",
   objectFit: "contain",
   transformOrigin: "center center",
-  transition: "filter 0.3s ease-out",
-  variants: {
-    stage: {
-      thumbnail: { filter: "blur(6px)" },
-      reduced: { filter: "none" },
-    },
-  },
 });
 const FullScreenVideo = styled("video", {
   display: "block",
