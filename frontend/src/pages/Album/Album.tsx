@@ -207,6 +207,14 @@ export default function Album() {
       setSelectedImages(metadata?.files.map((file) => file.fileId));
     }
   }
+  /** Same as tapping a tile's ring: the album enters selection mode on the first pick. */
+  function toggleSelected(id: string) {
+    setSelectedImages((selected) =>
+      selected.includes(id)
+        ? selected.filter((imgId) => imgId !== id)
+        : [...selected, id],
+    );
+  }
 
   async function* getThumbnails(
     files: Metadata["files"],
@@ -264,6 +272,8 @@ export default function Album() {
           onShowChange={setShowOrigin}
           onNext={(direction) => nextOriginImgId(direction)}
           onDelete={() => deleteImages([fullscreenImage.fileId])}
+          isSelected={selectedImages.includes(fullscreenImage.fileId)}
+          onToggleSelect={() => toggleSelected(fullscreenImage.fileId)}
         />
       )}
       <Header

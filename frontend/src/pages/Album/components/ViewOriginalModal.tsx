@@ -5,6 +5,8 @@ import Exit from "@assets/images/icons/exit.svg?react";
 import Next from "@assets/images/icons/next.svg?react";
 import Prev from "@assets/images/icons/prev.svg?react";
 import Rotate from "@assets/images/icons/rotate.svg?react";
+import Check from "@assets/images/icons/check.svg?react";
+import Circle from "@assets/images/icons/circle.svg?react";
 import { ImageQueryService } from "../services/ImageQueryService";
 import { useEffect, useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
@@ -86,6 +88,10 @@ type ViewOriginalModalProps = {
   onNext: (direction: number) => void;
   onDelete: () => void;
   onShowChange: (visible: boolean) => void;
+  /** whether the shown photo is part of the album selection */
+  isSelected: boolean;
+  /** (de)selects the shown photo, same as tapping its tile's ring */
+  onToggleSelect: () => void;
 };
 // eslint-disable-next-line sonarjs/cognitive-complexity
 export function ViewOriginalModal(props: ViewOriginalModalProps) {
@@ -275,11 +281,16 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     };
   }, [props.visible]);
 
+  const onToggleSelectRef = useRef(props.onToggleSelect);
+  onToggleSelectRef.current = props.onToggleSelect;
+
   useEffect(() => {
     if (!props.visible) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         close();
+      } else if (e.key === "s" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        onToggleSelectRef.current();
       } else if (isZoomed) {
         // The user is panning a zoomed image, leave the arrow keys alone.
         return;
@@ -433,6 +444,16 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     <Container isVisible={props.visible} onClick={close}>
       <ButtonBar onClick={stop}>
         <ButtonGroup>
+          <SelectButton
+            type="button"
+            isSelected={props.isSelected}
+            aria-pressed={props.isSelected}
+            title={props.isSelected ? "Deselect" : "Select"}
+            onClick={() => props.onToggleSelect()}
+          >
+            <SelectIcon as={props.isSelected ? Check : Circle} aria-hidden="true" />
+            <SelectLabel>{props.isSelected ? "Selected" : "Select"}</SelectLabel>
+          </SelectButton>
           <Button
             onClick={() => {
               if (!window.confirm("Delete this photo? This cannot be undone.")) {
@@ -757,6 +778,46 @@ const Icons = styled("svg", {
   height: "1.5rem",
   width: "2rem",
   color: "#fff",
+});
+// Pill at the left of the top bar (see artwork/design.svg, viewer page):
+// ring + "Select" while unselected, check + "Selected" once selected.
+const SelectButton = styled("button", {
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  height: "2rem",
+  margin: "10px",
+  padding: "0 0.9rem 0 0.5rem",
+  borderRadius: "1rem",
+  border: "none",
+  background: "rgba(26, 26, 26, 0.8)",
+  color: "#fff",
+  fontFamily: "Open Sans",
+  fontSize: "0.9rem",
+  whiteSpace: "nowrap",
+  userSelect: "none",
+  "&:hover": {
+    backgroundColor: "#000",
+  },
+  variants: {
+    isSelected: {
+      true: { background: "rgba(26, 26, 26, 0.95)", fontWeight: 600 },
+      false: {},
+    },
+  },
+  "@narrow": {
+    // Icon only, so the trash / download / rotate buttons keep their room.
+    padding: "0 0.5rem",
+  },
+});
+const SelectIcon = styled("svg", {
+  width: "1.4rem",
+  height: "1.4rem",
+  flexShrink: 0,
+});
+const SelectLabel = styled("span", {
+  "@narrow": { display: "none" },
 });
 const ButtonBar = styled("div", {
   width: "100%",
