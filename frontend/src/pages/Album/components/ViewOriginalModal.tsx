@@ -554,12 +554,18 @@ function ImageActions(props: {
           <Icons as={SimpleCloud} style={iconStyle} />
         </Button>
       )}
-      <RotateButtonWrap>
-        <Button onClick={() => props.onRotate()} title="Rotate 90° clockwise">
-          <Icons as={Rotate} />
-        </Button>
-        {props.isRotating && <RotateSpinner role="status" aria-label="Saving rotation" />}
-      </RotateButtonWrap>
+      <Button onClick={() => props.onRotate()} title="Rotate 90° clockwise">
+        <Icons as={Rotate} />
+      </Button>
+      {props.isRotating && (
+        <SavingStatus role="status">
+          <SyncIcon viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 12a8 8 0 0 1-13.7 5.6M4 12a8 8 0 0 1 13.7-5.6" />
+            <path d="M17.7 2.4v4h-4M6.3 21.6v-4h4" />
+          </SyncIcon>
+          Saving…
+        </SavingStatus>
+      )}
     </>
   );
 }
@@ -765,21 +771,28 @@ const ButtonBar = styled("div", {
 const ButtonGroup = styled("div", {
   display: "flex",
 });
-const RotateButtonWrap = styled("div", {
-  position: "relative",
+const SavingStatus = styled("div", {
   display: "flex",
+  alignItems: "center",
+  gap: "0.4rem",
+  alignSelf: "center",
+  marginLeft: "0.25rem",
+  color: "rgba(255, 255, 255, 0.75)",
+  fontFamily: "Open Sans",
+  fontSize: "0.85rem",
+  whiteSpace: "nowrap",
+  userSelect: "none",
 });
-const RotateSpinner = styled("div", {
-  position: "absolute",
-  right: "0.35rem",
-  bottom: "0.35rem",
-  width: "0.7rem",
-  height: "0.7rem",
-  border: "2px solid rgba(255, 255, 255, 0.3)",
-  borderTop: "2px solid white",
-  borderRadius: "50%",
-  animation: "spin 1s linear infinite",
-  pointerEvents: "none",
+const SyncIcon = styled("svg", {
+  width: "1rem",
+  height: "1rem",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  animation: "spin 1.2s linear infinite",
+  "@media (prefers-reduced-motion: reduce)": { animation: "none" },
 });
 const MenuWrap = styled("div", {
   position: "relative",
