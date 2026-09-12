@@ -37,6 +37,15 @@ const REVOKE_DELAY_MS = 60_000;
 const PLACEHOLDER_GIF =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=";
 
+/** The thumbnail URL the grid shows for `fileId`, if it has one. */
+function gridThumbnail(groups: ThumbnailGroup[], fileId: string): string | undefined {
+  for (const group of groups) {
+    const thumb = group.thumbnails.find((t) => t.id === fileId);
+    if (thumb) return thumb.thumbnail;
+  }
+  return undefined;
+}
+
 /** Decodes `src` up front so swapping it into the <img> paints in the same frame. */
 async function decodeImage(src: string): Promise<Size> {
   const img = new Image();
@@ -326,13 +335,14 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       if (!metadata || metadata.albumId === undefined || file === undefined) return;
       if (shownFileIdRef.current !== props.fileId) {
         // New photo: start from its thumbnail and forget the previous photo's turns.
-        shownFileIdRef.current = props.fileId;
         targetRotationRef.current = serverRotation(file);
-        const currentThumb = thumbnailsRef.current
-          .flatMap((group) => group.thumbnails)
-          .find((thumb) => thumb.id === props.fileId);
-        await showImage(currentThumb?.thumbnail ?? PLACEHOLDER_GIF, serverRotation(file));
+        await showImage(
+          gridThumbnail(thumbnailsRef.current, props.fileId) ?? PLACEHOLDER_GIF,
+          serverRotation(file),
+        );
         if (cancelled) return;
+        // Only now does `url` belong to this photo (see `isSwitching` in the render).
+        shownFileIdRef.current = props.fileId;
       }
       try {
         if (file.original !== undefined) {
@@ -431,11 +441,19 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   }, [downloadUrl]);
 
   const stop = (e: React.MouseEvent) => e.stopPropagation();
+  // Until the effect above has swapped in the new photo, `url` and the turns
+  // still belong to the previous one: draw the new photo's thumbnail (already
+  // decoded by the grid) unturned instead, so opening never blinks.
+  const isSwitching = shownFileIdRef.current !== props.fileId;
+  const shownUrl = isSwitching
+    ? (gridThumbnail(props.thumbnails, props.fileId) ?? PLACEHOLDER_GIF)
+    : url;
+  const shownTurns = isSwitching ? 0 : cssTurns;
   const imageTransform = {
-    transform: `rotate(${cssTurns * 90}deg) scale(${rotatedFitScale(
+    transform: `rotate(${shownTurns * 90}deg) scale(${rotatedFitScale(
       naturalSize,
       viewport,
-      cssTurns,
+      shownTurns,
     )})`,
     transition: animateTurn ? `transform ${ROTATE_ANIMATION_MS}ms ease` : "none",
   };
@@ -508,7 +526,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       </NextButton>
       {file?.originalVideo ? (
         <>
-          <FullScreenImg src={url} />
+          <FullScreenImg src={shownUrl} />
           {isVideoReady && (
             <FullScreenVideo src={url} autoPlay muted loop controls onClick={stop} />
           )}
@@ -524,7 +542,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           <ZoomLayer ref={zoom.targetRef}>
             <ZoomableImg
               ref={zoom.imageRef}
-              src={url}
+              src={shownUrl}
               draggable={false}
               style={imageTransform}
             />

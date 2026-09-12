@@ -213,6 +213,11 @@ export function useGridPinch(options: Options) {
     [paint],
   );
 
+  const clearAfterSettle = useCallback(() => {
+    settle.current = null;
+    clear();
+  }, [clear]);
+
   const finish = useCallback(() => {
     const g = gesture.current;
     if (!g) return;
@@ -223,9 +228,12 @@ export function useGridPinch(options: Options) {
     }
     animateTo(1, COMMIT_MS, () => {
       if (target.kind === "fullscreen") {
-        const id = g.anchor.id;
-        clear();
-        optionsRef.current.onOpen(id);
+        // Keep the grown tile and the dark overlay on screen until the modal
+        // (opaque, above both) has painted, so the handoff does not blink.
+        optionsRef.current.onOpen(g.anchor.id);
+        settle.current = requestAnimationFrame(() => {
+          settle.current = requestAnimationFrame(clearAfterSettle);
+        });
         return;
       }
       // After the real relayout the anchored tile sits at its target rect;
@@ -234,7 +242,7 @@ export function useGridPinch(options: Options) {
       clear();
       optionsRef.current.onCommit(target.columns, scrollTop);
     });
-  }, [animateTo, clear]);
+  }, [animateTo, clear, clearAfterSettle]);
 
   const begin = useCallback((a: Point, b: Point) => {
     const container = containerRef.current;
