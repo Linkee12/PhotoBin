@@ -194,6 +194,9 @@ const routes = {
       );
       return success({
         message: "File has been uploaded successfully!",
+        // Echoed so a client can tell that the batch was actually recorded
+        // (a server without batch support would drop the field silently).
+        batchId: data.body.batch?.batchId,
       });
     }),
   renameBatch: builder
