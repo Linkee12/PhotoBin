@@ -205,6 +205,8 @@ const Name = styled("span", {
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
+  // Keep the name on the left, where the wave leaves the most water above it.
+  "@wide": { maxWidth: "40vw" },
   variants: {
     editable: {
       true: {

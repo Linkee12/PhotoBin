@@ -1,6 +1,12 @@
 import { ReactNode } from "react";
 import { styled } from "../../../stitches.config";
 import albumItemsBg from "@assets/images/albumItemsBg.svg?no-inline";
+import {
+  SHEET_BAR_HEIGHT,
+  SHELF_COLOR,
+  TOOLBAR_HEIGHT,
+  TOOLBAR_RESERVED_WIDTH,
+} from "./Menu";
 
 const COLORS = ["#181818", "#333333", "#666666"];
 
@@ -25,37 +31,32 @@ export function Panel(props: PanelProps) {
 type SectionPanelProps = {
   /** Colour of the section body. */
   variant: PanelVariant;
-  /** Colour of the section above, which the wave strip curves out of. */
+  /** Colour of the band the header sits in — the panel above ends with it. */
   bandVariant: PanelVariant;
   /**
-   * The first section of the album: the toolbar shelf (wide) or the bottom
-   * sheet bar (narrow) already draws the curve above it, so it has no strip.
+   * The first section of the album: its band is transparent so the toolbar
+   * shelf shows through, and on wide viewports it shares the toolbar's row.
    */
   first?: boolean;
   header: ReactNode;
   children: ReactNode;
 };
 
-/** Height of the curved strip between two sections. */
-export const WAVE_HEIGHT = "3rem";
-
 /**
- * A group of the album, laid out as in the design: a curved strip where the
- * previous section's colour gives way to this section's body colour, then the
- * header row on the body colour with clear space under the curve, then the
- * tiles.
+ * A group of the album. The header sits in the wave: a band whose height
+ * comes from the header's content and padding, with the curved edge between
+ * the band colour and the body colour drawn as its background, stretched to
+ * the band. Whatever the header's height, it stays inside the curve.
  */
 export function SectionPanel(props: SectionPanelProps) {
   const first = props.first === true;
   return (
     <Section>
-      {!first && (
-        <WaveStrip data-group-band band={props.bandVariant} aria-hidden="true">
-          <WaveEdge body={props.variant} />
-        </WaveStrip>
-      )}
+      <Band data-group-band first={first} band={props.bandVariant}>
+        <WaveEdge body={props.variant} aria-hidden="true" />
+        <BandContent>{props.header}</BandContent>
+      </Band>
       <SectionBody body={props.variant} data-section-body>
-        <HeaderRow>{props.header}</HeaderRow>
         {props.children}
       </SectionBody>
     </Section>
@@ -120,41 +121,68 @@ const Section = styled("section", {
   width: "100%",
 });
 
-/** The strip holding the curve; painted in the previous section's colour. */
-const WaveStrip = styled("div", {
+const Band = styled("div", {
+  // Painted above the (masked) toolbar shelf it may overlap; only the header
+  // row itself takes clicks so the toolbar buttons beside it stay reachable.
+  position: "relative",
+  pointerEvents: "none",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  width: "100%",
+  boxSizing: "border-box",
+  transition: "background-color 0.3s",
+  variants: {
+    band: bandColors,
+    first: {
+      true: {
+        // Transparent so the toolbar shelf shows through. Share the row with
+        // the toolbar buttons where there is room; keep clear of them (they
+        // are right-aligned) with reserved padding.
+        "@wide": { background: "none" },
+        "@toolbarInline": {
+          marginTop: `-${TOOLBAR_HEIGHT}`,
+          minHeight: TOOLBAR_HEIGHT,
+          paddingRight: TOOLBAR_RESERVED_WIDTH,
+          // Clear the shelf's curve, which is highest at the left.
+          paddingTop: "1.25rem",
+        },
+        // Continues the bottom sheet's (empty) bar, which it sits on.
+        "@narrow": {
+          marginTop: `-${SHEET_BAR_HEIGHT}`,
+          minHeight: SHEET_BAR_HEIGHT,
+          background: SHELF_COLOR,
+        },
+      },
+      false: {},
+    },
+  },
+});
+
+/** The header row, painted inside the wave; the curve passes below it. */
+const BandContent = styled("div", {
   position: "relative",
   width: "100%",
-  height: WAVE_HEIGHT,
-  pointerEvents: "none",
-  transition: "background-color 0.3s",
-  variants: { band: bandColors },
+  // Deep enough in the water: the curve descends left to right, so the header
+  // needs room above it for its whole width.
+  paddingTop: "2.5rem",
+  paddingBottom: "1rem",
 });
 
 /**
- * Body colour rising from the bottom-left of the strip over the previous
- * section's colour: the curve of the design.
+ * Curved edge of the body colour rising from the bottom-left of the band over
+ * the band colour. The mask is stretched over the whole band, so the slope is
+ * gentle at any width and the header at the top-left stays inside the curve.
  */
 const WaveEdge = styled("div", {
   position: "absolute",
   inset: 0,
+  pointerEvents: "none",
   maskImage: `url(${albumItemsBg})`,
   maskRepeat: "no-repeat",
-  "@narrow": {
-    maskSize: "100% 100%",
-  },
-  "@wide": {
-    maskSize: "min(800px, 100%) 100%",
-  },
+  maskSize: "100% 100%",
   transition: "background-color 0.3s",
   variants: { body: bandColors },
-});
-
-/** The header row, on the body colour, kept clear of the curve above it. */
-const HeaderRow = styled("div", {
-  width: "100%",
-  boxSizing: "border-box",
-  paddingTop: "1.5rem",
-  paddingBottom: "0.5rem",
 });
 
 const SectionBody = styled("div", {
