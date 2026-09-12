@@ -14,11 +14,17 @@ export class ImageQueryService {
 
   constructor(private _cryptoService: CryptoService) {}
 
+  /**
+   * Fetches, reassembles and decrypts one rendition of a file. `withText: false`
+   * skips decrypting the file name and date (the album already has them
+   * decoded) — use it for thumbnails, where only the object URL is needed.
+   */
   async getImg(
     albumId: string,
     file: Metadata["files"][number],
     key: string | null,
     type: PartType,
+    options: { withText?: boolean } = {},
   ) {
     const part = file[type];
     if (!part) return;
@@ -26,7 +32,7 @@ export class ImageQueryService {
 
     const tFetch = performance.now();
     const chunks = await mapWithConcurrency(part.chunkCount, DOWNLOAD_CONCURRENCY, (i) =>
-      this._transport.get(albumId, file.fileId, type, i),
+      this._transport.get(albumId, file.fileId, type, i, { version: part.iv }),
     );
     const combinedImg = this._combineChunks(chunks);
     const tDecrypt = performance.now();
@@ -37,17 +43,14 @@ export class ImageQueryService {
       );
     }
 
-    const date = await this._cryptoService.decryptText(
-      file.date.value,
-      key,
-      file.date.iv,
-    );
+    const withText = options.withText ?? true;
+    const date = withText
+      ? await this._cryptoService.decryptText(file.date.value, key, file.date.iv)
+      : "";
     const blob = new Blob([img]);
-    const fileName = await this._cryptoService.decryptText(
-      file.fileName.value,
-      key,
-      file.fileName.iv,
-    );
+    const fileName = withText
+      ? await this._cryptoService.decryptText(file.fileName.value, key, file.fileName.iv)
+      : "";
     return {
       img: type === "unsupportedFile" ? undefined : URL.createObjectURL(blob),
       id: file.fileId,

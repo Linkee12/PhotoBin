@@ -16,12 +16,24 @@ const EMPTY_IV = new Uint8Array(0) as Uint8Array<ArrayBuffer>;
  * encrypted album opened without its key fails loudly instead of showing garbage.
  */
 export class CryptoService {
+  // An album uses one key for thousands of operations; import it once.
+  private _importedKeys = new Map<string, Promise<CryptoKey>>();
+
+  private _key(key: string): Promise<CryptoKey> {
+    let imported = this._importedKeys.get(key);
+    if (imported === undefined) {
+      imported = importKey(key);
+      this._importedKeys.set(key, imported);
+    }
+    return imported;
+  }
+
   async decryptImage(cryptedImg: ArrayBuffer, key: string | null, base64Iv: string) {
     if (key === null) return cryptedImg;
     const iv = base64toUint8Array(base64Iv);
     return await window.crypto.subtle.decrypt(
       { name: "AES-GCM", iv },
-      await importKey(key),
+      await this._key(key),
       cryptedImg,
     );
   }
@@ -34,7 +46,7 @@ export class CryptoService {
     const iv = base64toUint8Array(base64Iv);
     const arraybuffer = await window.crypto.subtle.decrypt(
       { name: "AES-GCM", iv },
-      await importKey(key),
+      await this._key(key),
       buffer,
     );
     return decoder.decode(arraybuffer);
@@ -53,7 +65,7 @@ export class CryptoService {
     if (key === null) return { cryptedImg: buffer, iv: EMPTY_IV };
     const cryptedImg = await window.crypto.subtle.encrypt(
       { name: "AES-GCM", iv },
-      await importKey(key),
+      await this._key(key),
       buffer,
     );
     return { cryptedImg, iv };
@@ -71,7 +83,7 @@ export class CryptoService {
     }
     const encryptedText = await window.crypto.subtle.encrypt(
       { name: "AES-GCM", iv },
-      await importKey(key),
+      await this._key(key),
       encodedText,
     );
     return { encryptedText, iv };

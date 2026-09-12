@@ -17,10 +17,14 @@ function partUrl(
   fileId: string,
   type: PartType,
   part: number,
-  editId?: string,
+  query: { editId?: string; v?: string } = {},
 ) {
   const url = `${PARTS_PATH}/${albumId}/${fileId}/${type}/${part}`;
-  return editId === undefined ? url : `${url}?editId=${encodeURIComponent(editId)}`;
+  const params = new URLSearchParams();
+  if (query.editId !== undefined) params.set("editId", query.editId);
+  if (query.v !== undefined && query.v.length > 0) params.set("v", query.v);
+  const search = params.toString();
+  return search.length === 0 ? url : `${url}?${search}`;
 }
 
 /** A non-2xx response; `status` lets callers tell server errors (retryable) from rejections. */
@@ -52,7 +56,8 @@ export class PartTransport {
     bytes: ArrayBuffer,
     options: { editId?: string; signal?: AbortSignal } = {},
   ) {
-    const response = await fetch(partUrl(albumId, fileId, type, part, options.editId), {
+    const url = partUrl(albumId, fileId, type, part, { editId: options.editId });
+    const response = await fetch(url, {
       method: "PUT",
       headers: { "Content-Type": "application/octet-stream" },
       // Chromium streams Blob bodies straight from the browser process, while
@@ -67,8 +72,22 @@ export class PartTransport {
       );
   }
 
-  async get(albumId: string, fileId: string, type: PartType, part: number) {
-    const response = await fetch(partUrl(albumId, fileId, type, part));
+  /**
+   * Fetches one chunk. `version` (the part's iv) goes into the URL as `?v=`
+   * so the backend can mark the response immutable: a replaced part (rotation)
+   * gets a new iv and therefore a new URL, so a cached copy is never stale.
+   * Plain albums have empty ivs and fall back to revalidated caching.
+   */
+  async get(
+    albumId: string,
+    fileId: string,
+    type: PartType,
+    part: number,
+    options: { version?: string } = {},
+  ) {
+    const response = await fetch(
+      partUrl(albumId, fileId, type, part, { v: options.version }),
+    );
     if (!response.ok)
       throw new PartTransportError(
         `Download of ${type}[${part}] failed: ${response.status}`,

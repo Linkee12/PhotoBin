@@ -5,8 +5,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "serve": "vite preview",
-    "lint": "eslint ./src",
-    "lint:fix": "eslint ./src --fix",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint ./src",
+    "lint:fix": "ESLINT_USE_FLAT_CONFIG=false eslint ./src --fix",
     "type-check": "tsc",
     "test": "vitest run"
   },
