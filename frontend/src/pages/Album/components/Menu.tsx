@@ -5,8 +5,17 @@ import SlideUp from "@assets/images/icons/slideUp.svg?react";
 import SlideDown from "@assets/images/icons/slideDown.svg?react";
 import AddIcon from "@assets/images/icons/addIcon.svg?react";
 import { styled } from "../../../stitches.config";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AlbumView } from "../../../utils/groupFiles";
+
+/** Background of the toolbar shelf and the narrow bottom sheet. */
+export const SHELF_COLOR = "#0E0E0E";
+/** Height of the wide toolbar shelf; the first group's band overlaps it on `@toolbarInline`. */
+export const TOOLBAR_HEIGHT = "5rem";
+/** Width kept free at the right of the first group's header for the toolbar buttons. */
+export const TOOLBAR_RESERVED_WIDTH = "27rem";
+/** Height of the narrow bottom-sheet's closed bar; the first group's header sits on it. */
+export const SHEET_BAR_HEIGHT = "3rem";
 
 type MenuProps = {
   onDownloadAll: () => void;
@@ -46,131 +55,121 @@ function ViewToggle(props: { view: AlbumView; onChangeView: (view: AlbumView) =>
 
 export function Menu(props: MenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [showButton, setShowButton] = useState(false);
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => setShowButton(true), 400);
-    } else {
-      setShowButton(false);
-    }
-  }, [isOpen]);
 
   return (
     <>
       <LandscapeButtonsBg>
         <ViewToggle view={props.view} onChangeView={props.onChangeView} />
-        <Button disabled={props.isBusy}>
-          <ButtonText onClick={props.onDownloadAll}>DOWNLOAD ALL</ButtonText>
+        <Button disabled={props.isBusy} onClick={props.onDownloadAll}>
+          <ButtonText>DOWNLOAD ALL</ButtonText>
           <LandscapeDownloadIcon />
         </Button>
-        <Button>
-          <ButtonText onClick={props.onAddPhoto}> ADD PHOTO</ButtonText>
+        <Button onClick={props.onAddPhoto}>
+          <ButtonText>ADD PHOTO</ButtonText>
           <AddIcon />
         </Button>
       </LandscapeButtonsBg>
       <PortraitButtonsContainer onClick={() => setIsOpen(!isOpen)}>
-        <PortraitHeader isOpen={isOpen}>
+        <PortraitHeader isOpen={isOpen} data-sheet-handle>
           <SlideIconUp as={SlideUp} />
         </PortraitHeader>
-        <Bottom isOpen={isOpen}>
-          <Buttons>
-            <NarrowToggle isOpen={showButton && isOpen}>
+        <Sheet isOpen={isOpen} aria-hidden={!isOpen}>
+          <SheetContent>
+            <Buttons>
               <ViewToggle view={props.view} onChangeView={props.onChangeView} />
-            </NarrowToggle>
-            <Button
-              disabled={props.isBusy}
-              isOpen={showButton && isOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onDownloadAll();
-                setIsOpen(false);
-              }}
-            >
-              <div />
-              <ButtonText>DOWNLOAD ALL</ButtonText>
-              <LandscapeDownloadIcon />
-            </Button>
-            <Button
-              isOpen={showButton && isOpen}
-              onClick={(e) => {
-                e.stopPropagation();
-                props.onAddPhoto();
-                setIsOpen(false);
-              }}
-            >
-              <div />
-              <ButtonText> ADD PHOTO</ButtonText>
-              <AddIcon />
-            </Button>
-          </Buttons>
-          {isOpen ? (
-            <SlideIconDown as={SlideDown} isOpen={showButton && isOpen} />
-          ) : (
-            <></>
-          )}
-        </Bottom>
+              <Button
+                disabled={props.isBusy}
+                tabIndex={isOpen ? 0 : -1}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onDownloadAll();
+                  setIsOpen(false);
+                }}
+              >
+                <div />
+                <ButtonText>DOWNLOAD ALL</ButtonText>
+                <LandscapeDownloadIcon />
+              </Button>
+              <Button
+                tabIndex={isOpen ? 0 : -1}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onAddPhoto();
+                  setIsOpen(false);
+                }}
+              >
+                <div />
+                <ButtonText>ADD PHOTO</ButtonText>
+                <AddIcon />
+              </Button>
+            </Buttons>
+            <SlideIconDown as={SlideDown} />
+          </SheetContent>
+        </Sheet>
       </PortraitButtonsContainer>
     </>
   );
 }
 
+/** Wide toolbar: a dark shelf with the buttons right-aligned; wraps when the row is short. */
 const LandscapeButtonsBg = styled("div", {
   "@narrow": { display: "none" },
   "@wide": { display: "flex" },
-  maskRepeat: "no-repeat",
-  backgroundSize: "100% 100%",
-  height: "5rem",
-  justifyContent: "right",
+  flexWrap: "wrap",
+  gap: "0.6rem",
+  justifyContent: "flex-end",
   alignItems: "center",
-  maskSize: "cover",
-  backgroundColor: "#0E0E0E",
+  boxSizing: "border-box",
+  minHeight: TOOLBAR_HEIGHT,
+  padding: "0.6rem 0.6rem 0.6rem 8rem",
+  backgroundColor: SHELF_COLOR,
   maskImage: `url(${landscapeButtonsBg})`,
-  variants: {
-    show: {
-      true: {
-        display: "grid",
-      },
-      false: { display: "none" },
-    },
-  },
+  maskRepeat: "no-repeat",
+  maskSize: "cover",
 });
 
 const PortraitButtonsContainer = styled("div", {
   "@narrow": { display: "flex" },
   "@wide": { display: "none" },
+  position: "relative",
   cursor: "pointer",
   flexDirection: "column",
-  transition: "display 0.3s , height 0.4s",
-  justifyContent: "flex-end",
+  justifyContent: "flex-start",
   alignItems: "center",
-  height: "6rem",
+  // Handle (wave with the chevron) on top, the sheet's bar below it.
+  height: `calc(${SHEET_BAR_HEIGHT} * 2)`,
+});
+
+/**
+ * Bottom sheet, anchored to the bar so it grows upwards over the album header.
+ * Closed it is the empty bar; open it is as tall as its buttons.
+ */
+const Sheet = styled("div", {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  display: "grid",
+  minHeight: SHEET_BAR_HEIGHT,
+  backgroundColor: SHELF_COLOR,
+  transition: "grid-template-rows 0.4s",
+  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
   variants: {
-    show: {
-      true: {
-        display: "flex",
-      },
-      false: {
-        display: "none",
-      },
+    isOpen: {
+      true: { gridTemplateRows: "1fr" },
+      false: { gridTemplateRows: "0fr" },
     },
   },
 });
-const Bottom = styled("div", {
+
+const SheetContent = styled("div", {
+  minHeight: 0,
+  overflow: "hidden",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
-  height: "3rem",
-  cursor: "pointer",
-  justifyContent: "space-between",
-  width: "100%",
-  backgroundColor: "#0E0E0E",
-  transition: "margin 0.4s , height 0.4s",
-  variants: {
-    isOpen: {
-      true: { marginTop: "-18rem", height: "18rem" },
-      false: { height: "3rem" },
-    },
-  },
+  boxSizing: "border-box",
+  padding: "1rem 5% 0",
 });
 
 const PortraitHeader = styled("div", {
@@ -181,50 +180,43 @@ const PortraitHeader = styled("div", {
   maskRepeat: "no-repeat",
   maskSize: "100% 100%",
   maskPosition: "bottom",
-  height: "3rem",
-  backgroundColor: "#0E0E0E",
+  height: SHEET_BAR_HEIGHT,
+  backgroundColor: SHELF_COLOR,
   maskImage: `url(${albumItemsBg})`,
+  transition: "height 0.4s",
+  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
   variants: {
     isOpen: {
       true: { height: "0rem", overflow: "hidden" },
-      false: { height: "3rem" },
+      false: { height: SHEET_BAR_HEIGHT },
     },
   },
 });
 
 const Button = styled("button", {
-  zIndex: "1",
-  background: "#0e0e0e",
+  display: "flex",
+  flexShrink: 0,
+  background: SHELF_COLOR,
   justifyContent: "space-between",
   alignItems: "center",
   color: "#fff",
   border: "solid 2px #333333",
   fontSize: "0.7rem",
   fontWeight: "bold",
-  marginRight: "0.6rem",
+  fontFamily: "inherit",
   borderRadius: "1.5rem",
   height: "2.5rem",
   padding: "0.5rem",
   cursor: "pointer",
-  "@wide": { display: "flex" },
-  variants: {
-    isOpen: {
-      true: {
-        "@narrow": { display: "flex", marginTop: "1rem", width: "90%" },
-      },
-      false: {
-        "@narrow": { display: "none" },
-      },
-    },
-  },
+  "@narrow": { width: "100%" },
 });
 const Segmented = styled("div", {
   display: "inline-flex",
+  flexShrink: 0,
   border: "solid 2px #333333",
   borderRadius: "1.5rem",
   overflow: "hidden",
-  background: "#0e0e0e",
-  marginRight: "0.6rem",
+  background: SHELF_COLOR,
 });
 const Segment = styled("button", {
   background: "none",
@@ -243,20 +235,11 @@ const Segment = styled("button", {
     },
   },
 });
-const NarrowToggle = styled("div", {
-  "@wide": { display: "none" },
-  marginTop: "1rem",
-  variants: {
-    isOpen: {
-      true: { "@narrow": { display: "flex" } },
-      false: { "@narrow": { display: "none" } },
-    },
-  },
-});
 const Buttons = styled("div", {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
+  gap: "1rem",
   width: "100%",
 });
 const ButtonText = styled("div", {
@@ -266,15 +249,5 @@ const SlideIconUp = styled("div", {
   margin: "0.5rem",
 });
 const SlideIconDown = styled("div", {
-  margin: "3rem",
-  variants: {
-    isOpen: {
-      true: {
-        "@narrow": { display: "flex" },
-      },
-      false: {
-        "@narrow": { display: "none" },
-      },
-    },
-  },
+  margin: "1.5rem 0 3.5rem",
 });

@@ -2,7 +2,7 @@ import { AlbumItem } from "./AlbumItem";
 import Check2 from "@assets/images/icons/check2.svg?react";
 import Check from "@assets/images/icons/check.svg?react";
 import { styled } from "../../../stitches.config";
-import { Panel, PanelHeader, PushDown } from "./Panel";
+import { PanelVariant, SectionPanel } from "./Panel";
 import { ThumbnailGroup } from "../Album";
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -31,9 +31,18 @@ export function AlbumSection(props: AlbumSectionProps) {
   const selectOne = useCallback((id: string) => onSelect([id]), [onSelect]);
   const deselectOne = useCallback((id: string) => onDeSelect([id]), [onDeSelect]);
 
+  const variant: PanelVariant = props.index % 2 == 0 ? 1 : 2;
+  // The band above the wave continues the previous section's colour (the
+  // album's own dark ground before the first group).
+  let bandVariant: PanelVariant = variant === 1 ? 2 : 1;
+  if (props.index === 0) bandVariant = 0;
+
   return (
-    <Panel zIndex={0} variant={props.index % 2 == 0 ? 1 : 2}>
-      <PanelHeader>
+    <SectionPanel
+      variant={variant}
+      bandVariant={bandVariant}
+      first={props.index === 0}
+      header={
         <Header
           role="button"
           aria-expanded={!props.isCollapsed}
@@ -44,7 +53,7 @@ export function AlbumSection(props: AlbumSectionProps) {
             ▾
           </Chevron>
           <GroupName name={props.group.title} onRename={props.onRename} />
-          {props.group.meta && <Meta data-group-meta>· {props.group.meta}</Meta>}
+          {props.group.meta && <Meta data-group-meta>{props.group.meta}</Meta>}
           <SelectAll
             data-select-group
             title={includeAllImages ? "Unselect group" : "Select group"}
@@ -57,7 +66,8 @@ export function AlbumSection(props: AlbumSectionProps) {
             {includeAllImages ? <CheckIcon as={Check} /> : <CheckIcon as={Check2} />}
           </SelectAll>
         </Header>
-      </PanelHeader>
+      }
+    >
       {!props.isCollapsed && (
         <Images>
           {props.group.thumbnails.map((image) => (
@@ -79,8 +89,7 @@ export function AlbumSection(props: AlbumSectionProps) {
           ))}
         </Images>
       )}
-      <PushDown />
-    </Panel>
+    </SectionPanel>
   );
 }
 
@@ -117,6 +126,7 @@ function GroupName(props: {
         ref={inputRef}
         value={draft}
         data-group-name-input
+        style={{ width: `${Math.max(draft.length, 6)}ch` }}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={onKeyDown}
         onBlur={save}
@@ -140,28 +150,43 @@ function GroupName(props: {
   );
 }
 
+/**
+ * One row on wide viewports: chevron, name (truncates), meta, checkbox.
+ * Two rows on narrow ones: the name gets the whole width and the meta sits
+ * under it, so nothing ever runs past the edge of the band.
+ */
 const Header = styled("div", {
-  display: "flex",
-  alignItems: "center",
-  gap: "0.5rem",
-  height: "3rem",
+  pointerEvents: "auto",
+  boxSizing: "border-box",
+  width: "100%",
   color: "#fff",
   fontFamily: "SourceCodeVF",
   whiteSpace: "nowrap",
   cursor: "pointer",
   userSelect: "none",
   "@narrow": {
-    paddingLeft: "1.28rem",
+    display: "grid",
+    gridTemplateColumns: "auto minmax(0, 1fr) auto",
+    columnGap: "0.5rem",
+    rowGap: "0.1rem",
+    alignItems: "center",
+    minHeight: "3rem",
+    padding: "0.5rem 1.28rem",
     fontSize: "1.1rem",
   },
   "@wide": {
-    paddingLeft: "5rem",
+    display: "flex",
+    alignItems: "center",
+    gap: "0.5rem",
+    minHeight: "3rem",
+    padding: "0.5rem 1.9rem 0.5rem 5rem",
     fontSize: "1.42rem",
   },
 });
 
 const Chevron = styled("span", {
   display: "inline-block",
+  flexShrink: 0,
   fontSize: "1em",
   lineHeight: 1,
   color: "#9A9A9A",
@@ -176,6 +201,10 @@ const Chevron = styled("span", {
 });
 
 const Name = styled("span", {
+  flex: "0 1 auto",
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
   variants: {
     editable: {
       true: {
@@ -195,18 +224,29 @@ const NameInput = styled("input", {
   border: "none",
   borderBottom: "1px solid #fff",
   padding: 0,
-  width: "12ch",
-  minWidth: "6ch",
+  flex: "0 1 auto",
+  minWidth: 0,
+  maxWidth: "100%",
+  boxSizing: "border-box",
   "&:focus": { outline: "none" },
 });
 
 const Meta = styled("span", {
+  flexShrink: 0,
   color: "#9A9A9A",
   fontSize: "0.7em",
+  "@narrow": {
+    gridColumn: 2,
+    gridRow: 2,
+  },
+  "@wide": {
+    "&::before": { content: '"· "' },
+  },
 });
 
 const SelectAll = styled("div", {
   cursor: "pointer",
+  flexShrink: 0,
   width: "1.4rem",
   height: "1.4rem",
   display: "flex",

@@ -12,10 +12,17 @@ import { createStitches } from "@stitches/react";
  * also reports `(orientation: portrait)`.
  */
 export const NARROW_MAX_WIDTH_PX = 699;
+/**
+ * From this width on, the album toolbar (HISTORY/DATE, DOWNLOAD ALL, ADD PHOTO)
+ * shares its row with the first group's header; below it the toolbar gets its
+ * own row so the two can never collide.
+ */
+export const TOOLBAR_INLINE_MIN_WIDTH_PX = 1100;
 
 export const { styled, keyframes } = createStitches({
   media: {
     narrow: `(max-width: ${NARROW_MAX_WIDTH_PX}px) and (orientation: portrait)`,
     wide: `(min-width: ${NARROW_MAX_WIDTH_PX + 1}px), (orientation: landscape)`,
+    toolbarInline: `(min-width: ${TOOLBAR_INLINE_MIN_WIDTH_PX}px)`,
   },
 });

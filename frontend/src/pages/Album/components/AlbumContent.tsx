@@ -197,6 +197,11 @@ export function AlbumContent(props: AlbumContentProps) {
     ref.current.click();
   }
   const shownPercent = displayedPercent(phase, uploadProgress?.percent ?? 0);
+  const hasFailedFiles = failedFiles.length > 0;
+  let cloudText = "Drop photos here";
+  if (props.isUploading) cloudText = "Preparing your photos";
+  else if (hasFailedFiles)
+    cloudText = `${failedFiles.length} of your files didn't upload`;
   function getAllId(): string[] {
     return props.thumbnailGroups.flatMap((group) =>
       group.thumbnails.map((file) => file.id),
@@ -210,15 +215,6 @@ export function AlbumContent(props: AlbumContentProps) {
           <RemainingTime>{timeLeft}</RemainingTime>
         </RemainingTimeContainer>
       )}
-      {props.thumbnailGroups.length > 0 && (
-        <Menu
-          onDownloadAll={() => props.onDownloadAll(getAllId())}
-          onAddPhoto={openFilePicker}
-          isBusy={props.isUploading || props.isDownloading}
-          view={props.view}
-          onChangeView={props.onChangeView}
-        />
-      )}
       <DragNdrop
         onDroppedFiles={(files) => {
           if (files != null) {
@@ -227,6 +223,65 @@ export function AlbumContent(props: AlbumContentProps) {
           }
         }}
       >
+        {/* Drop hero / upload indicator / retry notice, before the toolbar so the
+            first group's band still overlaps the toolbar shelf, not this. */}
+        <CloudSlot>
+          <CloudContainer
+            placement={props.showUploader ? "floating" : "inline"}
+            isVisible={props.showUploader || hasFailedFiles}
+            isFadingOut={phase === "outro"}
+            onClick={openFilePicker}
+          >
+            <StyledUpload progress={shownPercent} active={phase !== "idle"} />
+            {uploadProgress ? (
+              <UploadStats>
+                <Percent>{shownPercent}%</Percent>
+                <Bytes>
+                  {formatBytesPair(
+                    uploadProgress.uploadedBytes,
+                    uploadProgress.totalBytes,
+                  )}
+                </Bytes>
+              </UploadStats>
+            ) : (
+              <Text>
+                {cloudText}
+                {!props.isUploading && !hasFailedFiles && (
+                  <TextHint>or click to browse</TextHint>
+                )}
+              </Text>
+            )}
+            {phase === "uploading" && (
+              <UploadAction
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cancelUpload();
+                }}
+              >
+                Cancel upload
+              </UploadAction>
+            )}
+            {phase === "idle" && hasFailedFiles && (
+              <UploadAction
+                onClick={(e) => {
+                  e.stopPropagation();
+                  retryFailedUploads();
+                }}
+              >
+                Retry failed uploads ({failedFiles.length})
+              </UploadAction>
+            )}
+          </CloudContainer>
+        </CloudSlot>
+        {props.thumbnailGroups.length > 0 && (
+          <Menu
+            onDownloadAll={() => props.onDownloadAll(getAllId())}
+            onAddPhoto={openFilePicker}
+            isBusy={props.isUploading || props.isDownloading}
+            view={props.view}
+            onChangeView={props.onChangeView}
+          />
+        )}
         <AlbumSections>
           {props.thumbnailGroups.map((group, i) => (
             <AlbumSection
@@ -251,18 +306,6 @@ export function AlbumContent(props: AlbumContentProps) {
           )}
         </AlbumSections>
         <UploadMask show={phase === "uploading" || phase === "done"} />
-        {phase === "uploading" && (
-          <UploadActions>
-            <UploadButton onClick={cancelUpload}>Cancel upload</UploadButton>
-          </UploadActions>
-        )}
-        {phase === "idle" && failedFiles.length > 0 && (
-          <UploadActions>
-            <UploadButton onClick={retryFailedUploads}>
-              Retry failed uploads ({failedFiles.length})
-            </UploadButton>
-          </UploadActions>
-        )}
         <DownloadMask show={props.isDownloading}>
           <DownloadText>Preparing your files</DownloadText>
           {props.downloadProgress > 0 && (
@@ -270,29 +313,6 @@ export function AlbumContent(props: AlbumContentProps) {
           )}
         </DownloadMask>
         <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
-          <CloudContainer
-            isVisible={props.showUploader}
-            isFadingOut={phase === "outro"}
-            onClick={openFilePicker}
-          >
-            <StyledUpload progress={shownPercent} active={phase !== "idle"} />
-            {uploadProgress ? (
-              <UploadStats>
-                <Percent>{shownPercent}%</Percent>
-                <Bytes>
-                  {formatBytesPair(
-                    uploadProgress.uploadedBytes,
-                    uploadProgress.totalBytes,
-                  )}
-                </Bytes>
-              </UploadStats>
-            ) : (
-              <Text>
-                {props.isUploading ? "Preparing your photos" : "Drop photos here"}
-                {!props.isUploading && <TextHint>or click to browse</TextHint>}
-              </Text>
-            )}
-          </CloudContainer>
           <input
             type="file"
             style={{ display: "none" }}
@@ -397,30 +417,32 @@ async function* upload(params: {
   }
 }
 
-// Plain placement/styling on purpose: the upload indicator area is being
-// redesigned separately and these buttons are meant to be easy to move.
-const UploadActions = styled("div", {
-  position: "fixed",
-  bottom: "2rem",
-  left: 0,
-  width: "100%",
+/**
+ * Cancel / retry, part of the cloud block right under the stats so it can
+ * never collide with the indicator. Same pill as the toolbar buttons.
+ */
+const UploadAction = styled("button", {
+  marginTop: "1rem",
   display: "flex",
-  justifyContent: "center",
-  pointerEvents: "none",
-});
-
-const UploadButton = styled("button", {
-  pointerEvents: "auto",
-  padding: "0.6rem 1.2rem",
-  borderRadius: "0.5rem",
-  border: "1px solid #8B8B8B",
-  background: "#333333",
-  color: "#DBDCD9",
+  alignItems: "center",
+  background: "#0e0e0e",
+  color: "#fff",
+  border: "solid 2px #333333",
+  borderRadius: "1.5rem",
+  height: "2.5rem",
+  padding: "0.5rem 1.2rem",
   fontFamily: "Open Sans",
-  fontSize: "0.9rem",
+  fontSize: "0.7rem",
+  fontWeight: "bold",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
   cursor: "pointer",
   "&:hover": {
-    background: "#444444",
+    borderColor: "#8B8B8B",
+  },
+  "&:focus-visible": {
+    outline: "2px solid #DBDCD9",
+    outlineOffset: "2px",
   },
 });
 
@@ -441,7 +463,6 @@ const UploadSection = styled("div", {
 });
 
 const AlbumSections = styled("div", {
-  backgroundColor: "rgba(51, 51, 51,0.2)",
   display: "flex",
   flexDirection: "column",
 });
@@ -462,16 +483,36 @@ const Spinner = styled("div", {
   animation: "spin 1s linear infinite",
 });
 
+/** Centres the cloud block; the floating variant takes its horizontal position from here. */
+const CloudSlot = styled("div", {
+  display: "flex",
+  justifyContent: "center",
+  width: "100%",
+});
+
 const CloudContainer = styled("div", {
   flexDirection: "column",
   alignItems: "center",
-  position: "absolute",
-  top: "18rem",
   transition: `opacity ${OUTRO_MS}ms ease-out`,
   "@media (prefers-reduced-motion: reduce)": {
     transition: "none",
   },
   variants: {
+    placement: {
+      // Hero of an empty album, and the progress indicator over the dimmed album.
+      floating: {
+        position: "absolute",
+        top: "18rem",
+        // Above the upload mask, which comes later in the DOM.
+        zIndex: 2,
+      },
+      // After failures in a filled album: in flow above the toolbar, about
+      // where the floating indicator was.
+      inline: {
+        position: "static",
+        padding: "3rem 1rem 1.5rem",
+      },
+    },
     isVisible: {
       true: {
         display: "flex",
