@@ -16,6 +16,8 @@ type AlbumSectionProps = {
   onToggleCollapsed: () => void;
   /** Absent for groups that are not a named upload batch (date groups, "Earlier uploads"). */
   onRename: ((name: string) => void) | undefined;
+  /** Where the toolbar shares its row with this (first) group's header: render the header there. */
+  headerSlot?: HTMLElement | null;
   isSelected: (imageId: string) => boolean;
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
@@ -42,6 +44,7 @@ export function AlbumSection(props: AlbumSectionProps) {
       variant={variant}
       bandVariant={bandVariant}
       first={props.index === 0}
+      headerSlot={props.headerSlot}
       header={
         <Header
           role="button"
@@ -52,8 +55,6 @@ export function AlbumSection(props: AlbumSectionProps) {
           <Chevron collapsed={props.isCollapsed} aria-hidden="true">
             ▾
           </Chevron>
-          <GroupName name={props.group.title} onRename={props.onRename} />
-          {props.group.meta && <Meta data-group-meta>{props.group.meta}</Meta>}
           <SelectAll
             data-select-group
             title={includeAllImages ? "Unselect group" : "Select group"}
@@ -65,6 +66,8 @@ export function AlbumSection(props: AlbumSectionProps) {
           >
             {includeAllImages ? <CheckIcon as={Check} /> : <CheckIcon as={Check2} />}
           </SelectAll>
+          <GroupName name={props.group.title} onRename={props.onRename} />
+          {props.group.meta && <Meta data-group-meta>{props.group.meta}</Meta>}
         </Header>
       }
     >
@@ -151,9 +154,13 @@ function GroupName(props: {
 }
 
 /**
- * One row on wide viewports: chevron, name (truncates), meta, checkbox.
- * Two rows on narrow ones: the name gets the whole width and the meta sits
- * under it, so nothing ever runs past the edge of the band.
+ * Chevron, select-all, name, and the meta on a second line. The header is
+ * always in the water of its wave, whose curve descends left to right, so it
+ * keeps to the left and the name wraps rather than running under the curve.
+ * With the wide toolbar the wave is as tall as the band and the header takes
+ * its left third, starting deep enough below the top; with the bottom sheet
+ * the curve spans only `WAVE_HEIGHT`, so the header overlaps that span and the
+ * name column ends where the curve is still above the text.
  */
 const Header = styled("div", {
   pointerEvents: "auto",
@@ -161,26 +168,33 @@ const Header = styled("div", {
   width: "100%",
   color: "#fff",
   fontFamily: "SourceCodeVF",
-  whiteSpace: "nowrap",
   cursor: "pointer",
   userSelect: "none",
+  display: "grid",
+  columnGap: "0.5rem",
+  rowGap: "0.1rem",
+  alignItems: "center",
+  overflowWrap: "anywhere",
   "@narrow": {
-    display: "grid",
-    gridTemplateColumns: "auto minmax(0, 1fr) auto",
-    columnGap: "0.5rem",
-    rowGap: "0.1rem",
-    alignItems: "center",
-    minHeight: "3rem",
-    padding: "0.5rem 1.28rem",
+    paddingLeft: "1.28rem",
     fontSize: "1.1rem",
   },
   "@wide": {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-    minHeight: "3rem",
-    padding: "0.5rem 1.9rem 0.5rem 5rem",
+    paddingLeft: "5rem",
     fontSize: "1.42rem",
+  },
+  "@toolbarInline": {
+    gridTemplateColumns: "auto auto minmax(0, 1fr)",
+    paddingTop: "2rem",
+    paddingRight: "1rem",
+    paddingBottom: "1rem",
+  },
+  "@toolbarStacked": {
+    // The name column ends at half the band, where the curve (spanning
+    // `WAVE_HEIGHT`) is still well above the text.
+    gridTemplateColumns: "auto auto minmax(0, 1fr) 50%",
+    paddingTop: "2rem",
+    paddingBottom: "0.75rem",
   },
 });
 
@@ -201,12 +215,8 @@ const Chevron = styled("span", {
 });
 
 const Name = styled("span", {
-  flex: "0 1 auto",
   minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  // Keep the name on the left, where the wave leaves the most water above it.
-  "@wide": { maxWidth: "40vw" },
+  justifySelf: "start",
   variants: {
     editable: {
       true: {
@@ -226,7 +236,6 @@ const NameInput = styled("input", {
   border: "none",
   borderBottom: "1px solid #fff",
   padding: 0,
-  flex: "0 1 auto",
   minWidth: 0,
   maxWidth: "100%",
   boxSizing: "border-box",
@@ -234,16 +243,11 @@ const NameInput = styled("input", {
 });
 
 const Meta = styled("span", {
-  flexShrink: 0,
   color: "#9A9A9A",
   fontSize: "0.7em",
-  "@narrow": {
-    gridColumn: 2,
-    gridRow: 2,
-  },
-  "@wide": {
-    "&::before": { content: '"· "' },
-  },
+  whiteSpace: "nowrap",
+  gridColumn: "3 / -1",
+  gridRow: 2,
 });
 
 const SelectAll = styled("div", {

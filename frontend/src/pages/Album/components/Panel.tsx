@@ -1,14 +1,14 @@
 import { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { styled } from "../../../stitches.config";
 import albumItemsBg from "@assets/images/albumItemsBg.svg?no-inline";
 import {
+  PANEL_COLORS as COLORS,
   SHEET_BAR_HEIGHT,
   SHELF_COLOR,
   TOOLBAR_HEIGHT,
-  TOOLBAR_RESERVED_WIDTH,
-} from "./Menu";
-
-const COLORS = ["#181818", "#333333", "#666666"];
+  WAVE_HEIGHT,
+} from "./layout";
 
 export type PanelVariant = 0 | 1 | 2;
 
@@ -34,28 +34,42 @@ type SectionPanelProps = {
   /** Colour of the band the header sits in — the panel above ends with it. */
   bandVariant: PanelVariant;
   /**
-   * The first section of the album: its band is transparent so the toolbar
-   * shelf shows through, and on wide viewports it shares the toolbar's row.
+   * The first section of the album: its band continues the bottom sheet's bar
+   * it sits on (the toolbar is that sheet whenever the section has no
+   * `headerSlot`).
    */
   first?: boolean;
+  /**
+   * Where the toolbar shelf shares its row with this section's header: the
+   * header is rendered there instead of in a band of its own, and the shelf
+   * draws the wave (see `Menu`).
+   */
+  headerSlot?: HTMLElement | null;
   header: ReactNode;
   children: ReactNode;
 };
 
 /**
- * A group of the album. The header sits in the wave: a band whose height
- * comes from the header's content and padding, with the curved edge between
- * the band colour and the body colour drawn as its background, stretched to
- * the band. Whatever the header's height, it stays inside the curve.
+ * A group of the album. The header sits in the water of the wave: a band
+ * whose height comes from the header's content and padding, with the curved
+ * edge between the band colour and the body colour drawn as its background.
+ * With the wide toolbar the curve is stretched to the band, exactly like the
+ * toolbar row the first group's header is in; with the bottom sheet it spans
+ * the top `WAVE_HEIGHT` of the band, the same span as the sheet's handle, so
+ * the two run parallel.
  */
 export function SectionPanel(props: SectionPanelProps) {
   const first = props.first === true;
   return (
     <Section>
-      <Band data-group-band first={first} band={props.bandVariant}>
-        <WaveEdge body={props.variant} aria-hidden="true" />
-        <BandContent>{props.header}</BandContent>
-      </Band>
+      {props.headerSlot ? (
+        createPortal(props.header, props.headerSlot)
+      ) : (
+        <Band data-group-band first={first} band={props.bandVariant}>
+          <BandWave body={props.variant} aria-hidden="true" />
+          <BandContent>{props.header}</BandContent>
+        </Band>
+      )}
       <SectionBody body={props.variant} data-section-body>
         {props.children}
       </SectionBody>
@@ -131,50 +145,39 @@ const Band = styled("div", {
   justifyContent: "center",
   width: "100%",
   boxSizing: "border-box",
+  // As tall as the toolbar row the first group's header shares.
+  "@toolbarInline": { minHeight: TOOLBAR_HEIGHT },
   transition: "background-color 0.3s",
   variants: {
     band: bandColors,
     first: {
+      // Continues the bottom sheet's (empty) bar, which it sits on.
       true: {
-        // Transparent so the toolbar shelf shows through. Share the row with
-        // the toolbar buttons where there is room; keep clear of them (they
-        // are right-aligned) with reserved padding.
-        "@wide": { background: "none" },
-        "@toolbarInline": {
-          marginTop: `-${TOOLBAR_HEIGHT}`,
-          minHeight: TOOLBAR_HEIGHT,
-          paddingRight: TOOLBAR_RESERVED_WIDTH,
-          // Clear the shelf's curve, which is highest at the left.
-          paddingTop: "1.25rem",
-        },
-        // Continues the bottom sheet's (empty) bar, which it sits on.
-        "@narrow": {
-          marginTop: `-${SHEET_BAR_HEIGHT}`,
-          minHeight: SHEET_BAR_HEIGHT,
-          background: SHELF_COLOR,
-        },
+        marginTop: `-${SHEET_BAR_HEIGHT}`,
+        minHeight: SHEET_BAR_HEIGHT,
+        background: SHELF_COLOR,
       },
       false: {},
     },
   },
 });
 
-/** The header row, painted inside the wave; the curve passes below it. */
+/** The header row, painted inside the wave. Its own padding keeps it under the curve. */
 const BandContent = styled("div", {
   position: "relative",
-  width: "100%",
-  // Deep enough in the water: the curve descends left to right, so the header
-  // needs room above it for its whole width.
-  paddingTop: "2.5rem",
-  paddingBottom: "1rem",
+  // The left third of the wave, as in the toolbar row.
+  "@toolbarInline": { width: "33.333%" },
+  "@toolbarStacked": { width: "100%" },
 });
 
 /**
- * Curved edge of the body colour rising from the bottom-left of the band over
- * the band colour. The mask is stretched over the whole band, so the slope is
- * gentle at any width and the header at the top-left stays inside the curve.
+ * The water: body colour under a curve descending from the top-left of the
+ * band to its bottom-right, over the band colour. The mask is stretched over
+ * the whole band, so the slope is gentle at any width and a header at the
+ * left stays inside the curve. Also drawn by the toolbar shelf for the first
+ * group's header (`Menu`).
  */
-const WaveEdge = styled("div", {
+export const WaveEdge = styled("div", {
   position: "absolute",
   inset: 0,
   pointerEvents: "none",
@@ -183,6 +186,19 @@ const WaveEdge = styled("div", {
   maskSize: "100% 100%",
   transition: "background-color 0.3s",
   variants: { body: bandColors },
+});
+
+/**
+ * The band's water. With the bottom sheet: the curve over the top
+ * `WAVE_HEIGHT` of the band and solid body colour under it.
+ */
+const BandWave = styled(WaveEdge, {
+  "@toolbarStacked": {
+    maskImage: `url(${albumItemsBg}), linear-gradient(#000, #000)`,
+    maskRepeat: "no-repeat, no-repeat",
+    maskSize: `100% ${WAVE_HEIGHT}, 100% calc(100% - ${WAVE_HEIGHT})`,
+    maskPosition: "left top, left bottom",
+  },
 });
 
 const SectionBody = styled("div", {

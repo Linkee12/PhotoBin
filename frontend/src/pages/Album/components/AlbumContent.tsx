@@ -1,10 +1,11 @@
-import { styled } from "../../../stitches.config";
+import { styled, TOOLBAR_INLINE_QUERY } from "../../../stitches.config";
 import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
 import { PULSE_MS } from "./AlbumItem";
 import { useEffect, useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
 import { Panel, PushDown } from "./Panel";
@@ -65,6 +66,10 @@ export function AlbumContent(props: AlbumContentProps) {
   const [newFileIds, setNewFileIds] = useState<string[]>([]);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  // Where the toolbar is the wide shelf, the first group's header shares its
+  // row (rendered into this slot); otherwise it heads its own band.
+  const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const { metadata, refreshMetadata, key, expiresAt } = useAlbumContext();
@@ -275,6 +280,7 @@ export function AlbumContent(props: AlbumContentProps) {
         </CloudSlot>
         {props.thumbnailGroups.length > 0 && (
           <Menu
+            headerSlotRef={setHeaderSlot}
             onDownloadAll={() => props.onDownloadAll(getAllId())}
             onAddPhoto={openFilePicker}
             isBusy={props.isUploading || props.isDownloading}
@@ -291,6 +297,7 @@ export function AlbumContent(props: AlbumContentProps) {
               isCollapsed={collapsedGroups.has(group.key)}
               onToggleCollapsed={() => toggleCollapsed(group.key)}
               onRename={renameHandler(group.batchId)}
+              headerSlot={i === 0 && toolbarInline ? headerSlot : null}
               newFileIds={newFileIds}
               selectedImages={props.selectedImages}
               isSelected={props.isSelected}

@@ -14,15 +14,19 @@ import { createStitches } from "@stitches/react";
 export const NARROW_MAX_WIDTH_PX = 699;
 /**
  * From this width on, the album toolbar (HISTORY/DATE, DOWNLOAD ALL, ADD PHOTO)
- * shares its row with the first group's header; below it the toolbar gets its
- * own row so the two can never collide.
+ * is a shelf sharing its row with the first group's header, which gets the
+ * left third of it. Below this width the toolbar is the bottom sheet of the
+ * phone layout, whatever the orientation: the header and the buttons are never
+ * stacked on separate rows.
  */
-export const TOOLBAR_INLINE_MIN_WIDTH_PX = 1100;
+export const TOOLBAR_INLINE_MIN_WIDTH_PX = 1280;
+export const TOOLBAR_INLINE_QUERY = `(min-width: ${TOOLBAR_INLINE_MIN_WIDTH_PX}px)`;
 
 export const { styled, keyframes } = createStitches({
   media: {
     narrow: `(max-width: ${NARROW_MAX_WIDTH_PX}px) and (orientation: portrait)`,
     wide: `(min-width: ${NARROW_MAX_WIDTH_PX + 1}px), (orientation: landscape)`,
-    toolbarInline: `(min-width: ${TOOLBAR_INLINE_MIN_WIDTH_PX}px)`,
+    toolbarInline: TOOLBAR_INLINE_QUERY,
+    toolbarStacked: `(max-width: ${TOOLBAR_INLINE_MIN_WIDTH_PX - 1}px)`,
   },
 });

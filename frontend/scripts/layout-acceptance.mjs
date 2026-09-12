@@ -1,9 +1,11 @@
 // Pixel-level acceptance for album group headers and toolbar.
-// Criteria (wide viewports; narrow is reported N/A for A/B):
-// (A) 12px above/below and 4px beside the group name is body colour (the name is in the water);
+// Criteria (all viewports):
+// (A) 12px above the group name is body colour (the name is in the water; the meta sits under it);
 // (B) water above the name >= 12px at its left/mid/right (the curve passes above it);
 // (C) 8px halo around each toolbar control is shelf colour (#0E0E0E);
-// (D) header parts inside viewport, no horizontal scroll.
+// (D) header parts inside viewport, no horizontal scroll;
+// (F) toolbar inline (>= 1280px): the first header is in the left third of the wave (the row left of the buttons), centred on the buttons' row,
+//     and the row is as tall as both; below 1280px there are no toolbar controls, only the bottom sheet's handle.
 // Usage: CHROMIUM=<chrome binary> FIXTURE_DIR=<dir with img1..8.jpg> [BASE_URL] [OUT_DIR]
 //        [PLAYWRIGHT_CORE=<path to playwright-core/index.mjs>] [PNGJS=<path to pngjs/lib/png.js>]
 //        node scripts/layout-acceptance.mjs
@@ -15,7 +17,7 @@ const { PNG } = await import(process.env.PNGJS ?? "pngjs");
 const S = process.env.FIXTURE_DIR ?? ".";
 const OUT = process.env.OUT_DIR ?? "layout-acceptance-out";
 fs.mkdirSync(OUT, { recursive: true });
-const VIEWPORTS = [[390,844],[844,390],[1024,768],[1280,800],[1440,900],[1920,1080],[1980,2014],[2560,1440]];
+const VIEWPORTS = [[390,844],[844,390],[1024,768],[1279,800],[1280,800],[1440,900],[1920,1080],[1980,2014],[2560,1440]];
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
 const page = await ctx.newPage();
@@ -49,7 +51,10 @@ for (const [w, h] of VIEWPORTS) {
       return { title: name.textContent, box, parts, body, strip: strip ? { top: strip.top, bottom: strip.bottom } : null };
     }).filter(Boolean);
     const toolbar = [...document.querySelectorAll("[data-toolbar-control]")].map((e) => ({ box: e.getBoundingClientRect().toJSON(), visible: e.getBoundingClientRect().width > 0 }));
-    return { headers, toolbar, scrollW: document.documentElement.scrollWidth, innerW: innerWidth, innerH: innerHeight };
+    const row = document.querySelector("[data-toolbar]")?.getBoundingClientRect().toJSON();
+    const sheetHandle = document.querySelector("[data-sheet-handle]")?.getBoundingClientRect();
+    const firstHeader = document.querySelector("[data-group-header]")?.getBoundingClientRect().toJSON();
+    return { headers, toolbar, row, sheetVisible: !!sheetHandle && sheetHandle.width > 0, firstHeader, scrollW: document.documentElement.scrollWidth, innerW: innerWidth, innerH: innerHeight };
   });
   const vp = `${w}x${h}`;
   rows.push([vp, "D no-hscroll", info.scrollW <= info.innerW ? "PASS" : "FAIL", `${info.scrollW}/${info.innerW}`]);
@@ -59,11 +64,9 @@ for (const [w, h] of VIEWPORTS) {
     const inside = hd.parts.every((p) => p.left >= 0 && p.right <= info.innerW);
     rows.push([vp, `D inside "${hd.title.slice(0,12)}"`, inside ? "PASS" : "FAIL", ""]);
     // A: halo
-    const m = 12, ms = 4; let bad = 0, total = 0;
+    const m = 12, ms = 0; let bad = 0, total = 0;
     const b = hd.box;
-    if (w < 700) { rows.push([vp, `A halo "${hd.title.slice(0,12)}"`, "N/A", "narrow: name spans the row, curve geometry accepted as-is"]); rows.push([vp, `B clearance "${hd.title.slice(0,12)}"`, "N/A", ""]); continue; }
-    for (let x = b.left - ms; x <= b.right + ms; x += 2) { for (const y of [b.top - m, b.bottom + m]) { const c = px(x, y); if (!c) continue; total++; if (!near(c, body)) bad++; } }
-    for (let y = b.top - m; y <= b.bottom + m; y += 2) { for (const x of [b.left - ms, b.right + ms]) { const c = px(x, y); if (!c) continue; total++; if (!near(c, body)) bad++; } }
+    for (let x = b.left - ms; x <= b.right + ms; x += 2) { for (const y of [b.top - m]) { const c = px(x, y); if (!c) continue; total++; if (!near(c, body)) bad++; } }
     rows.push([vp, `A halo "${hd.title.slice(0,12)}"`, bad === 0 ? "PASS" : "FAIL", `${bad}/${total} off-colour`]);
     // B: clearance
     let minD = Infinity;
@@ -76,6 +79,22 @@ for (const [w, h] of VIEWPORTS) {
     for (let x = b.left - m; x <= b.right + m; x += 2) for (const y of [b.top - m, b.bottom + m]) { const c = px(x, y); if (!c) continue; total++; if (!near(c, [14,14,14])) bad++; }
     for (let y = b.top - m; y <= b.bottom + m; y += 2) for (const x of [b.left - m, b.right + m]) { const c = px(x, y); if (!c) continue; total++; if (!near(c, [14,14,14])) bad++; }
     rows.push([vp, `C toolbar@${Math.round(b.left)}`, bad === 0 ? "PASS" : "FAIL", `${bad}/${total} off-shelf`]);
+  }
+  const controls = info.toolbar.filter((t) => t.visible);
+  if (w >= 1280) {
+    const hb = info.firstHeader, r = info.row;
+    rows.push([vp, "F toolbar inline", controls.length === 3 && !info.sheetVisible ? "PASS" : "FAIL", `${controls.length} controls, sheet ${info.sheetVisible}`]);
+    if (hb && r) {
+      const cy = (b) => (b.top + b.bottom) / 2;
+      const bc = controls.map((t) => cy(t.box)).reduce((a, b) => a + b, 0) / controls.length;
+      rows.push([vp, "F header on buttons' row", Math.abs(cy(hb) - bc) <= 4 ? "PASS" : "FAIL", `header ${Math.round(cy(hb))} buttons ${Math.round(bc)}`]);
+      const waveRight = Math.min(...controls.map((t) => t.box.left)) - 10; // controls' padding
+      rows.push([vp, "F header in left third", hb.right <= waveRight / 3 + 1 ? "PASS" : "FAIL", `right ${Math.round(hb.right)} / ${Math.round(waveRight / 3)}`]);
+      const tallest = Math.max(hb.height, ...controls.map((t) => t.box.height));
+      rows.push([vp, "F row fits both", hb.top >= r.top && hb.bottom <= r.bottom && r.height >= tallest ? "PASS" : "FAIL", `row ${Math.round(r.height)} header ${Math.round(hb.height)}`]);
+    }
+  } else {
+    rows.push([vp, "F toolbar stacked", controls.length === 0 && info.sheetVisible ? "PASS" : "FAIL", `${controls.length} controls, sheet ${info.sheetVisible}`]);
   }
   await page.screenshot({ path: `${OUT}/${vp}.png` });
 }

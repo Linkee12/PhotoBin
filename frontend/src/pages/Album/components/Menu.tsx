@@ -1,23 +1,35 @@
 import landscapeButtonsBg from "@assets/images/landscapeButtonsBg.svg?no-inline";
 import albumItemsBg from "@assets/images/albumItemsBg.svg?no-inline";
 import LandscapeDownloadIcon from "@assets/images/icons/landscapeDownloadIcon.svg?react";
-import SlideUp from "@assets/images/icons/slideUp.svg?react";
 import SlideDown from "@assets/images/icons/slideDown.svg?react";
 import AddIcon from "@assets/images/icons/addIcon.svg?react";
 import { styled } from "../../../stitches.config";
-import { useState } from "react";
+import { Ref, useState } from "react";
 import { AlbumView } from "../../../utils/groupFiles";
+import { SHEET_BAR_HEIGHT, SHELF_COLOR, TOOLBAR_HEIGHT, WAVE_HEIGHT } from "./layout";
+import { WaveEdge } from "./Panel";
+import { WaveMenuIcon } from "./WaveMenuIcon";
 
-/** Background of the toolbar shelf and the narrow bottom sheet. */
-export const SHELF_COLOR = "#0E0E0E";
-/** Height of the wide toolbar shelf; the first group's band overlaps it on `@toolbarInline`. */
-export const TOOLBAR_HEIGHT = "5rem";
-/** Width kept free at the right of the first group's header for the toolbar buttons. */
-export const TOOLBAR_RESERVED_WIDTH = "27rem";
-/** Height of the narrow bottom-sheet's closed bar; the first group's header sits on it. */
-export const SHEET_BAR_HEIGHT = "3rem";
+/**
+ * The hamburger of the collapsed sheet, in px (`WAVE_HEIGHT` and
+ * `SHEET_BAR_HEIGHT` are 3rem = 48px at the default root font size). The
+ * collapsed sheet is the shelf between the handle's curve and the first
+ * group's water, `SHEET_BAR_HEIGHT` thick; the bars are centred in it.
+ */
+const MENU_ICON_WIDTH_PX = 28;
+const MENU_ICON_WAVE_HEIGHT_PX = 48;
+const MENU_ICON_HEIGHT_PX = 96;
+const MENU_ICON_CENTER_BELOW_CURVE_PX = 24;
+
+/** Share of the toolbar row the first group's header gets: the part of the wave with the most water above it. */
+const HEADER_SHARE = "33.333%";
 
 type MenuProps = {
+  /**
+   * Receives the element the first group's header is rendered into on
+   * `@toolbarInline`, where it shares the toolbar row with the buttons.
+   */
+  headerSlotRef: Ref<HTMLDivElement>;
   onDownloadAll: () => void;
   onAddPhoto: () => void;
   isBusy: boolean;
@@ -58,27 +70,40 @@ export function Menu(props: MenuProps) {
 
   return (
     <>
-      <LandscapeButtonsBg>
-        <div data-toolbar-control>
-          <ViewToggle view={props.view} onChangeView={props.onChangeView} />
-        </div>
-        <Button
-          disabled={props.isBusy}
-          onClick={props.onDownloadAll}
-          data-toolbar-control
-        >
-          <ButtonText>DOWNLOAD ALL</ButtonText>
-          <LandscapeDownloadIcon />
-        </Button>
-        <Button onClick={props.onAddPhoto} data-toolbar-control>
-          <ButtonText>ADD PHOTO</ButtonText>
-          <AddIcon />
-        </Button>
-      </LandscapeButtonsBg>
+      <Toolbar data-toolbar>
+        <Wave>
+          <Shelf aria-hidden="true" />
+          <WaveEdge body={1} aria-hidden="true" />
+          <HeaderSlot ref={props.headerSlotRef} />
+        </Wave>
+        <ToolbarControls>
+          <div data-toolbar-control>
+            <ViewToggle view={props.view} onChangeView={props.onChangeView} />
+          </div>
+          <Button
+            disabled={props.isBusy}
+            onClick={props.onDownloadAll}
+            data-toolbar-control
+          >
+            <ButtonText>DOWNLOAD ALL</ButtonText>
+            <LandscapeDownloadIcon />
+          </Button>
+          <Button onClick={props.onAddPhoto} data-toolbar-control>
+            <ButtonText>ADD PHOTO</ButtonText>
+            <AddIcon />
+          </Button>
+        </ToolbarControls>
+      </Toolbar>
       <PortraitButtonsContainer onClick={() => setIsOpen(!isOpen)}>
-        <PortraitHeader isOpen={isOpen} data-sheet-handle>
-          <SlideIconUp as={SlideUp} />
-        </PortraitHeader>
+        <PortraitHeader isOpen={isOpen} data-sheet-handle />
+        {!isOpen && (
+          <MenuIcon
+            width={MENU_ICON_WIDTH_PX}
+            height={MENU_ICON_HEIGHT_PX}
+            waveHeight={MENU_ICON_WAVE_HEIGHT_PX}
+            centerBelowCurve={MENU_ICON_CENTER_BELOW_CURVE_PX}
+          />
+        )}
         <Sheet isOpen={isOpen} aria-hidden={!isOpen}>
           <SheetContent>
             <Buttons>
@@ -117,29 +142,62 @@ export function Menu(props: MenuProps) {
   );
 }
 
-/** Wide toolbar: a dark shelf with the buttons right-aligned; wraps when the row is short. */
-const LandscapeButtonsBg = styled("div", {
-  "@narrow": { display: "none" },
-  "@wide": { display: "flex" },
-  flexWrap: "wrap",
-  gap: "0.6rem",
-  justifyContent: "flex-end",
-  alignItems: "center",
+/**
+ * Wide toolbar: one row shared by the first group's header (left third of the
+ * wave, in its water) and the buttons (right, on the solid shelf). The row is
+ * as tall as the taller of the two, and both the shelf and the water are
+ * stretched to it, so the header never crosses the wave however many lines
+ * it wraps to.
+ */
+const Toolbar = styled("div", {
+  "@toolbarStacked": { display: "none" },
+  "@toolbarInline": { display: "flex" },
+  alignItems: "stretch",
   boxSizing: "border-box",
   minHeight: TOOLBAR_HEIGHT,
-  padding: "0.6rem 0.6rem 0.6rem 8rem",
+});
+
+/**
+ * The wave: everything left of the buttons. The shelf rises from its
+ * bottom-left to full height before the buttons; the water descends from its
+ * top-left to its bottom-right, so it reaches the bottom where the buttons
+ * start and never runs under them.
+ */
+const Wave = styled("div", {
+  position: "relative",
+  flex: 1,
+  minWidth: 0,
+  display: "flex",
+  alignItems: "center",
+});
+
+const Shelf = styled("div", {
+  position: "absolute",
+  inset: 0,
+  pointerEvents: "none",
   backgroundColor: SHELF_COLOR,
-  // The curve only spans the part left of the buttons; the reserved part under
-  // the buttons is solid, so the curve never crosses them however wide they get.
-  maskImage: `url(${landscapeButtonsBg}), linear-gradient(#000, #000)`,
-  maskRepeat: "no-repeat, no-repeat",
-  maskSize: `calc(100% - ${TOOLBAR_RESERVED_WIDTH}) 100%, ${TOOLBAR_RESERVED_WIDTH} 100%`,
-  maskPosition: "left top, right top",
+  maskImage: `url(${landscapeButtonsBg})`,
+  maskRepeat: "no-repeat",
+  maskSize: "100% 100%",
+});
+
+const HeaderSlot = styled("div", {
+  position: "relative",
+  flex: `0 0 ${HEADER_SHARE}`,
+  minWidth: 0,
+});
+
+const ToolbarControls = styled("div", {
+  display: "flex",
+  gap: "0.6rem",
+  alignItems: "center",
+  padding: "0.6rem",
+  backgroundColor: SHELF_COLOR,
 });
 
 const PortraitButtonsContainer = styled("div", {
-  "@narrow": { display: "flex" },
-  "@wide": { display: "none" },
+  "@toolbarStacked": { display: "flex" },
+  "@toolbarInline": { display: "none" },
   position: "relative",
   cursor: "pointer",
   flexDirection: "column",
@@ -181,15 +239,25 @@ const SheetContent = styled("div", {
   padding: "1rem 5% 0",
 });
 
+/**
+ * Over the handle and the bar (which the handle's mask would clip it to);
+ * measures the container's width, which the handle's wave is stretched over.
+ */
+const MenuIcon = styled(WaveMenuIcon, {
+  position: "absolute",
+  top: 0,
+  left: "50%",
+  marginLeft: `-${MENU_ICON_WIDTH_PX / 2}px`,
+  pointerEvents: "none",
+  zIndex: 1,
+});
+
 const PortraitHeader = styled("div", {
-  display: "flex",
   width: "100%",
-  justifyContent: "center",
-  alignItems: "end",
   maskRepeat: "no-repeat",
   maskSize: "100% 100%",
   maskPosition: "bottom",
-  height: SHEET_BAR_HEIGHT,
+  height: WAVE_HEIGHT,
   backgroundColor: SHELF_COLOR,
   maskImage: `url(${albumItemsBg})`,
   transition: "height 0.4s",
@@ -197,7 +265,7 @@ const PortraitHeader = styled("div", {
   variants: {
     isOpen: {
       true: { height: "0rem", overflow: "hidden" },
-      false: { height: SHEET_BAR_HEIGHT },
+      false: { height: WAVE_HEIGHT },
     },
   },
 });
@@ -217,7 +285,8 @@ const Button = styled("button", {
   height: "2.5rem",
   padding: "0.5rem",
   cursor: "pointer",
-  "@narrow": { width: "100%" },
+  // In the bottom sheet the buttons fill its width.
+  "@toolbarStacked": { width: "100%" },
 });
 const Segmented = styled("div", {
   display: "inline-flex",
@@ -250,12 +319,11 @@ const Buttons = styled("div", {
   alignItems: "center",
   gap: "1rem",
   width: "100%",
+  // The sheet also serves landscape phones and small desktop windows.
+  maxWidth: "30rem",
 });
 const ButtonText = styled("div", {
   paddingRight: "0.5rem",
-});
-const SlideIconUp = styled("div", {
-  margin: "0.5rem",
 });
 const SlideIconDown = styled("div", {
   margin: "1.5rem 0 3.5rem",
