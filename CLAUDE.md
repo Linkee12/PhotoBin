@@ -75,6 +75,11 @@ Performance notes (measured with `?profile`, which logs per-stage timings to the
 
 Uploads are resumable: `UploadService` asks `getUploadedParts` which chunks the server already has (it recognises both `<n>.bin` and legacy `<n>` files and returns the numeric part name) and sends only the missing ones, each chunk with its own `withRetry` (`utils/retry.ts`) and the batch's `AbortSignal`. Across reloads, `PendingUploadStore` keeps a small localStorage record per album (fingerprint, fileId, IVs, chunk counts, encrypted name/date, never file bytes) so re-picking the same file re-encrypts with the stored IV (AES-GCM is deterministic for the same key + IV + plaintext; in plain mode the IV is empty and the bytes are the file itself). Only `original` / `originalVideo` / `unsupportedFile` are resumed; canvas-derived `thumbnail` / `reduced` are always re-uploaded with fresh IVs, and `reduced` may be absent altogether for small originals.
 
+### Upload batches (groups)
+Every `uploadImages(files)` call in `AlbumContent.tsx` is one batch: `UploadService.createBatch` gives it a uuid, a client-generated fantasy name (`utils/batchName.ts`, adjective + animal, encrypted once with the album key like `albumName`) and `createdAt`. Metadata carries `batches: Record<batchId, { name: EncryptedEntry, createdAt }>` and each file a `batchId`. The batch travels in the `finalizeFile` body (`batch: { batchId, name, createdAt }`) and `MetadataService.addFile` upserts it in the same write, so a batch exists exactly when at least one of its files finalized; an existing batch is never overwritten (a retried finalize cannot undo a rename). `renameBatch` (albumId, batchId, name) renames it — anyone with the link may. Resume records (`PendingUploadStore`) store the batch, so a resumed or retried file lands in the batch it was first picked with. Files without `batchId` (older albums) form the implicit, non-renameable "Earlier uploads" group; albums without `batches` keep working.
+
+The album grid has two views, persisted in `localStorage` (`photobin:albumView`, default `history`): **History** (one collapsible group per batch, newest first, header `<name> · <MM/DD HH:mm> · <n> photos`, click-to-edit name) and **Date** (grouped by decrypted photo date). `utils/groupFiles.ts: groupFiles` is the pure grouping function of `(files, decodedValues, thumbnails, view)`; `Album.tsx` keeps only a `Map<fileId, { url, iv }>` of loaded thumbnails and derives the groups with `useMemo`, so both views share `AlbumSection`. Collapse state lives in `AlbumContent` component state (not persisted); a group receiving freshly uploaded tiles is expanded so the pulse is visible.
+
 ### Non-destructive edits (rotation)
 Rotation never touches `original/`. `RotateService.rotateTo` fetches the original, re-renders `edited` (full-res, only when rotation ≠ 0), `reduced` and `thumbnail` at the absolute rotation, and pushes them through the server-side edit lifecycle in `AlbumService`:
 - `beginEdit` takes a per-file lock (`<fileId>/.edit-lock`, JSON `{ editId, startedAt }`, exclusive create; a lock older than `EDIT_LOCK_TTL_MS`, default 10 min, is taken over; a fresh one yields HTTP 409 `edit-in-progress`).
@@ -85,7 +90,7 @@ Rotation never touches `original/`. `RotateService.rotateTo` fetches the origina
 ### File storage on the backend
 Files live under `backend/albums/` (gitignored in prod, mounted as a PVC in k8s):
 ```
-albums/<albumId>/metadata.json              ← album name + file list (values encrypted unless plain mode)
+albums/<albumId>/metadata.json              ← album name, `batches` + file list (values encrypted unless plain mode)
 albums/<albumId>/<fileId>/thumbnail/0.bin   ← single chunk
 albums/<albumId>/<fileId>/reduced/0.bin..N.bin   ← 2 MB chunks; absent for small originals
 albums/<albumId>/<fileId>/original/0.bin..N.bin
@@ -99,7 +104,7 @@ Parts written through the binary route are raw bytes named `<part>.bin`. Albums 
 ### Frontend page structure
 - `/` → `pages/Home` — landing page, album creation (encrypted by default, with an "unencrypted album" toggle)
 - `/bin/:albumId` → `pages/Album` — upload, view, download
-  - `AlbumContextProvider` (`hooks/useAlbumContext.tsx`) fetches metadata and decrypts the album name; exposes `{ key, isEncrypted, metadata, expiresAt, decodedValues, refreshMetadata }` via context (`key` is `null` for plain albums).
+  - `AlbumContextProvider` (`hooks/useAlbumContext.tsx`) fetches metadata and decrypts the album name, every file's name/date and every batch name; exposes `{ key, isEncrypted, metadata, expiresAt, decodedValues: { albumName, files, batches }, refreshMetadata }` via context (`key` is `null` for plain albums). Overlapping refreshes are sequenced so a slow older response cannot roll back a newer file list.
   - Service classes (`UploadService`, `ImageQueryService`, `DownloadService`, `RotateService`, `CanvasService`, `CryptoService`) handle all media logic; they are plain classes instantiated in components/hooks, not singletons.
   - `ViewOriginalModal` composes `hooks/useZoomPan.ts` (wheel/pinch/drag zoom, rAF transform writes on a wrapper layer) with the optimistic CSS rotation and a download menu (rotated vs. original) for edited photos.
 

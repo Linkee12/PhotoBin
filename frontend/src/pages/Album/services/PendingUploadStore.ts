@@ -8,12 +8,17 @@ export type ResumablePartType = "original" | "originalVideo" | "unsupportedFile"
 
 export type EncryptedEntry = { iv: string; value: string };
 
+/** The upload batch a file belongs to; `name` is encrypted once per batch. */
+export type UploadBatch = { batchId: string; name: EncryptedEntry; createdAt: number };
+
 export type PendingUpload = {
   fingerprint: string;
   fileId: string;
   createdAt: number;
   fileName: EncryptedEntry;
   date: EncryptedEntry;
+  /** Kept so a resumed file lands in the batch it was originally picked with. */
+  batch?: UploadBatch;
   /** Only parts whose plaintext is the file itself (byte-identical across sessions). */
   parts: Partial<Record<ResumablePartType, { iv: string; chunkCount: number }>>;
 };

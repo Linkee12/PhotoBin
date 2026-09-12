@@ -20,6 +20,7 @@ import {
   PendingUpload,
   PendingUploadStore,
   ResumablePartType,
+  UploadBatch,
 } from "./PendingUploadStore";
 import {
   mapWithConcurrency,
@@ -69,10 +70,9 @@ type PreparedPart = {
 type PreparedUpload = {
   fingerprint: string;
   fileId: string;
-  name: string;
-  date: string;
   fileName: EncryptedEntry;
   encryptedDate: EncryptedEntry;
+  batch: UploadBatch;
   thumbnailUrl: string | undefined;
   isVideo: boolean;
   parts: Partial<Record<PartType, PreparedPart>>;
@@ -82,10 +82,9 @@ type UploadYield =
   | {
       result: "finish";
       thumbnail: string | undefined;
+      /** iv of the uploaded thumbnail part, to tell a later server-side replacement apart. */
+      thumbnailIv: string | undefined;
       fileId: string;
-      name: string;
-      date: string;
-      isVideo: boolean;
     }
   | { result: "progress"; bytes: number };
 
@@ -107,14 +106,25 @@ export class UploadService {
    */
   async *upload(
     file: File,
-    props: { key: string | null; albumId: string; signal?: AbortSignal },
+    props: {
+      key: string | null;
+      albumId: string;
+      /** Batch for a fresh upload; a resumed or retried file keeps its original batch. */
+      batch: UploadBatch;
+      signal?: AbortSignal;
+    },
   ): AsyncGenerator<UploadYield> {
     const store = new PendingUploadStore(props.albumId);
     const fingerprint = fileFingerprint(file);
 
     let prepared = this._failed.get(fingerprint);
     if (prepared === undefined) {
-      prepared = await this._prepare(file, props.key, store.find(fingerprint));
+      prepared = await this._prepare(
+        file,
+        props.key,
+        store.find(fingerprint),
+        props.batch,
+      );
       this._failed.set(fingerprint, prepared);
     }
     store.save(this._toRecord(prepared));
@@ -129,11 +139,26 @@ export class UploadService {
     yield {
       result: "finish",
       thumbnail: prepared.thumbnailUrl,
-      name: prepared.name,
+      thumbnailIv: thumbnailIv(prepared),
       fileId: prepared.fileId,
-      date: prepared.date,
-      isVideo: prepared.isVideo,
     };
+  }
+
+  /** Creates a new batch identity with its name encrypted once for all its files. */
+  async createBatch(name: string, key: string | null): Promise<UploadBatch> {
+    return {
+      batchId: crypto.randomUUID(),
+      name: await this._encryptText(name, key),
+      createdAt: Date.now(),
+    };
+  }
+
+  async renameBatch(albumId: string, batchId: string, name: string, key: string | null) {
+    const encrypted = await this._encryptText(name, key);
+    const res = await client.renameBatch.post({
+      body: { albumId, batchId, name: encrypted },
+    });
+    if (res.result !== "success") throw new Error(`Rename failed (${res.statusCode})`);
   }
 
   async saveName(albumId: string, name: string, key: string | null) {
@@ -156,6 +181,7 @@ export class UploadService {
     file: File,
     key: string | null,
     pending: PendingUpload | undefined,
+    batch: UploadBatch,
   ): Promise<PreparedUpload> {
     const profile = new URLSearchParams(window.location.search).has("profile");
     const log = (label: string, start: number) => {
@@ -203,10 +229,9 @@ export class UploadService {
     return {
       fingerprint: fileFingerprint(file),
       fileId: pending?.fileId ?? crypto.randomUUID(),
-      name: file.name,
-      date,
       fileName,
       encryptedDate,
+      batch: pending?.batch ?? batch,
       thumbnailUrl,
       isVideo,
       parts,
@@ -280,7 +305,11 @@ export class UploadService {
         () =>
           this._rpc(() =>
             client.finalizeFile.post({
-              body: { albumId, fileMetadata: this._toMetadata(prepared) },
+              body: {
+                albumId,
+                fileMetadata: this._toMetadata(prepared),
+                batch: prepared.batch,
+              },
             }),
           ),
         { signal },
@@ -407,6 +436,7 @@ export class UploadService {
       createdAt: Date.now(),
       fileName: prepared.fileName,
       date: prepared.encryptedDate,
+      batch: prepared.batch,
       parts,
     };
   }
@@ -425,8 +455,14 @@ export class UploadService {
       thumbnail: describe(prepared.parts.thumbnail),
       originalVideo: describe(prepared.parts.originalVideo),
       unsupportedFile: describe(prepared.parts.unsupportedFile),
+      batchId: prepared.batch.batchId,
     };
   }
+}
+
+function thumbnailIv(prepared: PreparedUpload): string | undefined {
+  const part = prepared.parts.thumbnail;
+  return part === undefined ? undefined : uint8ArrayToBase64(part.iv);
 }
 
 /**

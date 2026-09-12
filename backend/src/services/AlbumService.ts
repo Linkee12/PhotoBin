@@ -1,7 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { FilePart, Metadata, MetadataService } from "./MetadataService";
+import {
+  Batch,
+  EncryptedEntry,
+  FilePart,
+  Metadata,
+  MetadataService,
+} from "./MetadataService";
 import { PartType, partTypeSchema } from "../utils/zod";
 
 const DEFAULT_ALBUMS_ROOT = path.resolve("./albums");
@@ -78,8 +84,15 @@ export class AlbumService {
     if (!isExist) await fs.mkdir(dir, { recursive: true });
     this._metadataService.renameAlbum(albumId, newTitle);
   }
-  finalizeFile(albumId: string, fileMetadata: Metadata["files"][0]) {
-    this._metadataService.addFile(albumId, fileMetadata);
+  finalizeFile(
+    albumId: string,
+    fileMetadata: Metadata["files"][0],
+    batch?: Batch & { batchId: string },
+  ) {
+    this._metadataService.addFile(albumId, fileMetadata, batch);
+  }
+  renameBatch(albumId: string, batchId: string, name: EncryptedEntry) {
+    this._metadataService.renameBatch(albumId, batchId, name);
   }
   /**
    * Legacy JSON transport: the part arrives base64-encoded and is stored as

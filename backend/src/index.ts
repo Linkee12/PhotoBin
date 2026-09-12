@@ -4,7 +4,9 @@ import { createBuilder, success, initRpc, apiResponse } from "@cuple/server";
 import { z } from "zod";
 import { AlbumService, EditInProgressError } from "./services/AlbumService";
 import {
+  batchUpsertSchema,
   editPatchSchema,
+  encryptedEntrySchema,
   fileMetadataSchema,
   metadataSchema,
   partNameSchema,
@@ -180,13 +182,31 @@ const routes = {
       z.object({
         albumId: uuidSchema,
         fileMetadata: fileMetadataSchema,
+        /** Upserted together with the file, so a batch exists iff one of its files finalized. */
+        batch: batchUpsertSchema.optional(),
       }),
     )
     .post(async ({ data }) => {
-      albumService.finalizeFile(data.body.albumId, data.body.fileMetadata);
+      albumService.finalizeFile(
+        data.body.albumId,
+        data.body.fileMetadata,
+        data.body.batch,
+      );
       return success({
         message: "File has been uploaded successfully!",
       });
+    }),
+  renameBatch: builder
+    .bodySchema(
+      z.object({
+        albumId: uuidSchema,
+        batchId: uuidSchema,
+        name: encryptedEntrySchema,
+      }),
+    )
+    .post(async ({ data }) => {
+      albumService.renameBatch(data.body.albumId, data.body.batchId, data.body.name);
+      return success({});
     }),
   beginEdit: builder
     .bodySchema(z.object({ albumId: uuidSchema, fileId: uuidSchema }))

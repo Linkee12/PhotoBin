@@ -21,6 +21,17 @@ export const filePartSchema = z.object({
   iv: z.string(),
   chunkCount: z.number(),
 });
+/** A value encrypted with the album key (plain mode: value as-is, empty iv). */
+export const encryptedEntrySchema = z.object({
+  value: z.string(),
+  iv: z.string(),
+});
+/** One upload batch: every `uploadImages` call on the client creates a new one. */
+export const batchSchema = z.object({
+  name: encryptedEntrySchema,
+  createdAt: z.number(),
+});
+export const batchUpsertSchema = batchSchema.extend({ batchId: uuidSchema });
 export const partNameSchema = z.string().regex(/^\d+$/, "partName must be numeric");
 export type PartType = z.infer<typeof partTypeSchema>;
 
@@ -71,6 +82,8 @@ export const fileMetadataSchema = z.object({
     .optional(),
   rotation: rotationSchema.optional(),
   edited: filePartSchema.optional(),
+  /** Upload batch the file belongs to; absent for albums uploaded before batches existed. */
+  batchId: uuidSchema.optional(),
 });
 
 export const editPatchSchema = z.object({
@@ -87,4 +100,5 @@ export const metadataSchema = z.object({
     iv: z.string(),
   }),
   files: z.array(fileMetadataSchema),
+  batches: z.record(uuidSchema, batchSchema).optional(),
 });

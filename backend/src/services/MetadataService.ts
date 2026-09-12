@@ -12,10 +12,15 @@ function safeMetadataPath(albumsRoot: string, albumId: string) {
 }
 
 export type FilePart = { iv: string; chunkCount: number };
+export type EncryptedEntry = { value: string; iv: string };
+/** One upload batch (a single "add photos" action); `name` is encrypted like `albumName`. */
+export type Batch = { name: EncryptedEntry; createdAt: number };
 
 export type Metadata = {
   albumId: string;
-  albumName: { value: string; iv: string };
+  albumName: EncryptedEntry;
+  /** Keyed by batchId. Absent on albums created before upload batches existed. */
+  batches?: Record<string, Batch> | undefined;
   files: {
     fileName: {
       value: string;
@@ -35,6 +40,8 @@ export type Metadata = {
     rotation?: 0 | 1 | 2 | 3 | undefined;
     /** Full-resolution rotated re-encode of `original`; present only when rotation !== 0. */
     edited?: FilePart | undefined;
+    /** Upload batch (key into `batches`); absent for files uploaded before batches existed. */
+    batchId?: string | undefined;
   }[];
 };
 
@@ -64,11 +71,34 @@ export class MetadataService {
       JSON.stringify(metadata),
     );
   }
-  addFile(albumId: string, file: Metadata["files"][0]) {
+  /**
+   * Adds (or replaces) a file entry and, when `batch` is given, creates its
+   * batch in the same write. An existing batch is left untouched so a retried
+   * finalize cannot undo a rename that happened in between.
+   */
+  addFile(
+    albumId: string,
+    file: Metadata["files"][0],
+    batch?: Batch & { batchId: string },
+  ) {
     const current = this.get(albumId);
     // Idempotent: a retried finalize must not duplicate the entry.
     current.files = current.files.filter((f) => f.fileId !== file.fileId);
     current.files.push(file);
+    if (batch !== undefined) {
+      current.batches ??= {};
+      current.batches[batch.batchId] ??= {
+        name: batch.name,
+        createdAt: batch.createdAt,
+      };
+    }
+    this.save(albumId, current);
+  }
+  renameBatch(albumId: string, batchId: string, name: EncryptedEntry) {
+    const current = this.get(albumId);
+    const batch = current.batches?.[batchId];
+    if (batch === undefined) throw new Error("Batch not found in metadata");
+    batch.name = name;
     this.save(albumId, current);
   }
   /**

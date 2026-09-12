@@ -1,5 +1,5 @@
 import { styled } from "../../stitches.config";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CanvasService } from "./services/CanvasService";
 import { UploadService } from "./services/UploadService";
 import { useParams } from "react-router";
@@ -11,10 +11,17 @@ import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { useAlbumContext } from "./hooks/useAlbumContext";
 import { DownloadService } from "./services/DownloadService";
 import { CryptoService } from "./services/CryptoService";
-import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
+import {
+  ALBUM_VIEWS,
+  AlbumView,
+  DEFAULT_ALBUM_VIEW,
+  groupFiles,
+} from "../../utils/groupFiles";
 import { Metadata } from "../../../../backend/src/services/MetadataService";
 import { AlbumContent } from "./components/AlbumContent";
 import { toast } from "react-toastify";
+
+export type { Thumbnail, ThumbnailGroup } from "../../utils/groupFiles";
 
 const imageResizeService = new CanvasService();
 const cryptoService = new CryptoService();
@@ -22,16 +29,31 @@ const uploadService = new UploadService(imageResizeService, cryptoService);
 const imageQueryService = new ImageQueryService(cryptoService);
 const downloadService = new DownloadService(imageQueryService);
 
-export type Thumbnail = {
-  thumbnail: string | undefined;
-  id: string;
-  name: string;
-  isVideo: boolean;
-};
-export type ThumbnailGroup = {
-  date: string;
-  thumbnails: Thumbnail[];
-};
+const VIEW_STORAGE_KEY = "photobin:albumView";
+
+/** A loaded thumbnail: its object URL and the iv of the part it was made from. */
+type LoadedThumbnail = { url: string | undefined; iv: string | undefined };
+
+function readStoredView(): AlbumView {
+  try {
+    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+    return ALBUM_VIEWS.find((view) => view === stored) ?? DEFAULT_ALBUM_VIEW;
+  } catch {
+    return DEFAULT_ALBUM_VIEW;
+  }
+}
+
+function storeView(view: AlbumView) {
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, view);
+  } catch {
+    // Persisting the view is a convenience; ignore storage errors.
+  }
+}
+
+function revokeIfBlob(url: string | undefined) {
+  if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+}
 
 export default function Album() {
   const albumContext = useAlbumContext();
@@ -39,53 +61,77 @@ export default function Album() {
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const { albumId } = useParams();
   const [title, setTitle] = useState("");
-  const [thumbnails, setThumbnails] = useState<ThumbnailGroup[]>([]);
+  const [view, setView] = useState<AlbumView>(readStoredView);
+  // Thumbnails are loaded (or announced by an upload) per file; the grouped
+  // view is derived from metadata + this map, so switching views is free.
+  const [thumbnails, setThumbnails] = useState<Map<string, LoadedThumbnail>>(
+    () => new Map(),
+  );
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [showOrigin, setShowOrigin] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [emptyAlbum, setEmptyAlbum] = useState(false);
-  const [isLoadingThumbnails, setIsLoadingThumbnails] = useState(false);
-  // thumbnail.iv per fileId as last seen in metadata; a changed iv means the
-  // thumbnail was replaced server-side (e.g. rotation) and must be refetched.
-  const thumbnailVersions = useRef(new Map<string, string | undefined>());
-  const showUploader = (thumbnails.length === 0 && emptyAlbum) || isUploading;
+  const files = useMemo(() => metadata?.files ?? [], [metadata]);
+  const thumbnailUrls = useMemo(
+    () => new Map([...thumbnails].map(([id, thumb]) => [id, thumb.url])),
+    [thumbnails],
+  );
+  const thumbnailGroups = useMemo(
+    () =>
+      groupFiles({
+        files,
+        decodedFiles: decodedValues.files,
+        decodedBatches: decodedValues.batches,
+        thumbnails: thumbnailUrls,
+        view,
+      }),
+    [files, decodedValues, thumbnailUrls, view],
+  );
+  const isEmptyAlbum = thumbnailGroups.length === 0;
+  const isLoadingThumbnails = files.length > 0 && isEmptyAlbum;
+  const showUploader = (metadata !== undefined && files.length === 0) || isUploading;
 
   useEffect(() => {
+    setTitle(decodedValues.albumName);
+  }, [decodedValues.albumName]);
+
+  useEffect(() => {
+    if (metadata === undefined || albumId === undefined) return;
     let cancelled = false;
-    if (metadata !== undefined && albumId !== undefined) {
-      setTitle(decodedValues.albumName);
-      setEmptyAlbum(metadata?.files.length === 0);
-      const oldThumbnailIds = new Set();
-      thumbnails.forEach((thumb) =>
-        thumb.thumbnails.forEach((t) => oldThumbnailIds.add(t.id)),
-      );
-
-      const versions = thumbnailVersions.current;
-      const newThumbnails = metadata.files.filter(
-        (file) =>
-          !oldThumbnailIds.has(file.fileId) ||
-          (versions.has(file.fileId) && versions.get(file.fileId) !== file.thumbnail?.iv),
-      );
-      metadata.files.forEach((file) => versions.set(file.fileId, file.thumbnail?.iv));
-      const loadThumbnails = async () => {
-        for await (const thumb of getThumbnails(newThumbnails)) {
-          if (cancelled) break;
-          setThumbnails((prev) => {
-            if (oldThumbnailIds.has(thumb.id)) return replaceThumbnail(prev, thumb);
-            const grouped = groupThumbnailsByDate([thumb]);
-            return mergeThumbnailGroups(prev, grouped);
-          });
+    // A changed thumbnail iv means the part was replaced server-side (e.g.
+    // rotation) and must be refetched.
+    const stale = metadata.files.filter((file) => {
+      const loaded = thumbnails.get(file.fileId);
+      return loaded === undefined || loaded.iv !== file.thumbnail?.iv;
+    });
+    const loadThumbnails = async () => {
+      for await (const thumb of getThumbnails(stale)) {
+        if (cancelled) {
+          revokeIfBlob(thumb.url);
+          break;
         }
-      };
-
-      loadThumbnails();
-      return () => {
-        cancelled = true;
-      };
-    }
+        setLoadedThumbnail(thumb.id, thumb);
+      }
+    };
+    loadThumbnails().catch((e) => console.error(e));
+    return () => {
+      cancelled = true;
+    };
   }, [metadata]);
+
+  function setLoadedThumbnail(fileId: string, next: LoadedThumbnail) {
+    setThumbnails((prev) => {
+      const current = prev.get(fileId);
+      if (current?.url !== next.url) revokeIfBlob(current?.url);
+      return new Map(prev).set(fileId, next);
+    });
+  }
+
+  function changeView(next: AlbumView) {
+    setView(next);
+    storeView(next);
+  }
 
   async function deleteImages(ids: string[]) {
     if (albumId === undefined) return;
@@ -102,14 +148,11 @@ export default function Album() {
     }
 
     setThumbnails((prev) => {
-      const next = prev
-        .map((group) => ({
-          ...group,
-          // eslint-disable-next-line sonarjs/no-nested-functions
-          thumbnails: group.thumbnails.filter((element) => !ids.includes(element.id)),
-        }))
-        .filter((group) => group.thumbnails.length > 0);
-      if (next.length === 0) setEmptyAlbum(true);
+      const next = new Map(prev);
+      for (const id of ids) {
+        revokeIfBlob(next.get(id)?.url);
+        next.delete(id);
+      }
       return next;
     });
     setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
@@ -165,9 +208,11 @@ export default function Album() {
     }
   }
 
-  async function* getThumbnails(thumbnails: Metadata["files"]) {
+  async function* getThumbnails(
+    files: Metadata["files"],
+  ): AsyncGenerator<LoadedThumbnail & { id: string }> {
     if (albumId === undefined) return;
-    for (const file of thumbnails) {
+    for (const file of files) {
       const result = await imageQueryService.getImg(
         albumId,
         file,
@@ -175,42 +220,11 @@ export default function Album() {
         file.thumbnail !== undefined ? "thumbnail" : "unsupportedFile",
       );
       if (result === undefined) return;
-      yield {
-        thumbnail: result.img,
-        id: result.id,
-        date: result.date,
-        name: result.fileName,
-        isVideo: !!file.originalVideo,
-      };
+      yield { id: result.id, url: result.img, iv: file.thumbnail?.iv };
     }
-  }
-  function mergeThumbnailGroups(prev: ThumbnailGroup[], newGroups: ThumbnailGroup[]) {
-    const merged = [...prev];
-
-    for (const newGroup of newGroups) {
-      const existingGroup = merged.find((g) => g.date === newGroup.date);
-      if (existingGroup) {
-        existingGroup.thumbnails = [...existingGroup.thumbnails, ...newGroup.thumbnails];
-      } else {
-        merged.push(newGroup);
-      }
-    }
-
-    return merged;
-  }
-  function replaceThumbnail(prev: ThumbnailGroup[], next: Thumbnail) {
-    return prev.map((group) => ({
-      ...group,
-      thumbnails: group.thumbnails.map((thumb) => {
-        if (thumb.id !== next.id) return thumb;
-        if (thumb.thumbnail?.startsWith("blob:")) URL.revokeObjectURL(thumb.thumbnail);
-        return { ...thumb, thumbnail: next.thumbnail };
-      }),
-    }));
   }
   function nextOriginImgId(direction: number) {
-    const ids: string[] = [];
-    thumbnails.forEach((group) => group.thumbnails.forEach((i) => ids.push(i.id)));
+    const ids = thumbnailGroups.flatMap((group) => group.thumbnails.map((i) => i.id));
     const currentIdx = ids.findIndex((id) => id === fullscreenImage?.fileId);
 
     let nextIdx;
@@ -229,27 +243,31 @@ export default function Album() {
       uploadService.saveName(metadata.albumId, title, key);
     }
   }
+  async function renameBatch(batchId: string, name: string) {
+    if (metadata === undefined) return;
+    try {
+      await uploadService.renameBatch(metadata.albumId, batchId, name, key);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to rename");
+    }
+    refreshMetadata();
+  }
   return (
-    <Container isEmptyAlbum={thumbnails.length === 0}>
+    <Container isEmptyAlbum={isEmptyAlbum}>
       {fullscreenImage && (
         <ViewOriginalModal
           fileId={fullscreenImage.fileId}
           visible={showOrigin}
-          thumbnails={thumbnails}
-          fileName={
-            thumbnails.map((thumbnailsGroup) =>
-              thumbnailsGroup.thumbnails.find(
-                (thumb) => thumb.id === fullscreenImage.fileId,
-              ),
-            )[0]?.name ?? ""
-          }
+          thumbnails={thumbnailGroups}
+          fileName={decodedValues.files[fullscreenImage.fileId]?.name ?? ""}
           onShowChange={setShowOrigin}
           onNext={(direction) => nextOriginImgId(direction)}
           onDelete={() => deleteImages([fullscreenImage.fileId])}
         />
       )}
       <Header
-        isEmptyAlbum={thumbnails.length === 0}
+        isEmptyAlbum={isEmptyAlbum}
         title={title}
         onChangeTitle={setTitle}
         onSaveName={saveAlbumName}
@@ -262,26 +280,21 @@ export default function Album() {
         showUploader={showUploader}
         isUploading={isUploading}
         isDownloading={isDownloading}
-        isLoadingThumbnails={isLoadingThumbnails && thumbnails.length === 0}
+        isLoadingThumbnails={isLoadingThumbnails}
         downloadProgress={downloadProgress}
         onUploadStarted={() => setIsUploading(true)}
         onUploadFinished={() => setIsUploading(false)}
         onDownloadAll={(files: string[]) => onDownloadAll(files)}
-        thumbnailGroups={thumbnails}
-        onAddThumbnail={(result) => {
-          setThumbnails((thumbnails) => {
-            const group = thumbnails.find((g) => g.date === result.date);
-
-            if (!group) {
-              const newGroup = { date: result.date, thumbnails: [result] };
-              thumbnails.push(newGroup);
-              return thumbnails;
-            }
-
-            group.thumbnails.push(result);
-            return thumbnails;
-          });
-        }}
+        thumbnailGroups={thumbnailGroups}
+        view={view}
+        onChangeView={changeView}
+        onRenameBatch={(batchId, name) => renameBatch(batchId, name)}
+        onUploaded={(uploaded) =>
+          setLoadedThumbnail(uploaded.fileId, {
+            url: uploaded.thumbnail,
+            iv: uploaded.thumbnailIv,
+          })
+        }
         selectedImages={selectedImages}
         isSelected={(id) => selectedImages.includes(id)}
         onSelect={(id: string[]) => setSelectedImages([...selectedImages, ...id])}

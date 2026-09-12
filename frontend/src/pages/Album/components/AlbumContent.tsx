@@ -14,6 +14,9 @@ import { formatTimeLeft } from "../../../utils/formatTimeLeft";
 import { acquireWakeLock } from "../../../utils/wakeLock";
 import { isAbortError } from "../../../utils/retry";
 import { formatBytesPair } from "../../../utils/formatBytes";
+import { randomBatchName } from "../../../utils/batchName";
+import { AlbumView } from "../../../utils/groupFiles";
+import { UploadBatch } from "../services/PendingUploadStore";
 
 type UploadProgress = { percent: number; uploadedBytes: number; totalBytes: number };
 
@@ -34,6 +37,9 @@ type AlbumContentProps = {
   isLoadingThumbnails: boolean;
   downloadProgress: number;
   thumbnailGroups: ThumbnailGroup[];
+  view: AlbumView;
+  onChangeView: (view: AlbumView) => void;
+  onRenameBatch: (batchId: string, name: string) => void;
   uploadService: UploadService;
 
   // selection
@@ -45,12 +51,11 @@ type AlbumContentProps = {
   onDownloadAll: (files: string[]) => void;
   onUploadStarted: () => void;
   onUploadFinished: () => void;
-  onAddThumbnail: (thumbnail: {
-    date: string;
-    id: string;
-    name: string;
+  /** A file finished uploading; its thumbnail is known before metadata lists it. */
+  onUploaded: (uploaded: {
+    fileId: string;
     thumbnail: string | undefined;
-    isVideo: boolean;
+    thumbnailIv: string | undefined;
   }) => void;
 };
 
@@ -59,6 +64,7 @@ export function AlbumContent(props: AlbumContentProps) {
   const [phase, setPhase] = useState<UploadPhase>("idle");
   const [newFileIds, setNewFileIds] = useState<string[]>([]);
   const [failedFiles, setFailedFiles] = useState<File[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const abortRef = useRef<AbortController | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const { metadata, refreshMetadata, key, expiresAt } = useAlbumContext();
@@ -93,11 +99,15 @@ export function AlbumContent(props: AlbumContentProps) {
     let cancelled = false;
     let completed = false;
     try {
+      // Every picked set of files is its own batch with a fresh fantasy name;
+      // resumed or retried files keep the batch they were first picked with.
+      const batch = await props.uploadService.createBatch(randomBatchName(), key);
       const results = upload({
         uploadService: props.uploadService,
         files,
         key,
         metadata,
+        batch,
         signal: controller.signal,
       });
 
@@ -110,8 +120,10 @@ export function AlbumContent(props: AlbumContentProps) {
           cancelled = true;
           failed.push(...result.remaining);
         } else {
-          uploaded.push(result.thumbnail.id);
-          props.onAddThumbnail(result.thumbnail);
+          uploaded.push(result.fileId);
+          props.onUploaded(result);
+          // The tile shows as soon as metadata lists the file.
+          refreshMetadata();
         }
       }
       completed = true;
@@ -149,6 +161,31 @@ export function AlbumContent(props: AlbumContentProps) {
     await wait(PULSE_MS);
     setNewFileIds([]);
   }
+  // A group that receives freshly uploaded tiles opens so the pulse is visible.
+  useEffect(() => {
+    if (newFileIds.length === 0) return;
+    const receiving = props.thumbnailGroups
+      .filter((group) => group.thumbnails.some((thumb) => newFileIds.includes(thumb.id)))
+      .map((group) => group.key);
+    if (!receiving.some((key) => collapsedGroups.has(key))) return;
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      for (const key of receiving) next.delete(key);
+      return next;
+    });
+  }, [newFileIds, props.thumbnailGroups]);
+  function renameHandler(batchId: string | undefined) {
+    if (batchId === undefined) return undefined;
+    return (name: string) => props.onRenameBatch(batchId, name);
+  }
+  function toggleCollapsed(groupKey: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }
   function cancelUpload() {
     abortRef.current?.abort();
   }
@@ -178,6 +215,8 @@ export function AlbumContent(props: AlbumContentProps) {
           onDownloadAll={() => props.onDownloadAll(getAllId())}
           onAddPhoto={openFilePicker}
           isBusy={props.isUploading || props.isDownloading}
+          view={props.view}
+          onChangeView={props.onChangeView}
         />
       )}
       <DragNdrop
@@ -191,10 +230,12 @@ export function AlbumContent(props: AlbumContentProps) {
         <AlbumSections>
           {props.thumbnailGroups.map((group, i) => (
             <AlbumSection
-              key={i}
+              key={group.key}
               group={group}
               index={i}
-              isUploading={props.isUploading}
+              isCollapsed={collapsedGroups.has(group.key)}
+              onToggleCollapsed={() => toggleCollapsed(group.key)}
+              onRename={renameHandler(group.batchId)}
               newFileIds={newFileIds}
               selectedImages={props.selectedImages}
               isSelected={props.isSelected}
@@ -298,14 +339,9 @@ type BatchYield =
   | { result: "cancelled"; remaining: File[] }
   | {
       result: "finish";
-      thumbnail: {
-        result: "thumbnail";
-        thumbnail: string | undefined;
-        id: string;
-        name: string;
-        date: string;
-        isVideo: boolean;
-      };
+      fileId: string;
+      thumbnail: string | undefined;
+      thumbnailIv: string | undefined;
     };
 
 /**
@@ -317,6 +353,7 @@ async function* upload(params: {
   files: File[];
   key: string | null;
   metadata: { albumId: string };
+  batch: UploadBatch;
   signal: AbortSignal;
 }): AsyncGenerator<BatchYield> {
   const arrLength = params.files.length;
@@ -328,6 +365,7 @@ async function* upload(params: {
       const uploadData = params.uploadService.upload(file, {
         albumId: params.metadata.albumId,
         key: params.key,
+        batch: params.batch,
         signal: params.signal,
       });
       for await (const response of uploadData) {
@@ -342,14 +380,9 @@ async function* upload(params: {
         } else {
           yield {
             result: "finish",
-            thumbnail: {
-              result: "thumbnail",
-              thumbnail: response.thumbnail,
-              id: response.fileId,
-              name: response.name,
-              date: response.date,
-              isVideo: response.isVideo,
-            },
+            fileId: response.fileId,
+            thumbnail: response.thumbnail,
+            thumbnailIv: response.thumbnailIv,
           };
         }
       }

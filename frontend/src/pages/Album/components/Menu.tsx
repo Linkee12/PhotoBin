@@ -6,12 +6,43 @@ import SlideDown from "@assets/images/icons/slideDown.svg?react";
 import AddIcon from "@assets/images/icons/addIcon.svg?react";
 import { styled } from "../../../stitches.config";
 import { useEffect, useState } from "react";
+import { AlbumView } from "../../../utils/groupFiles";
 
 type MenuProps = {
   onDownloadAll: () => void;
   onAddPhoto: () => void;
   isBusy: boolean;
+  view: AlbumView;
+  onChangeView: (view: AlbumView) => void;
 };
+
+const VIEW_LABELS: { view: AlbumView; label: string }[] = [
+  { view: "history", label: "HISTORY" },
+  { view: "date", label: "DATE" },
+];
+
+/** Segmented "group by" switch: upload history or photo date. */
+function ViewToggle(props: { view: AlbumView; onChangeView: (view: AlbumView) => void }) {
+  return (
+    <Segmented role="radiogroup" aria-label="Group photos by" data-view-toggle>
+      {VIEW_LABELS.map(({ view, label }) => (
+        <Segment
+          key={view}
+          role="radio"
+          aria-checked={props.view === view}
+          active={props.view === view}
+          data-view={view}
+          onClick={(e) => {
+            e.stopPropagation();
+            props.onChangeView(view);
+          }}
+        >
+          {label}
+        </Segment>
+      ))}
+    </Segmented>
+  );
+}
 
 export function Menu(props: MenuProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -27,6 +58,7 @@ export function Menu(props: MenuProps) {
   return (
     <>
       <LandscapeButtonsBg>
+        <ViewToggle view={props.view} onChangeView={props.onChangeView} />
         <Button disabled={props.isBusy}>
           <ButtonText onClick={props.onDownloadAll}>DOWNLOAD ALL</ButtonText>
           <LandscapeDownloadIcon />
@@ -42,6 +74,9 @@ export function Menu(props: MenuProps) {
         </PortraitHeader>
         <Bottom isOpen={isOpen}>
           <Buttons>
+            <NarrowToggle isOpen={showButton && isOpen}>
+              <ViewToggle view={props.view} onChangeView={props.onChangeView} />
+            </NarrowToggle>
             <Button
               disabled={props.isBusy}
               isOpen={showButton && isOpen}
@@ -180,6 +215,41 @@ const Button = styled("button", {
       false: {
         "@narrow": { display: "none" },
       },
+    },
+  },
+});
+const Segmented = styled("div", {
+  display: "inline-flex",
+  border: "solid 2px #333333",
+  borderRadius: "1.5rem",
+  overflow: "hidden",
+  background: "#0e0e0e",
+  marginRight: "0.6rem",
+});
+const Segment = styled("button", {
+  background: "none",
+  border: "none",
+  color: "#8B8B8B",
+  fontSize: "0.7rem",
+  fontWeight: "bold",
+  fontFamily: "inherit",
+  padding: "0.5rem 0.9rem",
+  cursor: "pointer",
+  "&:hover": { color: "#fff" },
+  variants: {
+    active: {
+      true: { background: "#333333", color: "#fff" },
+      false: {},
+    },
+  },
+});
+const NarrowToggle = styled("div", {
+  "@wide": { display: "none" },
+  marginTop: "1rem",
+  variants: {
+    isOpen: {
+      true: { "@narrow": { display: "flex" } },
+      false: { "@narrow": { display: "none" } },
     },
   },
 });
