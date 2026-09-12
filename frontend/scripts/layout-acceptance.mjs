@@ -4,8 +4,8 @@
 // (B) water above the name >= 12px at its left/mid/right (the curve passes above it);
 // (C) 8px halo around each toolbar control is shelf colour (#0E0E0E);
 // (D) header parts inside viewport, no horizontal scroll;
-// (F) toolbar inline (>= 1280px): the first header is in the left third of the wave (the row left of the buttons), centred on the buttons' row,
-//     and the row is as tall as both; below 1280px there are no toolbar controls, only the bottom sheet's handle.
+// (F) toolbar inline (>= 1200px): the first header is in the left third of the wave (the row left of the buttons), centred on the buttons' row,
+//     and the row is as tall as both; below 1200px there are no toolbar controls, only the bottom sheet's handle.
 // Usage: CHROMIUM=<chrome binary> FIXTURE_DIR=<dir with img1..8.jpg> [BASE_URL] [OUT_DIR]
 //        [PLAYWRIGHT_CORE=<path to playwright-core/index.mjs>] [PNGJS=<path to pngjs/lib/png.js>]
 //        node scripts/layout-acceptance.mjs
@@ -17,7 +17,7 @@ const { PNG } = await import(process.env.PNGJS ?? "pngjs");
 const S = process.env.FIXTURE_DIR ?? ".";
 const OUT = process.env.OUT_DIR ?? "layout-acceptance-out";
 fs.mkdirSync(OUT, { recursive: true });
-const VIEWPORTS = [[390,844],[844,390],[1024,768],[1279,800],[1280,800],[1440,900],[1920,1080],[1980,2014],[2560,1440]];
+const VIEWPORTS = [[390,844],[844,390],[1024,768],[1199,800],[1200,800],[1280,800],[1440,900],[1920,1080],[1980,2014],[2560,1440]];
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM, headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
 const page = await ctx.newPage();
@@ -81,7 +81,7 @@ for (const [w, h] of VIEWPORTS) {
     rows.push([vp, `C toolbar@${Math.round(b.left)}`, bad === 0 ? "PASS" : "FAIL", `${bad}/${total} off-shelf`]);
   }
   const controls = info.toolbar.filter((t) => t.visible);
-  if (w >= 1280) {
+  if (w >= 1200) {
     const hb = info.firstHeader, r = info.row;
     rows.push([vp, "F toolbar inline", controls.length === 3 && !info.sheetVisible ? "PASS" : "FAIL", `${controls.length} controls, sheet ${info.sheetVisible}`]);
     if (hb && r) {

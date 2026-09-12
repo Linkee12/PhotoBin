@@ -19,7 +19,7 @@ export const NARROW_MAX_WIDTH_PX = 699;
  * phone layout, whatever the orientation: the header and the buttons are never
  * stacked on separate rows.
  */
-export const TOOLBAR_INLINE_MIN_WIDTH_PX = 1280;
+export const TOOLBAR_INLINE_MIN_WIDTH_PX = 1200;
 export const TOOLBAR_INLINE_QUERY = `(min-width: ${TOOLBAR_INLINE_MIN_WIDTH_PX}px)`;
 
 export const { styled, keyframes } = createStitches({

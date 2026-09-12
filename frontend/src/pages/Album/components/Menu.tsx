@@ -299,7 +299,7 @@ const Segmented = styled("div", {
 const Segment = styled("button", {
   background: "none",
   border: "none",
-  color: "#8B8B8B",
+  color: "#A8A8A8",
   fontSize: "0.7rem",
   fontWeight: "bold",
   fontFamily: "inherit",

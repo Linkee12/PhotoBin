@@ -174,15 +174,11 @@ const Header = styled("div", {
   columnGap: "0.5rem",
   rowGap: "0.1rem",
   alignItems: "center",
-  overflowWrap: "anywhere",
-  "@narrow": {
-    paddingLeft: "1.28rem",
-    fontSize: "1.1rem",
-  },
-  "@wide": {
-    paddingLeft: "5rem",
-    fontSize: "1.42rem",
-  },
+  overflowWrap: "break-word",
+  fontSize: "1.1rem",
+  "@narrow": { paddingLeft: "1.28rem" },
+  // Flush with the tiles' left edge (see `Images`).
+  "@wide": { paddingLeft: "1.9rem" },
   "@toolbarInline": {
     gridTemplateColumns: "auto auto minmax(0, 1fr)",
     paddingTop: "2rem",

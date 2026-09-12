@@ -163,7 +163,7 @@ const Preview = styled("div", {
   },
   "@wide": {
     minWidth: "150px",
-    maxWidth: "300px",
+    maxWidth: "280px",
   },
   "@narrow": {
     width: "90vw",
