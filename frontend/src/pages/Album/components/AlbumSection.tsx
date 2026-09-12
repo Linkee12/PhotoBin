@@ -278,7 +278,9 @@ const Images = styled("div", {
       true: {
         display: "grid",
         justifyItems: "stretch",
-        "& > [data-tile]": { width: "100%", maxWidth: "none" },
+        // The tile is exactly its cell: the auto layouts' tile margin would
+        // push every tile right by it and the last column into the gutter.
+        "& > [data-tile]": { width: "100%", maxWidth: "none", margin: 0 },
         "@narrow": {
           display: "grid",
           gap: "10px",

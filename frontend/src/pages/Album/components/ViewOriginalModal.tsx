@@ -153,6 +153,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         ? drawn
         : { width: drawn.height * fitScale, height: drawn.width * fitScale };
     },
+    onSwipe: (direction) => goTo(direction),
+    onPinchClose: () => close(),
   });
   const isZoomed = zoom.isZoomed;
 
@@ -759,6 +761,9 @@ const ZoomableImg = styled("img", {
   display: "block",
   width: "100%",
   height: "100vh",
+  // Its own layer, so the zoom transform above scales a cached raster instead
+  // of re-rasterizing (or re-decoding) the full picture every frame.
+  willChange: "transform",
   objectFit: "contain",
   transformOrigin: "center center",
 });
@@ -939,6 +944,8 @@ const Notice = styled("div", {
 });
 const NextButton = styled("button", {
   display: "flex",
+  // Touch screens swipe instead; the buttons would swallow a swipe starting near an edge.
+  "@media (hover: none)": { display: "none" },
   justifyContent: "center",
   alignItems: "center",
   width: "20%",

@@ -47,7 +47,6 @@ type Gesture = {
   minColumns: number;
   maxColumns: number;
   gap: number;
-  margin: number;
   scrollY: number;
   viewport: { width: number; height: number };
   sections: SectionState[];
@@ -252,7 +251,6 @@ export function useGridPinch(options: Options) {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     const sections: SectionState[] = [];
     let gap = 0;
-    let margin = 0;
     let anchor: TileState | null = null;
     for (const images of container.querySelectorAll<HTMLElement>("[data-images]")) {
       const tiles: TileState[] = [];
@@ -262,11 +260,7 @@ export function useGridPinch(options: Options) {
         if (anchor === null && contains(current, mid)) anchor = tile;
         tiles.push(tile);
       }
-      if (tiles.length > 0) {
-        const style = getComputedStyle(images);
-        gap = parseFloat(style.rowGap) || 0;
-        margin = parseFloat(getComputedStyle(tiles[0].el).marginTop) || 0;
-      }
+      if (tiles.length > 0) gap = parseFloat(getComputedStyle(images).rowGap) || 0;
       sections.push({ images, current: documentRect(images), tiles });
     }
     const first = sections.find((s) => s.tiles.length > 0);
@@ -284,7 +278,6 @@ export function useGridPinch(options: Options) {
       minColumns: 1,
       maxColumns,
       gap,
-      margin,
       scrollY,
       viewport,
       sections,
@@ -298,6 +291,8 @@ export function useGridPinch(options: Options) {
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (!optionsRef.current.enabled || e.pointerType !== "touch") return;
+      // A new touch: the pinch's click, if any, has been and gone.
+      if (pointers.current.size === 0) swallowClick.current = false;
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (
         pointers.current.size === 2 &&
@@ -483,7 +478,8 @@ function targetFor(g: Gesture, direction: Direction): Target | null {
         top: section.current.top + drift,
         width: section.current.width,
         gap: g.gap,
-        margin: g.margin,
+        // The explicit layout has no tile margin (see `Images`' `explicit` variant).
+        margin: 0,
         columns,
         count: section.tiles.length,
       });

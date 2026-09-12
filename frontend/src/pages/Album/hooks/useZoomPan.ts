@@ -7,6 +7,12 @@ const DRAG_THRESHOLD_PX = 5;
 const DOUBLE_TAP_MS = 300;
 const DOUBLE_TAP_DISTANCE_PX = 30;
 const WHEEL_SENSITIVITY = 0.0015;
+/** A pinch may shrink the picture this far below 1x before the fingers lift. */
+const PINCH_OUT_MIN_SCALE = 0.4;
+/** Lifting the fingers with the picture smaller than this closes the viewer. */
+const PINCH_CLOSE_SCALE = 0.8;
+/** Horizontal drag at 1x, in px, that counts as a swipe to the next / previous photo. */
+const SWIPE_PX = 60;
 
 export type ZoomTransform = { scale: number; tx: number; ty: number };
 
@@ -23,6 +29,10 @@ type UseZoomPanOptions = {
    * inner transform of its own). Defaults to `drawnSize(image)`.
    */
   pictureSize?: (image: HTMLImageElement) => { width: number; height: number };
+  /** A horizontal swipe at 1x: `1` for the next photo (swipe left), `-1` for the previous. */
+  onSwipe?: (direction: 1 | -1) => void;
+  /** The fingers lifted after pinching the picture well below 1x. */
+  onPinchClose?: () => void;
 };
 
 const IDENTITY: ZoomTransform = { scale: 1, tx: 0, ty: 0 };
@@ -73,12 +83,22 @@ export function drawnSize(image: HTMLImageElement) {
  * itself, or attach it to a layer around the image when the image carries a
  * transform of its own (rotation) that must not be overwritten.
  */
-export function useZoomPan({ resetKey, enabled, pictureSize }: UseZoomPanOptions) {
+export function useZoomPan({
+  resetKey,
+  enabled,
+  pictureSize,
+  onSwipe,
+  onPinchClose,
+}: UseZoomPanOptions) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const targetRef = useRef<HTMLDivElement | null>(null);
   const pictureSizeRef = useRef(pictureSize);
   pictureSizeRef.current = pictureSize;
+  const onSwipeRef = useRef(onSwipe);
+  onSwipeRef.current = onSwipe;
+  const onPinchCloseRef = useRef(onPinchClose);
+  onPinchCloseRef.current = onPinchClose;
   const measure = useCallback(
     (image: HTMLImageElement) => (pictureSizeRef.current ?? drawnSize)(image),
     [],
@@ -120,7 +140,9 @@ export function useZoomPan({ resetKey, enabled, pictureSize }: UseZoomPanOptions
 
   const clampTransform = useCallback(
     (next: ZoomTransform): ZoomTransform => {
-      const scale = clamp(next.scale, MIN_SCALE, MAX_SCALE);
+      // While two fingers are down the picture may shrink below 1x (to close).
+      const minScale = pinch.current ? PINCH_OUT_MIN_SCALE : MIN_SCALE;
+      const scale = clamp(next.scale, minScale, MAX_SCALE);
       const wrapper = wrapperRef.current;
       const image = imageRef.current;
       if (!wrapper || !image) return { scale, tx: 0, ty: 0 };
@@ -141,7 +163,8 @@ export function useZoomPan({ resetKey, enabled, pictureSize }: UseZoomPanOptions
     (point: Point, nextScale: number, base: ZoomTransform = transformRef.current) => {
       const wrapper = wrapperRef.current;
       if (!wrapper) return;
-      const scale = clamp(nextScale, MIN_SCALE, MAX_SCALE);
+      const minScale = pinch.current ? PINCH_OUT_MIN_SCALE : MIN_SCALE;
+      const scale = clamp(nextScale, minScale, MAX_SCALE);
       const ratio = scale / base.scale;
       const dx = point.x - wrapper.clientWidth / 2;
       const dy = point.y - wrapper.clientHeight / 2;
@@ -285,25 +308,36 @@ export function useZoomPan({ resetKey, enabled, pictureSize }: UseZoomPanOptions
             ty: current.ty + (point.y - previous.y),
           }),
         );
+      } else if (
+        pointers.current.size === 1 &&
+        current.scale === 1 &&
+        dragged.current &&
+        downPosition.current &&
+        onSwipeRef.current
+      ) {
+        // Swipe at 1x: the picture follows the finger sideways, unclamped.
+        setTransform({ scale: 1, tx: point.x - downPosition.current.x, ty: 0 });
       }
     },
     [clampTransform, setTransform, toLocal, zoomAround],
   );
 
-  const onPointerUp = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!pointers.current.has(e.pointerId)) return;
-      pointers.current.delete(e.pointerId);
-      if (pointers.current.size < 2) pinch.current = null;
-      if (pointers.current.size > 0 || e.type === "pointercancel") return;
+  /** The last finger of a drag or pinch lifted: settle the picture, close or swipe. */
+  const endGesture = useCallback(() => {
+    const { scale, tx } = transformRef.current;
+    if (scale < 1) {
+      // Pinched below 1x: well below closes the viewer, otherwise spring back.
+      setTransform(IDENTITY);
+      if (scale < PINCH_CLOSE_SCALE) onPinchCloseRef.current?.();
+    } else if (scale === 1 && tx !== 0) {
+      setTransform(IDENTITY);
+      if (Math.abs(tx) >= SWIPE_PX) onSwipeRef.current?.(tx < 0 ? 1 : -1);
+    }
+  }, [setTransform]);
 
-      if (dragged.current) {
-        lastTap.current = null;
-        return;
-      }
-
-      // Double tap / double click detection, works for touch and mouse alike.
-      const point = toLocal(e);
+  /** Double tap / double click detection, works for touch and mouse alike. */
+  const onTap = useCallback(
+    (point: Point) => {
       const now = Date.now();
       const previousTap = lastTap.current;
       if (
@@ -318,7 +352,29 @@ export function useZoomPan({ resetKey, enabled, pictureSize }: UseZoomPanOptions
         lastTap.current = { time: now, point };
       }
     },
-    [toLocal, zoomAround],
+    [zoomAround],
+  );
+
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!pointers.current.has(e.pointerId)) return;
+      pointers.current.delete(e.pointerId);
+      if (pointers.current.size < 2) pinch.current = null;
+      if (pointers.current.size > 0) return;
+      if (e.type === "pointercancel") {
+        // A cancelled gesture may leave the picture below 1x or pushed sideways.
+        if (transformRef.current.scale <= 1) setTransform(IDENTITY);
+        return;
+      }
+
+      if (dragged.current) {
+        lastTap.current = null;
+        endGesture();
+      } else {
+        onTap(toLocal(e));
+      }
+    },
+    [endGesture, onTap, setTransform, toLocal],
   );
 
   /**
