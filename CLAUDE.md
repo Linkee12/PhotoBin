@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-PhotoBin is a temporary, E2E-encrypted photo album sharing app. Users create an album, share the link, and all participants can upload/download photos. The encryption key lives only in the URL hash fragment — the server never sees plaintext data. Albums auto-expire after 30 days (configurable via `ALBUM_TTL_MS`); `AlbumService.cleanStorage` is invoked on backend startup and every `CLEANUP_INTERVAL_MS` (default 1 hour) by a `setInterval` registered in `backend/src/index.ts`.
+PhotoBin is a temporary, E2E-encrypted photo album sharing app. Users create an album, share the link, and all participants can upload/download photos. The encryption key lives only in the URL hash fragment — the server never sees plaintext data. Albums auto-expire after 30 days (configurable via `ALBUM_TTL_MS`); `AlbumService.cleanStorage` is invoked on backend startup and every `CLEANUP_INTERVAL_MS` (default 1 hour) by a `setInterval` registered in `backend/src/index.ts`. The same pass also deletes unfinalized file directories (not referenced in `metadata.json`) that have not been written to for `ORPHAN_TTL_MS` (default 24 hours).
 
 ## Development
 
@@ -32,7 +32,9 @@ npm run type-check   # frontend only
 npm run build        # tsc + vite build (frontend) / tsc (backend)
 ```
 
-There are no automated tests in this codebase.
+The only automated tests are the backend vitest specs (`backend/src/services/*.test.ts`, run with `npm test` in `backend/`); the frontend has none.
+
+Backend env vars (all optional, read via `dotenv`): `ALBUM_TTL_MS` (album lifetime, 30 days), `CLEANUP_INTERVAL_MS` (1 hour), `ORPHAN_TTL_MS` (unfinalized upload dirs, 24 hours), `EDIT_LOCK_TTL_MS` (stale edit lock, 10 minutes). `backend/src/index.ts` passes them to `new AlbumService(metadataService, albumTtlMs, { editLockTtlMs, orphanTtlMs })`; tests additionally pass `albumsRoot`.
 
 ## Architecture
 
@@ -62,12 +64,23 @@ This means the frontend also directly imports the `Metadata` type from `backend/
 
 ### Binary part transport
 Chunks do not go through cuple. `backend/src/index.ts` registers two plain express routes, validated with the shared zod schemas:
-- `PUT /parts/:albumId/:fileId/:type/:part` — `express.raw` body (limit `MAX_PART_BYTES`, 8 MB), stored as raw bytes.
+- `PUT /parts/:albumId/:fileId/:type/:part` — `express.raw` body (limit `MAX_PART_BYTES`, 8 MB), stored as raw bytes. An optional `?editId=<uuid>` routes the write into the file's edit staging dir (see "Non-destructive edits").
 - `GET /parts/:albumId/:fileId/:type/:part` — serves the part as raw bytes, whatever its on-disk format.
+
+`CHUNK_SIZE` (2 MB) and `UPLOAD_CONCURRENCY` (4) in `PartTransport.ts` are the single source of truth for chunking: `UploadService`, `ChunkUploader` (edits) and the resume records all count chunks with it. `PartType` is defined once, in `backend/src/utils/zod.ts`, and re-exported by `PartTransport`/`ImageQueryService`.
 
 The frontend reaches them at `/api/parts/...` (same `/api` → backend prefix as the RPC). The old cuple routes `uploadFilePart` / `getPartOfImage` (base64 inside JSON) still work and read/write both on-disk formats; they exist only for backward compatibility.
 
 Performance notes (measured with `?profile`, which logs per-stage timings to the console): AES-GCM is a small share of upload time. The big costs were full-resolution WebP encoding of the "reduced" rendition (now capped at 2560 px, JPEG for JPEG sources, skipped for small originals), base64 + JSON transport, and — in Chromium — `fetch` with an `ArrayBuffer` body, which uploads at ~10 MB/s while a `Blob` body is near-instant. Always send chunks as `Blob`s.
+
+Uploads are resumable: `UploadService` asks `getUploadedParts` which chunks the server already has (it recognises both `<n>.bin` and legacy `<n>` files and returns the numeric part name) and sends only the missing ones, each chunk with its own `withRetry` (`utils/retry.ts`) and the batch's `AbortSignal`. Across reloads, `PendingUploadStore` keeps a small localStorage record per album (fingerprint, fileId, IVs, chunk counts, encrypted name/date, never file bytes) so re-picking the same file re-encrypts with the stored IV (AES-GCM is deterministic for the same key + IV + plaintext; in plain mode the IV is empty and the bytes are the file itself). Only `original` / `originalVideo` / `unsupportedFile` are resumed; canvas-derived `thumbnail` / `reduced` are always re-uploaded with fresh IVs, and `reduced` may be absent altogether for small originals.
+
+### Non-destructive edits (rotation)
+Rotation never touches `original/`. `RotateService.rotateTo` fetches the original, re-renders `edited` (full-res, only when rotation ≠ 0), `reduced` and `thumbnail` at the absolute rotation, and pushes them through the server-side edit lifecycle in `AlbumService`:
+- `beginEdit` takes a per-file lock (`<fileId>/.edit-lock`, JSON `{ editId, startedAt }`, exclusive create; a lock older than `EDIT_LOCK_TTL_MS`, default 10 min, is taken over; a fresh one yields HTTP 409 `edit-in-progress`).
+- Parts uploaded with that `editId` (binary route `?editId=` or the JSON route's `editId` field) land in `<fileId>/.edit-<editId>/<type>/`; only `edited`/`reduced`/`thumbnail` are editable.
+- `commitEdit` swaps each staged `<type>` dir into place (via `<type>.old`), patches metadata (`rotation`, `edited`, `reduced`, `thumbnail`) and releases the lock; `abortEdit` drops staging + lock. `collectEditGarbage` (run by `cleanStorage`, and with `{ all: true }` at startup/shutdown) repairs stale locks, staging dirs and leftover `.old` dirs. Because whole type directories are swapped, the on-disk part naming (`.bin` or legacy) does not matter to the edit lifecycle.
+`ViewOriginalModal` rotates optimistically with CSS (the zoom transform lives on a wrapper layer, the rotation on the `<img>`), coalesces quick clicks into one `rotateTo`, and resets zoom on every turn. `backend/src/services/AlbumService.edit.test.ts` (vitest, `npm test` in `backend/`) covers the lifecycle.
 
 ### File storage on the backend
 Files live under `backend/albums/` (gitignored in prod, mounted as a PVC in k8s):
@@ -78,15 +91,18 @@ albums/<albumId>/<fileId>/reduced/0.bin..N.bin   ← 2 MB chunks; absent for sma
 albums/<albumId>/<fileId>/original/0.bin..N.bin
 albums/<albumId>/<fileId>/originalVideo/0.bin..N.bin   ← video only (its `original` is the poster frame)
 albums/<albumId>/<fileId>/unsupportedFile/0.bin..N.bin ← non-image/video files
+albums/<albumId>/<fileId>/edited/0.bin..N.bin   ← full-res rotated re-encode; only when `rotation` ≠ 0
+albums/<albumId>/<fileId>/.edit-lock, .edit-<editId>/   ← transient edit lock + staging (see below)
 ```
 Parts written through the binary route are raw bytes named `<part>.bin`. Albums uploaded before that route existed have base64 text files named `<part>` (no suffix); `AlbumService` checks for `<part>.bin` first and falls back to decoding `<part>`, so both layouts stay readable. Do not write both names for the same part.
 
 ### Frontend page structure
-- `/` → `pages/Home` — landing page, album creation
+- `/` → `pages/Home` — landing page, album creation (encrypted by default, with an "unencrypted album" toggle)
 - `/bin/:albumId` → `pages/Album` — upload, view, download
-  - `AlbumContextProvider` (`hooks/useAlbumContext.tsx`) fetches metadata and decrypts the album name; exposes `{ key, metadata, decodedValues, refreshMetadata }` via context.
-  - Service classes (`UploadService`, `ImageQueryService`, `DownloadService`, `CanvasService`, `CryptoService`) handle all media logic; they are plain classes instantiated in components/hooks, not singletons.
+  - `AlbumContextProvider` (`hooks/useAlbumContext.tsx`) fetches metadata and decrypts the album name; exposes `{ key, isEncrypted, metadata, expiresAt, decodedValues, refreshMetadata }` via context (`key` is `null` for plain albums).
+  - Service classes (`UploadService`, `ImageQueryService`, `DownloadService`, `RotateService`, `CanvasService`, `CryptoService`) handle all media logic; they are plain classes instantiated in components/hooks, not singletons.
+  - `ViewOriginalModal` composes `hooks/useZoomPan.ts` (wheel/pinch/drag zoom, rAF transform writes on a wrapper layer) with the optimistic CSS rotation and a download menu (rotated vs. original) for edited photos.
 
 ### Styling
-CSS-in-JS via `@stitches/react`. The config (`stitches.config.ts`) defines two breakpoints: `portrait` and `landscape` (orientation-based, not width-based). Use the exported `styled` from there rather than importing from `@stitches/react` directly.
+CSS-in-JS via `@stitches/react`. The config (`stitches.config.ts`) defines two complementary breakpoints: `narrow` (≤699px wide AND portrait — phones held upright) and `wide` (everything else, including tall desktop monitors). Use the exported `styled` and `keyframes` from there rather than importing from `@stitches/react` directly.
 

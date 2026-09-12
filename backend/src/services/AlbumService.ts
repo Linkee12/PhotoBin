@@ -2,12 +2,20 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { FilePart, Metadata, MetadataService } from "./MetadataService";
+import { PartType, partTypeSchema } from "../utils/zod";
 
 const DEFAULT_ALBUMS_ROOT = path.resolve("./albums");
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 const TEN_MINUTES_MS = 10 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const METADATA_FILE = "metadata.json";
 /** Parts uploaded through the binary route are stored as raw bytes with this suffix. */
 const RAW_SUFFIX = ".bin";
+
+export type UploadedParts = {
+  parts: Partial<Record<PartType, string[]>>;
+  finalized: boolean;
+};
 
 const EDIT_LOCK = ".edit-lock";
 const EDIT_STAGING_PREFIX = ".edit-";
@@ -42,13 +50,15 @@ function isEexist(err: unknown) {
 export class AlbumService {
   private _albumsRoot: string;
   private _editLockTtlMs: number;
+  private _orphanTtlMs: number;
   constructor(
     private _metadataService: MetadataService,
     private _ttlMs: number = ONE_MONTH_MS,
-    options: { albumsRoot?: string; editLockTtlMs?: number } = {},
+    options: { albumsRoot?: string; editLockTtlMs?: number; orphanTtlMs?: number } = {},
   ) {
     this._albumsRoot = options.albumsRoot ?? DEFAULT_ALBUMS_ROOT;
     this._editLockTtlMs = options.editLockTtlMs ?? TEN_MINUTES_MS;
+    this._orphanTtlMs = options.orphanTtlMs ?? ONE_DAY_MS;
   }
   getMetaData(albumId: string) {
     return this._metadataService.get(albumId);
@@ -104,6 +114,37 @@ export class AlbumService {
     await fs.writeFile(filePath, params.bytes);
   }
   /** Returns the part as base64 text regardless of how it is stored. */
+  /**
+   * Lists the part names already stored for a file, grouped by part type, so a
+   * client can resume an interrupted upload. Both on-disk layouts are
+   * recognised (`<n>.bin` raw and legacy base64 `<n>`); the numeric part name
+   * is returned either way. Missing directories yield `{}`.
+   */
+  async getUploadedParts(albumId: string, fileId: string): Promise<UploadedParts> {
+    const finalized = this._metadataService
+      .get(albumId)
+      .files.some((file) => file.fileId === fileId);
+    const parts: UploadedParts["parts"] = {};
+    const fileDir = this._safePath(albumId, fileId);
+    for (const entry of await this._readdirOrEmpty(fileDir)) {
+      const type = partTypeSchema.safeParse(entry.name);
+      if (!entry.isDirectory() || !type.success) continue;
+      const names = await this._readdirOrEmpty(
+        this._safePath(albumId, fileId, type.data),
+      );
+      const found = new Set<string>();
+      for (const part of names) {
+        if (!part.isFile()) continue;
+        const partName = part.name.endsWith(RAW_SUFFIX)
+          ? part.name.slice(0, -RAW_SUFFIX.length)
+          : part.name;
+        if (/^\d+$/.test(partName)) found.add(partName);
+      }
+      parts[type.data] = [...found];
+    }
+    return { parts, finalized };
+  }
+  /** Returns the part as base64 text regardless of how it is stored. */
   async getFile(albumId: string, fileId: string, type: string, name: string) {
     const raw = await this._readRawPart(albumId, fileId, type, name);
     if (raw !== undefined) return raw.toString("base64");
@@ -126,7 +167,15 @@ export class AlbumService {
       await this._deleteImage(albumId, imageId);
     }
   }
-  async cleanStorage(ttlMs: number = this._ttlMs) {
+  /**
+   * Deletes expired albums and, inside live albums, file directories that were
+   * never finalized (not referenced by metadata.json) and have not been written
+   * to for `orphanTtlMs`. The mtime check keeps in-progress uploads alive.
+   */
+  async cleanStorage(
+    ttlMs: number = this._ttlMs,
+    orphanTtlMs: number = this._orphanTtlMs,
+  ) {
     let directions: string[];
     try {
       directions = await fs.readdir(this._albumsRoot);
@@ -141,6 +190,8 @@ export class AlbumService {
         const s = await fs.stat(albumPath);
         if (now - s.birthtimeMs > ttlMs) {
           await this._deleteDir(dir);
+        } else if (s.isDirectory()) {
+          await this._cleanOrphans(dir, now, orphanTtlMs);
         }
       } catch (err) {
         console.error(`cleanStorage: failed to inspect ${dir}`, err);
@@ -264,6 +315,28 @@ export class AlbumService {
         } catch (err) {
           console.error(`collectEditGarbage: failed on ${albumId}/${fileId}`, err);
         }
+      }
+    }
+  }
+
+  private async _cleanOrphans(albumId: string, now: number, orphanTtlMs: number) {
+    const known = new Set(this._metadataService.get(albumId).files.map((f) => f.fileId));
+    const entries = await this._readdirOrEmpty(this._safePath(albumId));
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name === METADATA_FILE || known.has(entry.name)) {
+        continue;
+      }
+      try {
+        const lastWrite = await this._lastWriteMs(albumId, entry.name);
+        if (now - lastWrite > orphanTtlMs) {
+          await fs.rm(this._safePath(albumId, entry.name), {
+            recursive: true,
+            force: true,
+          });
+          console.log(`cleanStorage: removed orphaned upload ${albumId}/${entry.name}`);
+        }
+      } catch (err) {
+        console.error(`cleanStorage: failed to inspect ${albumId}/${entry.name}`, err);
       }
     }
   }
@@ -423,6 +496,32 @@ export class AlbumService {
       throw err;
     }
   }
+
+  /**
+   * Newest mtime of the file directory and its part-type subdirectories. A
+   * directory's mtime only changes when direct children are added, so the
+   * subdirectories are what reflect the last uploaded chunk.
+   */
+  private async _lastWriteMs(albumId: string, fileId: string) {
+    const fileDir = this._safePath(albumId, fileId);
+    let latest = (await fs.stat(fileDir)).mtimeMs;
+    for (const entry of await this._readdirOrEmpty(fileDir)) {
+      if (!entry.isDirectory()) continue;
+      const s = await fs.stat(this._safePath(albumId, fileId, entry.name));
+      latest = Math.max(latest, s.mtimeMs);
+    }
+    return latest;
+  }
+
+  private async _readdirOrEmpty(dir: string) {
+    try {
+      return await fs.readdir(dir, { withFileTypes: true });
+    } catch (err) {
+      if (isEnoent(err)) return [];
+      throw err;
+    }
+  }
+
   private async _deleteImage(albumId: string, imageId: string) {
     await fs.rm(this._safePath(albumId, imageId), {
       recursive: true,

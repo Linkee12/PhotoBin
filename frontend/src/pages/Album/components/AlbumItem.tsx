@@ -1,21 +1,43 @@
 import Check from "@assets/images/icons/check.svg?react";
 import Zoom from "@assets/images/icons/zoom.svg?react";
 import Play from "@assets/images/icons/play.svg?react";
-import { styled } from "../../../stitches.config";
+import { keyframes, styled } from "../../../stitches.config";
+import { useEffect, useRef } from "react";
+
+/** Length of the "just uploaded" highlight pulse. */
+export const PULSE_MS = 800;
 
 type AlbumItemProps = {
   imageSrc: string | undefined;
   fileName: string;
   isSelected: boolean;
   isVideo: boolean;
+  /** just uploaded: play the highlight pulse */
+  isNew: boolean;
+  /** just uploaded and first of its batch: bring it on screen */
+  scrollIntoView: boolean;
   onSelect: () => void;
   onDeselect: () => void;
   onOpen: () => void;
 };
 
 export function AlbumItem(props: AlbumItemProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!props.scrollIntoView) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    ref.current?.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "nearest",
+    });
+  }, [props.scrollIntoView]);
+
   return (
-    <Preview onClick={() => (props.isSelected ? props.onDeselect() : props.onSelect())}>
+    <Preview
+      ref={ref}
+      isNew={props.isNew}
+      onClick={() => (props.isSelected ? props.onDeselect() : props.onSelect())}
+    >
       <CheckIcon isVisible={props.isSelected} />
       {props.isVideo === true ? <PlayIcon /> : <></>}
       {props.imageSrc !== undefined ? (
@@ -82,12 +104,32 @@ const UnsupportedFileName = styled("p", {
   fontFamily: "Open Sans",
 });
 
+const ACCENT = "#EFC15C";
+
+// Two gentle glows, then gone.
+const highlightPulse = keyframes({
+  "0%, 50%, 100%": { boxShadow: `0 0 0 0 ${ACCENT}00` },
+  "25%, 75%": { boxShadow: `0 0 0 5px ${ACCENT}b3` },
+});
+
 const Preview = styled("div", {
-  "@landscape": {
+  variants: {
+    isNew: {
+      true: {
+        animation: `${highlightPulse} ${PULSE_MS}ms ease-in-out`,
+        "@media (prefers-reduced-motion: reduce)": {
+          animation: "none",
+          boxShadow: `0 0 0 4px ${ACCENT}b3`,
+        },
+      },
+      false: {},
+    },
+  },
+  "@wide": {
     minWidth: "150px",
     maxWidth: "300px",
   },
-  "@portrait": {
+  "@narrow": {
     width: "90vw",
   },
   width: "100%",

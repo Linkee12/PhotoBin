@@ -57,10 +57,10 @@ const ContentHeader = styled("div", {
   maxHeight: "3rem",
   maskImage: `url(${albumItemsBg})`,
   maskRepeat: "no-repeat",
-  "@portrait": {
+  "@narrow": {
     maskSize: "100% 100%",
   },
-  "@landscape": {
+  "@wide": {
     maskSize: "min(800px, 100%) 100%",
   },
   transition: "background-color 0.3s",

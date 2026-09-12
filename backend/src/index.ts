@@ -9,6 +9,7 @@ import {
   metadataSchema,
   partNameSchema,
   partTypeSchema,
+  uploadedPartsQuerySchema,
   uuidSchema,
 } from "./utils/zod";
 import { MetadataService } from "./services/MetadataService";
@@ -16,9 +17,11 @@ import fs from "fs";
 dotenv.config();
 
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const albumTtlMs = Number(process.env["ALBUM_TTL_MS"]) || ONE_MONTH_MS;
+const orphanTtlMs = Number(process.env["ORPHAN_TTL_MS"]) || ONE_DAY_MS;
 const cleanupIntervalMs = Number(process.env["CLEANUP_INTERVAL_MS"]) || ONE_HOUR_MS;
 const editLockTtlMs = Number(process.env["EDIT_LOCK_TTL_MS"]) || TEN_MINUTES_MS;
 
@@ -28,7 +31,10 @@ app.use(express.json({ limit: "2mb" }));
 
 const builder = createBuilder(app);
 const metadataService = new MetadataService(fs);
-const albumService = new AlbumService(metadataService, albumTtlMs, { editLockTtlMs });
+const albumService = new AlbumService(metadataService, albumTtlMs, {
+  editLockTtlMs,
+  orphanTtlMs,
+});
 
 // Binary part transport: chunks travel as application/octet-stream instead of
 // base64 inside JSON (no +33% wire bytes, no base64/JSON CPU on either side).
@@ -131,6 +137,15 @@ const routes = {
         data.query.name,
       );
       return success({ file });
+    }),
+  getUploadedParts: builder
+    .querySchema(uploadedPartsQuerySchema)
+    .get(async ({ data }) => {
+      const uploaded = await albumService.getUploadedParts(
+        data.query.albumId,
+        data.query.fileId,
+      );
+      return success(uploaded);
     }),
   uploadFilePart: builder
     .bodySchema(
@@ -244,7 +259,7 @@ const server = app.listen(port, () => {
 });
 
 function runCleanup() {
-  albumService.cleanStorage(albumTtlMs).catch((err) => {
+  albumService.cleanStorage(albumTtlMs, orphanTtlMs).catch((err) => {
     console.error("Scheduled cleanup failed:", err);
   });
 }

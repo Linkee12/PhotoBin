@@ -24,6 +24,11 @@ export const filePartSchema = z.object({
 export const partNameSchema = z.string().regex(/^\d+$/, "partName must be numeric");
 export type PartType = z.infer<typeof partTypeSchema>;
 
+export const uploadedPartsQuerySchema = z.object({
+  albumId: uuidSchema,
+  fileId: uuidSchema,
+});
+
 export const fileMetadataSchema = z.object({
   fileId: uuidSchema,
   fileName: z.object({

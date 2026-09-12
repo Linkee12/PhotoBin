@@ -1,6 +1,12 @@
 import { base64ToArrayBuffer, base64toUint8Array } from "../../../utils/base64";
 import { importKey } from "../../../utils/key";
 
+function randomIv(): Uint8Array<ArrayBuffer> {
+  return crypto.getRandomValues(new Uint8Array(12));
+}
+
+const EMPTY_IV = new Uint8Array(0) as Uint8Array<ArrayBuffer>;
+
 /**
  * Encrypts/decrypts album data with AES-GCM.
  *
@@ -33,10 +39,18 @@ export class CryptoService {
     );
     return decoder.decode(arraybuffer);
   }
-  async encryptImage(file: File | Blob, key: string | null) {
+  /**
+   * Encrypts a file with AES-GCM. Pass `iv` to reproduce the exact ciphertext
+   * of an earlier run (resumed uploads); omit it to get a fresh random IV.
+   * In plain mode the bytes pass through untouched and the iv is empty.
+   */
+  async encryptImage(
+    file: File | Blob,
+    key: string | null,
+    iv: Uint8Array<ArrayBuffer> = randomIv(),
+  ) {
     const buffer = await file.arrayBuffer();
-    if (key === null) return { cryptedImg: buffer, iv: new Uint8Array(0) };
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    if (key === null) return { cryptedImg: buffer, iv: EMPTY_IV };
     const cryptedImg = await window.crypto.subtle.encrypt(
       { name: "AES-GCM", iv },
       await importKey(key),
@@ -44,14 +58,17 @@ export class CryptoService {
     );
     return { cryptedImg, iv };
   }
-  async encrypString(text: string, key: string | null) {
+  async encrypString(
+    text: string,
+    key: string | null,
+    iv: Uint8Array<ArrayBuffer> = randomIv(),
+  ) {
     const encoder = new TextEncoder();
     // Copy into a fresh Uint8Array so the buffer is typed as a plain ArrayBuffer.
     const encodedText = new Uint8Array(encoder.encode(text));
     if (key === null) {
-      return { encryptedText: encodedText.buffer, iv: new Uint8Array(0) };
+      return { encryptedText: encodedText.buffer, iv: EMPTY_IV };
     }
-    const iv = crypto.getRandomValues(new Uint8Array(12));
     const encryptedText = await window.crypto.subtle.encrypt(
       { name: "AES-GCM", iv },
       await importKey(key),

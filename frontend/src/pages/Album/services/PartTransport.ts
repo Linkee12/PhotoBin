@@ -23,6 +23,17 @@ function partUrl(
   return editId === undefined ? url : `${url}?editId=${encodeURIComponent(editId)}`;
 }
 
+/** A non-2xx response; `status` lets callers tell server errors (retryable) from rejections. */
+export class PartTransportError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "PartTransportError";
+  }
+}
+
 /**
  * Binary chunk transport. Bytes (plaintext in plain mode, AES-GCM ciphertext in
  * encrypted mode) travel as `application/octet-stream`, so there is no base64
@@ -50,13 +61,19 @@ export class PartTransport {
       signal: options.signal,
     });
     if (!response.ok)
-      throw new Error(`Upload of ${type}[${part}] failed: ${response.status}`);
+      throw new PartTransportError(
+        `Upload of ${type}[${part}] failed: ${response.status}`,
+        response.status,
+      );
   }
 
   async get(albumId: string, fileId: string, type: PartType, part: number) {
     const response = await fetch(partUrl(albumId, fileId, type, part));
     if (!response.ok)
-      throw new Error(`Download of ${type}[${part}] failed: ${response.status}`);
+      throw new PartTransportError(
+        `Download of ${type}[${part}] failed: ${response.status}`,
+        response.status,
+      );
     return await response.arrayBuffer();
   }
 }

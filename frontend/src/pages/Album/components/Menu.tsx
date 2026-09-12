@@ -80,8 +80,8 @@ export function Menu(props: MenuProps) {
 }
 
 const LandscapeButtonsBg = styled("div", {
-  "@portrait": { display: "none" },
-  "@landscape": { display: "flex" },
+  "@narrow": { display: "none" },
+  "@wide": { display: "flex" },
   maskRepeat: "no-repeat",
   backgroundSize: "100% 100%",
   height: "5rem",
@@ -101,8 +101,8 @@ const LandscapeButtonsBg = styled("div", {
 });
 
 const PortraitButtonsContainer = styled("div", {
-  "@portrait": { display: "flex" },
-  "@landscape": { display: "none" },
+  "@narrow": { display: "flex" },
+  "@wide": { display: "none" },
   cursor: "pointer",
   flexDirection: "column",
   transition: "display 0.3s , height 0.4s",
@@ -171,14 +171,14 @@ const Button = styled("button", {
   height: "2.5rem",
   padding: "0.5rem",
   cursor: "pointer",
-  "@landscape": { display: "flex" },
+  "@wide": { display: "flex" },
   variants: {
     isOpen: {
       true: {
-        "@portrait": { display: "flex", marginTop: "1rem", width: "90%" },
+        "@narrow": { display: "flex", marginTop: "1rem", width: "90%" },
       },
       false: {
-        "@portrait": { display: "none" },
+        "@narrow": { display: "none" },
       },
     },
   },
@@ -200,10 +200,10 @@ const SlideIconDown = styled("div", {
   variants: {
     isOpen: {
       true: {
-        "@portrait": { display: "flex" },
+        "@narrow": { display: "flex" },
       },
       false: {
-        "@portrait": { display: "none" },
+        "@narrow": { display: "none" },
       },
     },
   },

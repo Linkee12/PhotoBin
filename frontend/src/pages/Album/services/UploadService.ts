@@ -1,12 +1,30 @@
 import { client } from "../../../cuple";
-import { arrayBufferToBase64, uint8ArrayToBase64 } from "../../../utils/base64";
+import {
+  arrayBufferToBase64,
+  base64toUint8Array,
+  uint8ArrayToBase64,
+} from "../../../utils/base64";
 import { CanvasService } from "./CanvasService";
 import { CryptoService } from "./CryptoService";
 import { formatDate } from "../../../utils/formatDate";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import {
+  isAbortError,
+  RetryableError,
+  throwIfAborted,
+  withRetry,
+} from "../../../utils/retry";
+import {
+  EncryptedEntry,
+  fileFingerprint,
+  PendingUpload,
+  PendingUploadStore,
+  ResumablePartType,
+} from "./PendingUploadStore";
+import {
   mapWithConcurrency,
   PartTransport,
+  PartTransportError,
   PartType,
   splitIntoChunks,
   UPLOAD_CONCURRENCY,
@@ -27,6 +45,39 @@ const IMAGETYPES = [
   "image/svg+xml",
 ];
 
+/** Parts whose plaintext is the picked file itself and therefore reproducible after a reload. */
+const RESUMABLE: ReadonlySet<PartType> = new Set<ResumablePartType>([
+  "original",
+  "originalVideo",
+  "unsupportedFile",
+]);
+const SEND_ORDER: PartType[] = [
+  "originalVideo",
+  "original",
+  "reduced",
+  "thumbnail",
+  "unsupportedFile",
+];
+
+type PreparedPart = {
+  iv: Uint8Array;
+  chunks: ArrayBuffer[];
+  /** Chunk indexes confirmed by the server in this session. */
+  sent: Set<number>;
+};
+
+type PreparedUpload = {
+  fingerprint: string;
+  fileId: string;
+  name: string;
+  date: string;
+  fileName: EncryptedEntry;
+  encryptedDate: EncryptedEntry;
+  thumbnailUrl: string | undefined;
+  isVideo: boolean;
+  parts: Partial<Record<PartType, PreparedPart>>;
+};
+
 type UploadYield =
   | {
       result: "finish";
@@ -38,78 +89,50 @@ type UploadYield =
     }
   | { result: "progress"; bytes: number };
 
-type PartInfo = { iv: string; chunkCount: number };
-type FileMetadata = Metadata["files"][number];
-
 export class UploadService {
   private _transport = new PartTransport();
+  /** Encrypted state of files that failed in this session, for "retry" without re-encrypting. */
+  private _failed = new Map<string, PreparedUpload>();
 
   constructor(
     private _canvasService: CanvasService,
     private _cryptoService: CryptoService,
   ) {}
 
+  /**
+   * Uploads one file. Resumes from in-memory state (a failed attempt in this
+   * session) or from a localStorage record (previous session) when available,
+   * sending only the parts the server does not have yet. Throws on abort or
+   * after retries are exhausted; the resume state is kept in both cases.
+   */
   async *upload(
     file: File,
-    props: { key: string | null; albumId: string },
+    props: { key: string | null; albumId: string; signal?: AbortSignal },
   ): AsyncGenerator<UploadYield> {
-    const profile = new URLSearchParams(window.location.search).has("profile");
-    const t0 = performance.now();
-    const log = (label: string, start: number) => {
-      if (profile)
-        console.log(
-          `[upload] ${file.name} ${label}: ${Math.round(performance.now() - start)}ms`,
-        );
-    };
-    const fileId = crypto.randomUUID();
-    const date = formatDate(file.lastModified);
-    const cryptedFileName = await this._cryptoService.encrypString(file.name, props.key);
-    const cryptedDate = await this._cryptoService.encrypString(
-      date.toString(),
-      props.key,
-    );
-    const base: Pick<FileMetadata, "fileId" | "fileName" | "date"> = {
-      fileId,
-      fileName: {
-        iv: uint8ArrayToBase64(cryptedFileName.iv),
-        value: arrayBufferToBase64(cryptedFileName.encryptedText),
-      },
-      date: {
-        iv: uint8ArrayToBase64(cryptedDate.iv),
-        value: arrayBufferToBase64(cryptedDate.encryptedText),
-      },
-    };
-    const ctx = { ...props, fileId, log };
+    const store = new PendingUploadStore(props.albumId);
+    const fingerprint = fileFingerprint(file);
 
-    let fileMetadata: FileMetadata;
-    let thumbnailUrl: string | undefined;
-    let isVideo = false;
-
-    if (IMAGETYPES.includes(file.type)) {
-      const image = yield* this._uploadImage(file, ctx);
-      fileMetadata = { ...base, ...image.parts };
-      thumbnailUrl = image.thumbnailUrl;
-    } else if (VIDEOTYPES.includes(file.type)) {
-      isVideo = true;
-      const originalVideo = yield* this._encryptAndSend(file, "originalVideo", ctx);
-      const poster = await this._canvasService.getImageFromVideo(file);
-      const image = yield* this._uploadImage(poster, ctx);
-      fileMetadata = { ...base, ...image.parts, originalVideo };
-      thumbnailUrl = image.thumbnailUrl;
-    } else {
-      const unsupportedFile = yield* this._encryptAndSend(file, "unsupportedFile", ctx);
-      fileMetadata = { ...base, unsupportedFile };
+    let prepared = this._failed.get(fingerprint);
+    if (prepared === undefined) {
+      prepared = await this._prepare(file, props.key, store.find(fingerprint));
+      this._failed.set(fingerprint, prepared);
     }
+    store.save(this._toRecord(prepared));
 
-    await this._finalize(props.albumId, fileMetadata);
-    log("TOTAL", t0);
+    const alreadyFinalized = yield* this._send(prepared, props.albumId, props.signal);
+
+    this._failed.delete(fingerprint);
+    store.remove(prepared.fileId);
+    // An already finalized file is listed via metadata; announcing it again
+    // would show it twice.
+    if (alreadyFinalized) return;
     yield {
       result: "finish",
-      thumbnail: thumbnailUrl,
-      name: file.name,
-      fileId,
-      date,
-      isVideo,
+      thumbnail: prepared.thumbnailUrl,
+      name: prepared.name,
+      fileId: prepared.fileId,
+      date: prepared.date,
+      isVideo: prepared.isVideo,
     };
   }
 
@@ -129,23 +152,73 @@ export class UploadService {
     if (res.result !== "success") return { isSuccess: false };
   }
 
-  private async _finalize(albumId: string, fileMetadata: FileMetadata) {
-    await client.finalizeFile.post({
-      body: {
-        albumId,
-        fileMetadata,
-      },
-    });
+  private async _prepare(
+    file: File,
+    key: string | null,
+    pending: PendingUpload | undefined,
+  ): Promise<PreparedUpload> {
+    const profile = new URLSearchParams(window.location.search).has("profile");
+    const log = (label: string, start: number) => {
+      if (profile)
+        console.log(
+          `[upload] ${file.name} ${label}: ${Math.round(performance.now() - start)}ms`,
+        );
+    };
+    const isImage = IMAGETYPES.includes(file.type);
+    const isVideo = VIDEOTYPES.includes(file.type);
+    let resumableType: ResumablePartType = "unsupportedFile";
+    if (isImage) resumableType = "original";
+    else if (isVideo) resumableType = "originalVideo";
+
+    // The file itself is encrypted first so a stale record can be detected
+    // (chunk count mismatch) before anything else is derived from it.
+    const tEncrypt = performance.now();
+    const storedIv = pending?.parts[resumableType];
+    let filePart = await this._encryptPart(file, key, storedIv?.iv);
+    if (storedIv !== undefined && filePart.chunks.length !== storedIv.chunkCount) {
+      console.warn("[upload] pending record does not match file, starting over");
+      pending = undefined;
+      filePart = await this._encryptPart(file, key);
+    }
+
+    const date = formatDate(file.lastModified);
+    const fileName = pending?.fileName ?? (await this._encryptText(file.name, key));
+    const encryptedDate = pending?.date ?? (await this._encryptText(date, key));
+    const parts: PreparedUpload["parts"] = { [resumableType]: filePart };
+    let thumbnailUrl: string | undefined;
+
+    if (isImage || isVideo) {
+      const image = isImage ? file : await this._canvasService.getImageFromVideo(file);
+      const renditions = await this._renderImage(image, log);
+      thumbnailUrl = renditions.thumbnailUrl;
+      // Canvas output is not byte-stable across sessions: always fresh IVs.
+      parts.thumbnail = await this._encryptPart(renditions.thumbnail, key);
+      if (renditions.reduced !== undefined) {
+        parts.reduced = await this._encryptPart(renditions.reduced, key);
+      }
+      if (isVideo) parts.original = await this._encryptPart(image, key);
+    }
+    log("encrypt", tEncrypt);
+
+    return {
+      fingerprint: fileFingerprint(file),
+      fileId: pending?.fileId ?? crypto.randomUUID(),
+      name: file.name,
+      date,
+      fileName,
+      encryptedDate,
+      thumbnailUrl,
+      isVideo,
+      parts,
+    };
   }
 
   /**
-   * Uploads the original plus the thumbnail and (when worth it) a reduced
-   * rendition. The image is decoded once and both renditions are drawn from it.
+   * Draws the thumbnail and (when worth it) a reduced rendition from a single
+   * decode. Small originals within `REDUCED_MAX_EDGE` are shown as-is, so
+   * `reduced` is undefined for them and the metadata carries no `reduced` part.
    */
-  private async *_uploadImage(
-    image: Blob,
-    ctx: UploadContext,
-  ): AsyncGenerator<UploadYield, { parts: Partial<FileMetadata>; thumbnailUrl: string }> {
+  private async _renderImage(image: Blob, log: (label: string, start: number) => void) {
     const tResize = performance.now();
     const loaded = await this._canvasService.load(image);
     const thumbnail = loaded.resize({ targetSize: THUMBNAIL_SIZE });
@@ -163,53 +236,198 @@ export class UploadService {
       : undefined;
     const thumbnailUrl = thumbnail.url;
     loaded.release();
-    ctx.log("decode+resize", tResize);
+    log("decode+resize", tResize);
 
     const tBlobs = performance.now();
     const thumbnailBlob = await thumbnail.blob;
     const reducedBlob = reduced === undefined ? undefined : await reduced.blob;
-    ctx.log(`canvas toBlob(thumb${reducedBlob ? "+reduced" : ""})`, tBlobs);
+    log(`canvas toBlob(thumb${reducedBlob ? "+reduced" : ""})`, tBlobs);
+    return { thumbnail: thumbnailBlob, reduced: reducedBlob, thumbnailUrl };
+  }
 
-    const original = yield* this._encryptAndSend(image, "original", ctx);
-    const reducedPart =
-      reducedBlob === undefined
-        ? undefined
-        : yield* this._encryptAndSend(reducedBlob, "reduced", ctx);
-    const thumbnailPart = yield* this._encryptAndSend(thumbnailBlob, "thumbnail", ctx);
+  private async *_send(prepared: PreparedUpload, albumId: string, signal?: AbortSignal) {
+    const uploaded = await withRetry(
+      () =>
+        this._rpc(() =>
+          client.getUploadedParts.get({
+            query: { albumId, fileId: prepared.fileId },
+          }),
+        ),
+      { signal },
+    );
+
+    for (const type of SEND_ORDER) {
+      const part = prepared.parts[type];
+      if (part === undefined) continue;
+      if (!uploaded.finalized) {
+        const onServer = new Set(RESUMABLE.has(type) ? (uploaded.parts[type] ?? []) : []);
+        yield* this._sendPart(part, {
+          albumId,
+          fileId: prepared.fileId,
+          type,
+          onServer,
+          signal,
+        });
+      } else {
+        // A previous session finished but did not clear its record: nothing to send.
+        for (const chunk of part.chunks)
+          yield { result: "progress" as const, bytes: chunk.byteLength };
+      }
+    }
+
+    if (!uploaded.finalized) {
+      await withRetry(
+        () =>
+          this._rpc(() =>
+            client.finalizeFile.post({
+              body: { albumId, fileMetadata: this._toMetadata(prepared) },
+            }),
+          ),
+        { signal },
+      );
+    }
+    return uploaded.finalized;
+  }
+
+  /**
+   * Sends the chunks the server does not have yet, `UPLOAD_CONCURRENCY` at a
+   * time, each with its own retry. Progress is yielded per chunk (skipped
+   * chunks count immediately) so the sequential progress bar keeps moving.
+   */
+  private async *_sendPart(
+    part: PreparedPart,
+    ctx: {
+      albumId: string;
+      fileId: string;
+      type: PartType;
+      onServer: Set<string>;
+      signal?: AbortSignal;
+    },
+  ) {
+    const profile = new URLSearchParams(window.location.search).has("profile");
+    const missing: number[] = [];
+    for (let i = 0; i < part.chunks.length; i++) {
+      if (part.sent.has(i) || ctx.onServer.has(i.toString())) {
+        if (profile) console.log(`[upload] ${ctx.type}[${i}] skipped (already uploaded)`);
+        yield { result: "progress" as const, bytes: part.chunks[i].byteLength };
+      } else {
+        missing.push(i);
+      }
+    }
+    throwIfAborted(ctx.signal);
+    const tSend = performance.now();
+    yield* progressOf((report) =>
+      mapWithConcurrency(missing.length, UPLOAD_CONCURRENCY, async (n) => {
+        const i = missing[n];
+        await withRetry(() => this._putChunk(ctx, i, part.chunks[i]), {
+          signal: ctx.signal,
+        });
+        part.sent.add(i);
+        report(part.chunks[i].byteLength);
+      }),
+    );
+    if (profile) {
+      console.log(
+        `[upload] ${ctx.type}: sent ${missing.length}/${part.chunks.length} chunks in ${Math.round(performance.now() - tSend)}ms`,
+      );
+    }
+  }
+
+  /** Puts one chunk through the binary transport, classifying failures for `withRetry`. */
+  private async _putChunk(
+    ctx: { albumId: string; fileId: string; type: PartType; signal?: AbortSignal },
+    index: number,
+    chunk: ArrayBuffer,
+  ) {
+    throwIfAborted(ctx.signal);
+    try {
+      await this._transport.put(ctx.albumId, ctx.fileId, ctx.type, index, chunk, {
+        signal: ctx.signal,
+      });
+    } catch (e) {
+      if (isAbortError(e)) throw e;
+      if (e instanceof PartTransportError) {
+        if (e.status >= 500) throw new RetryableError(e.message, { cause: e });
+        throw e;
+      }
+      throw new RetryableError("Network error while uploading", { cause: e });
+    }
+  }
+
+  /** Classifies a cuple client call: network/5xx → retryable, other non-success → fatal. */
+  private async _rpc<T extends { result: string; statusCode: number }>(
+    call: () => Promise<T>,
+  ): Promise<Extract<T, { result: "success" }>> {
+    let res: T;
+    try {
+      res = await call();
+    } catch (e) {
+      throw new RetryableError("Network error", { cause: e });
+    }
+    if (res.result === "success") return res as Extract<T, { result: "success" }>;
+    if (res.statusCode >= 500) throw new RetryableError(`Server error ${res.statusCode}`);
+    throw new Error(`Request failed (${res.statusCode})`);
+  }
+
+  private async _encryptPart(
+    data: File | Blob,
+    key: string | null,
+    base64Iv?: string,
+  ): Promise<PreparedPart> {
+    const iv = base64Iv === undefined ? undefined : base64toUint8Array(base64Iv);
+    const encrypted = await this._cryptoService.encryptImage(data, key, iv);
     return {
-      parts: { original, reduced: reducedPart, thumbnail: thumbnailPart },
-      thumbnailUrl,
+      iv: encrypted.iv,
+      chunks: splitIntoChunks(encrypted.cryptedImg),
+      sent: new Set(),
     };
   }
 
-  private async *_encryptAndSend(
-    blob: Blob,
-    type: PartType,
-    ctx: UploadContext,
-  ): AsyncGenerator<UploadYield, PartInfo> {
-    const tEncrypt = performance.now();
-    const crypted = await this._cryptoService.encryptImage(blob, ctx.key);
-    ctx.log(`encrypt ${type}`, tEncrypt);
-    const chunks = splitIntoChunks(crypted.cryptedImg);
+  private async _encryptText(text: string, key: string | null): Promise<EncryptedEntry> {
+    const encrypted = await this._cryptoService.encrypString(text, key);
+    return {
+      iv: uint8ArrayToBase64(encrypted.iv),
+      value: arrayBufferToBase64(encrypted.encryptedText),
+    };
+  }
 
-    const tSend = performance.now();
-    yield* progressOf((report) =>
-      mapWithConcurrency(chunks.length, UPLOAD_CONCURRENCY, async (i) => {
-        await this._transport.put(ctx.albumId, ctx.fileId, type, i, chunks[i]);
-        report(chunks[i].byteLength);
-      }),
-    );
-    ctx.log(`send ${type} (${chunks.length} chunks)`, tSend);
-    return { iv: uint8ArrayToBase64(crypted.iv), chunkCount: chunks.length };
+  private _toRecord(prepared: PreparedUpload): PendingUpload {
+    const parts: PendingUpload["parts"] = {};
+    for (const type of RESUMABLE) {
+      const part = prepared.parts[type];
+      if (part === undefined) continue;
+      parts[type as ResumablePartType] = {
+        iv: uint8ArrayToBase64(part.iv),
+        chunkCount: part.chunks.length,
+      };
+    }
+    return {
+      fingerprint: prepared.fingerprint,
+      fileId: prepared.fileId,
+      createdAt: Date.now(),
+      fileName: prepared.fileName,
+      date: prepared.encryptedDate,
+      parts,
+    };
+  }
+
+  private _toMetadata(prepared: PreparedUpload): Metadata["files"][0] {
+    const describe = (part: PreparedPart | undefined) =>
+      part === undefined
+        ? undefined
+        : { iv: uint8ArrayToBase64(part.iv), chunkCount: part.chunks.length };
+    return {
+      fileId: prepared.fileId,
+      fileName: prepared.fileName,
+      date: prepared.encryptedDate,
+      original: describe(prepared.parts.original),
+      reduced: describe(prepared.parts.reduced),
+      thumbnail: describe(prepared.parts.thumbnail),
+      originalVideo: describe(prepared.parts.originalVideo),
+      unsupportedFile: describe(prepared.parts.unsupportedFile),
+    };
   }
 }
-
-type UploadContext = {
-  key: string | null;
-  albumId: string;
-  fileId: string;
-  log: (label: string, start: number) => void;
-};
 
 /**
  * Runs `run` and yields a progress event for every `report(bytes)` call it

@@ -66,6 +66,8 @@ export class MetadataService {
   }
   addFile(albumId: string, file: Metadata["files"][0]) {
     const current = this.get(albumId);
+    // Idempotent: a retried finalize must not duplicate the entry.
+    current.files = current.files.filter((f) => f.fileId !== file.fileId);
     current.files.push(file);
     this.save(albumId, current);
   }

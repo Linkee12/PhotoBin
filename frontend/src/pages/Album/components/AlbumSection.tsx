@@ -13,6 +13,8 @@ type AlbumSectionProps = {
   index: number;
   selectedImages: string[];
   isUploading: boolean;
+  /** ids uploaded in the batch that just finished; their tiles pulse and the first one is scrolled to */
+  newFileIds: string[];
   isSelected: (imageId: string) => boolean;
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
@@ -55,6 +57,8 @@ export function AlbumSection(props: AlbumSectionProps) {
                 imageSrc={image.thumbnail}
                 fileName={image.name}
                 isSelected={props.isSelected(image.id)}
+                isNew={props.newFileIds.includes(image.id)}
+                scrollIntoView={props.newFileIds[0] === image.id}
                 onSelect={() => props.onSelect([image.id])}
                 onDeselect={() => props.onDeSelect([image.id])}
                 onOpen={() => props.onOpen(image.id)}
@@ -87,7 +91,7 @@ const SelectAll = styled("div", {
 
 const Images = styled("div", {
   maxWidth: "100%",
-  "@portrait": {
+  "@narrow": {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
@@ -95,37 +99,13 @@ const Images = styled("div", {
     margin: "1rem 1.28rem 1.28rem 1.28rem",
     gap: "10px",
   },
-  "@landscape": {
+  "@wide": {
     display: "grid",
     gap: "20px",
     justifyItems: "center",
-    "@media (max-width:calc(300px * 10 + 60.8px + 9 * 20px))": {
-      gridTemplateColumns: "repeat(10, 1fr)",
-    },
-    "@media (max-width:calc(300px * 9 + 60.8px + 8 * 20px))": {
-      gridTemplateColumns: "repeat(9, 1fr)",
-    },
-    "@media (max-width:calc(300px * 8 + 60.8px + 7 * 20px))": {
-      gridTemplateColumns: "repeat(8, 1fr)",
-    },
-    "@media (max-width:calc(300px * 7 + 60.8px + 6 * 20px))": {
-      gridTemplateColumns: "repeat(7, 1fr)",
-    },
-    "@media (max-width:calc(300px * 6 + 60.8px + 5 * 20px))": {
-      gridTemplateColumns: "repeat(6, 1fr)",
-    },
-    "@media (max-width:calc(300px * 5 + 60.8px + 4 * 20px))": {
-      gridTemplateColumns: "repeat(5, 1fr)",
-    },
-    "@media (max-width:calc(300px * 4 + 60.8px + 3 * 20px))": {
-      gridTemplateColumns: "repeat(4, 1fr)",
-    },
-    "@media (max-width:calc(300px * 3 + 60.8px + 2 * 20px))": {
-      gridTemplateColumns: "repeat(3, 1fr)",
-    },
-    "@media (max-width:calc(300px * 2 + 60.8px + 1 * 20px))": {
-      gridTemplateColumns: "repeat(2, 1fr)",
-    },
+    // As many columns as fit; each tile is at least 230px and grows up to the
+    // 300px cap set on the tile itself (see AlbumItem's Preview).
+    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 230px), 1fr))",
     margin: "1.9rem 1.9rem 1.9rem 1.9rem",
   },
 });
@@ -134,10 +114,10 @@ const Header = styled("div", {
   display: "flex",
   height: "3rem",
   alignItems: "center",
-  "@portrait": {
+  "@narrow": {
     paddingLeft: "1.28rem",
   },
-  "@landscape": {
+  "@wide": {
     paddingLeft: "5rem",
   },
 });
