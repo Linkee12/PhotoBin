@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createGestureProfiler } from "../../../utils/gestureProfiler";
 
 export const MIN_SCALE = 1;
 export const MAX_SCALE = 5;
@@ -105,6 +106,7 @@ export function useZoomPan({
   );
   const transformRef = useRef<ZoomTransform>(IDENTITY);
   const frame = useRef<number | null>(null);
+  const profiler = useRef(createGestureProfiler("zoom")).current;
   const [isZoomed, setIsZoomed] = useState(false);
 
   const pointers = useRef(new Map<number, Point>());
@@ -120,7 +122,8 @@ export function useZoomPan({
     if (!target) return;
     const css = toCss(transformRef.current);
     if (target.style.transform !== css) target.style.transform = css;
-  }, []);
+    profiler.paint();
+  }, [profiler]);
 
   const schedulePaint = useCallback(() => {
     if (frame.current !== null) return;
@@ -260,6 +263,13 @@ export function useZoomPan({
       e.currentTarget.setPointerCapture(e.pointerId);
       const point = toLocal(e);
       pointers.current.set(e.pointerId, point);
+      if (profiler.enabled && pointers.current.size === 1) {
+        const image = imageRef.current;
+        profiler.gesture(
+          true,
+          `${e.pointerType} img ${image?.naturalWidth ?? 0}x${image?.naturalHeight ?? 0} dpr ${window.devicePixelRatio}`,
+        );
+      }
       if (pointers.current.size === 1) {
         downPosition.current = point;
         downOnImage.current = isOnPicture(point);
@@ -270,13 +280,14 @@ export function useZoomPan({
         dragged.current = true;
       }
     },
-    [isOnPicture, toLocal],
+    [isOnPicture, profiler, toLocal],
   );
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const previous = pointers.current.get(e.pointerId);
       if (!previous) return;
+      const done = profiler.event();
       const point = toLocal(e);
       pointers.current.set(e.pointerId, point);
 
@@ -318,8 +329,9 @@ export function useZoomPan({
         // Swipe at 1x: the picture follows the finger sideways, unclamped.
         setTransform({ scale: 1, tx: point.x - downPosition.current.x, ty: 0 });
       }
+      done();
     },
-    [clampTransform, setTransform, toLocal, zoomAround],
+    [clampTransform, profiler, setTransform, toLocal, zoomAround],
   );
 
   /** The last finger of a drag or pinch lifted: settle the picture, close or swipe. */
@@ -361,6 +373,7 @@ export function useZoomPan({
       pointers.current.delete(e.pointerId);
       if (pointers.current.size < 2) pinch.current = null;
       if (pointers.current.size > 0) return;
+      profiler.gesture(false);
       if (e.type === "pointercancel") {
         // A cancelled gesture may leave the picture below 1x or pushed sideways.
         if (transformRef.current.scale <= 1) setTransform(IDENTITY);
@@ -374,7 +387,7 @@ export function useZoomPan({
         onTap(toLocal(e));
       }
     },
-    [endGesture, onTap, setTransform, toLocal],
+    [endGesture, onTap, profiler, setTransform, toLocal],
   );
 
   /**

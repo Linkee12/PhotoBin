@@ -13,6 +13,8 @@ type CloudProps = {
   progress: number;
   /** true while an upload is running — enables the fill, hides the dashed drop hint */
   active: boolean;
+  /** the album is end-to-end encrypted: shows the E2E badge */
+  encrypted: boolean;
   className?: string;
 };
 
@@ -49,7 +51,7 @@ function waterline(progress: number): number {
   return CLOUD_BOTTOM + WAVE_AMPLITUDE - span * p;
 }
 
-export const Cloud = ({ progress, active, className }: CloudProps) => (
+export const Cloud = ({ progress, active, encrypted, className }: CloudProps) => (
   <svg viewBox="0 16 640 480" xmlns="http://www.w3.org/2000/svg" className={className}>
     <defs>
       <linearGradient id="pbCloudFill" x1="0" y1="0" x2="0" y2="1">
@@ -101,35 +103,37 @@ export const Cloud = ({ progress, active, className }: CloudProps) => (
     />
 
     {/* E2E badge: self-contained pill so it reads on both the dark and the filled cloud */}
-    <g>
-      <rect
-        x={352}
-        y={388}
-        width={226}
-        height={70}
-        rx={35}
-        fill="#181818"
-        stroke="rgba(255,255,255,0.16)"
-        strokeWidth={2}
-      />
-      <g transform="translate(378 401) scale(0.088)" fill="#EFC15C">
-        <path d={LOCK_PATH} />
+    {encrypted && (
+      <g>
+        <rect
+          x={352}
+          y={388}
+          width={226}
+          height={70}
+          rx={35}
+          fill="#181818"
+          stroke="rgba(255,255,255,0.16)"
+          strokeWidth={2}
+        />
+        <g transform="translate(378 401) scale(0.088)" fill="#EFC15C">
+          <path d={LOCK_PATH} />
+        </g>
+        <text
+          x={496}
+          y={436}
+          textAnchor="middle"
+          fill="#EFC15C"
+          style={{
+            fontFamily: "'Open Sans', system-ui, sans-serif",
+            fontSize: 36,
+            fontWeight: 600,
+            letterSpacing: 2,
+          }}
+        >
+          E2E
+        </text>
       </g>
-      <text
-        x={496}
-        y={436}
-        textAnchor="middle"
-        fill="#EFC15C"
-        style={{
-          fontFamily: "'Open Sans', system-ui, sans-serif",
-          fontSize: 36,
-          fontWeight: 600,
-          letterSpacing: 2,
-        }}
-      >
-        E2E
-      </text>
-    </g>
+    )}
   </svg>
 );
 

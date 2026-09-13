@@ -6,8 +6,18 @@ import AddIcon from "@assets/images/icons/addIcon.svg?react";
 import { styled } from "../../../stitches.config";
 import { Ref, useState } from "react";
 import { AlbumView } from "../../../utils/groupFiles";
-import { SHEET_BAR_HEIGHT, SHELF_COLOR, TOOLBAR_HEIGHT, WAVE_HEIGHT } from "./layout";
+import {
+  ACCENT_COLOR,
+  CONTROL_HEIGHT,
+  SHEET_BAR_HEIGHT,
+  SHELF_COLOR,
+  TOOLBAR_HEIGHT,
+  WAVE_HEIGHT,
+} from "./layout";
 import { WaveEdge } from "./Panel";
+import { pressable, pressableNoScale } from "../../../pressable";
+import { useAlbumContext } from "../hooks/useAlbumContext";
+import { useTimeLeft } from "../hooks/useTimeLeft";
 import { WaveMenuIcon } from "./WaveMenuIcon";
 
 /**
@@ -67,6 +77,7 @@ function ViewToggle(props: { view: AlbumView; onChangeView: (view: AlbumView) =>
 
 export function Menu(props: MenuProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const timeLeft = useTimeLeft(useAlbumContext().expiresAt);
 
   return (
     <>
@@ -85,17 +96,31 @@ export function Menu(props: MenuProps) {
             onClick={props.onDownloadAll}
             data-toolbar-control
           >
-            <ButtonText>DOWNLOAD ALL</ButtonText>
+            <span>DOWNLOAD ALL</span>
             <LandscapeDownloadIcon />
           </Button>
-          <Button onClick={props.onAddPhoto} data-toolbar-control>
-            <ButtonText>ADD PHOTO</ButtonText>
+          <Button onClick={props.onAddPhoto} data-toolbar-control accent>
+            <span>ADD PHOTO</span>
             <AddIcon />
           </Button>
         </ToolbarControls>
       </Toolbar>
-      <PortraitButtonsContainer onClick={() => setIsOpen(!isOpen)}>
+      <PortraitButtonsContainer
+        role="button"
+        tabIndex={0}
+        aria-expanded={isOpen}
+        aria-label={isOpen ? "Close the menu" : "Open the menu"}
+        onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+          }
+        }}
+      >
         <PortraitHeader isOpen={isOpen} data-sheet-handle />
+        {!isOpen && timeLeft && <HandleTimeLeft>{timeLeft}</HandleTimeLeft>}
         {!isOpen && (
           <MenuIcon
             width={MENU_ICON_WIDTH_PX}
@@ -118,10 +143,11 @@ export function Menu(props: MenuProps) {
                 }}
               >
                 <div />
-                <ButtonText>DOWNLOAD ALL</ButtonText>
+                <span>DOWNLOAD ALL</span>
                 <LandscapeDownloadIcon />
               </Button>
               <Button
+                accent
                 tabIndex={isOpen ? 0 : -1}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -130,7 +156,7 @@ export function Menu(props: MenuProps) {
                 }}
               >
                 <div />
-                <ButtonText>ADD PHOTO</ButtonText>
+                <span>ADD PHOTO</span>
                 <AddIcon />
               </Button>
             </Buttons>
@@ -191,7 +217,8 @@ const ToolbarControls = styled("div", {
   display: "flex",
   gap: "0.6rem",
   alignItems: "center",
-  padding: "0.6rem",
+  // The right edge lines up with the header's and the grid's 2rem gutter.
+  padding: "0.6rem 2rem 0.6rem 0.6rem",
   backgroundColor: SHELF_COLOR,
 });
 
@@ -199,7 +226,7 @@ const PortraitButtonsContainer = styled("div", {
   "@toolbarStacked": { display: "flex" },
   "@toolbarInline": { display: "none" },
   position: "relative",
-  cursor: "pointer",
+  ...pressableNoScale,
   flexDirection: "column",
   justifyContent: "flex-start",
   alignItems: "center",
@@ -250,6 +277,29 @@ const MenuIcon = styled(WaveMenuIcon, {
   marginLeft: `-${MENU_ICON_WIDTH_PX / 2}px`,
   pointerEvents: "none",
   zIndex: 1,
+  color: "#e0e0e0",
+  transition: "color 0.15s ease, transform 0.15s ease",
+  [`${PortraitButtonsContainer}:hover &`]: {
+    color: "#fff",
+    transform: "translateY(-2px)",
+  },
+  [`${PortraitButtonsContainer}:active &`]: { transform: "translateY(1px)" },
+  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+});
+
+// Time left in the handle's wave band, right-aligned, under the menu icon's row.
+const HandleTimeLeft = styled("div", {
+  position: "absolute",
+  top: 0,
+  right: "2rem",
+  height: WAVE_HEIGHT,
+  display: "flex",
+  alignItems: "center",
+  color: "#8B8B8B",
+  fontFamily: "SourceCodeVF",
+  fontSize: "0.8rem",
+  whiteSpace: "nowrap",
+  pointerEvents: "none",
 });
 
 const PortraitHeader = styled("div", {
@@ -270,27 +320,50 @@ const PortraitHeader = styled("div", {
   },
 });
 
+// Same shell as the view toggle: border, radius, text size and height.
 const Button = styled("button", {
   display: "flex",
   flexShrink: 0,
+  boxSizing: "border-box",
   background: SHELF_COLOR,
   justifyContent: "space-between",
   alignItems: "center",
-  color: "#fff",
+  gap: "0.5rem",
+  color: "#A8A8A8",
   border: "solid 2px #333333",
   fontSize: "0.7rem",
   fontWeight: "bold",
   fontFamily: "inherit",
   borderRadius: "1.5rem",
-  height: "2.5rem",
-  padding: "0.5rem",
-  cursor: "pointer",
+  height: CONTROL_HEIGHT,
+  padding: "0 0.5rem 0 0.9rem",
+  ...pressable,
+  "&:hover:not(:disabled)": { color: "#fff", borderColor: "#4a4a4a" },
+  "& svg": { width: "1.2rem", height: "1.2rem", flexShrink: 0 },
   // In the bottom sheet the buttons fill its width.
   "@toolbarStacked": { width: "100%" },
+  variants: {
+    accent: {
+      true: {
+        background: ACCENT_COLOR,
+        borderColor: ACCENT_COLOR,
+        color: "#181818",
+        "& svg": { fill: "#181818" },
+        "&:hover:not(:disabled)": {
+          color: "#000",
+          borderColor: ACCENT_COLOR,
+          filter: "brightness(1.08)",
+        },
+      },
+      false: {},
+    },
+  },
 });
 const Segmented = styled("div", {
   display: "inline-flex",
   flexShrink: 0,
+  boxSizing: "border-box",
+  height: CONTROL_HEIGHT,
   border: "solid 2px #333333",
   borderRadius: "1.5rem",
   overflow: "hidden",
@@ -303,12 +376,19 @@ const Segment = styled("button", {
   fontSize: "0.7rem",
   fontWeight: "bold",
   fontFamily: "inherit",
-  padding: "0.5rem 0.9rem",
-  cursor: "pointer",
-  "&:hover": { color: "#fff" },
+  padding: "0 0.9rem",
+  ...pressableNoScale,
+  "&:hover": { color: "#fff", background: "rgba(255, 255, 255, 0.06)" },
+  "&:active": { background: "rgba(255, 255, 255, 0.12)" },
+  // Inside the pill the ring would be clipped: draw it inside instead.
+  "&:focus-visible": { outline: `2px solid ${ACCENT_COLOR}`, outlineOffset: "-2px" },
   variants: {
     active: {
-      true: { background: "#333333", color: "#fff" },
+      true: {
+        background: "#333333",
+        color: "#fff",
+        "&:hover": { background: "#333333" },
+      },
       false: {},
     },
   },
@@ -321,9 +401,6 @@ const Buttons = styled("div", {
   width: "100%",
   // The sheet also serves landscape phones and small desktop windows.
   maxWidth: "30rem",
-});
-const ButtonText = styled("div", {
-  paddingRight: "0.5rem",
 });
 const SlideIconDown = styled("div", {
   margin: "1.5rem 0 3.5rem",

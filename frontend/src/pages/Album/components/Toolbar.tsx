@@ -1,4 +1,5 @@
 import { styled } from "../../../stitches.config";
+import { pressable } from "../../../pressable";
 import Cloud from "@assets/images/icons/cloud.svg?react";
 import SimpleCloud from "@assets/images/icons/cloud2.svg?react";
 import Trash from "@assets/images/icons/trash.svg?react";
@@ -13,6 +14,7 @@ export default function Toolbar(props: {
   return (
     <ToolBar isVisible={props.selectedImages.length > 0}>
       <Button
+        title="Delete selected"
         onClick={() => {
           props.onDeleteSelected();
         }}
@@ -36,9 +38,6 @@ export default function Toolbar(props: {
 const ToolbarIcons = styled("svg", {
   height: "1.5rem",
   width: "2rem",
-  "&:hover": {
-    color: "#fff",
-  },
 });
 const ToolBar = styled("div", {
   width: "330px",
@@ -65,22 +64,15 @@ const ToolBar = styled("div", {
   },
 });
 const Button = styled("button", {
-  cursor: "pointer",
+  ...pressable,
   display: "flex",
   alignItems: "center",
   width: "2rem",
   height: "2rem",
   size: "2rem",
   color: "#9A9A9A",
-  "&:hover": {
+  "&:hover:not(:disabled)": {
     color: "#fff",
-  },
-  "&:disabled": {
-    cursor: "not-allowed",
-    opacity: 0.4,
-  },
-  "&:disabled:hover": {
-    color: "#9A9A9A",
   },
   fontSize: "2rem",
   background: "none",

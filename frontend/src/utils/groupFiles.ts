@@ -13,7 +13,15 @@ export type Thumbnail = {
   id: string;
   name: string;
   isVideo: boolean;
+  /**
+   * Unsupported files that belong to this photo (a RAW next to its JPG): the
+   * same basename, a different extension. They get no tile of their own and
+   * follow the photo when it is selected, downloaded or deleted.
+   */
+  sidecars: Sidecar[];
 };
+
+export type Sidecar = { id: string; name: string };
 
 export type ThumbnailGroup = {
   /** Stable identity across renders (collapse state, React keys). */
@@ -52,14 +60,18 @@ function unknownBatchTitle(batchId: string): string {
 }
 
 /**
- * Pure grouping of the album's files for one view. Every file gets a tile;
- * the ones whose thumbnail has not been fetched yet are marked `isLoading`
- * so the grid shows placeholders that fill in as thumbnails arrive. The
- * order inside a group is the upload order (metadata order).
+ * Pure grouping of the album's files for one view. Every file gets a tile,
+ * except unsupported files that are sidecars of a supported one (see
+ * `Thumbnail.sidecars`); the ones whose thumbnail has not been fetched yet
+ * are marked `isLoading` so the grid shows placeholders that fill in as
+ * thumbnails arrive. The order inside a group is the upload order (metadata
+ * order).
  */
 export function groupFiles(input: GroupInput): ThumbnailGroup[] {
+  const sidecars = pairSidecars(input);
   const groups = new Map<string, ThumbnailGroup>();
   for (const file of input.files) {
+    if (sidecars.attached.has(file.fileId)) continue;
     const slot = groupOf(file, input);
     let group = groups.get(slot.key);
     if (group === undefined) {
@@ -72,6 +84,7 @@ export function groupFiles(input: GroupInput): ThumbnailGroup[] {
       isLoading: file.thumbnail !== undefined && !input.thumbnails.has(file.fileId),
       name: input.decodedFiles[file.fileId]?.name ?? "",
       isVideo: file.originalVideo !== undefined,
+      sidecars: sidecars.byPhoto.get(file.fileId) ?? [],
     });
   }
   const result = [...groups.values()];
@@ -80,6 +93,43 @@ export function groupFiles(input: GroupInput): ThumbnailGroup[] {
     for (const group of result) group.meta = historyMeta(group, input);
   }
   return result;
+}
+
+/**
+ * Pairs every unsupported file (no thumbnail) with the first supported file
+ * of the same basename, compared without extension and case. The album's
+ * files, not just the batch's: a RAW may be added later than its JPG.
+ */
+function pairSidecars(input: GroupInput) {
+  const photoByBasename = new Map<string, string>();
+  for (const file of input.files) {
+    if (file.thumbnail === undefined) continue;
+    const key = basenameKey(input.decodedFiles[file.fileId]?.name);
+    if (key !== undefined && !photoByBasename.has(key)) {
+      photoByBasename.set(key, file.fileId);
+    }
+  }
+  const byPhoto = new Map<string, Sidecar[]>();
+  const attached = new Set<string>();
+  for (const file of input.files) {
+    if (file.thumbnail !== undefined) continue;
+    const name = input.decodedFiles[file.fileId]?.name;
+    const photoId = photoByBasename.get(basenameKey(name) ?? "");
+    if (photoId === undefined || name === undefined) continue;
+    attached.add(file.fileId);
+    const list = byPhoto.get(photoId) ?? [];
+    list.push({ id: file.fileId, name });
+    byPhoto.set(photoId, list);
+  }
+  return { byPhoto, attached };
+}
+
+/** `IMG_0001.CR3` → `img_0001`; undefined without a name or an extension. */
+function basenameKey(name: string | undefined): string | undefined {
+  if (name === undefined) return undefined;
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return undefined;
+  return name.slice(0, dot).toLowerCase();
 }
 
 function groupOf(

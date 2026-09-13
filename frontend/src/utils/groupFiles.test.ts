@@ -69,3 +69,99 @@ describe("groupFiles (history view)", () => {
     expect(groups.map((g) => g.key).sort()).toEqual(["batch:b1", "batch:b2"]);
   });
 });
+
+describe("groupFiles (sidecars)", () => {
+  const supported = (fileId: string, name: string, batchId = "b1") => ({
+    fileId,
+    fileName: entry(name),
+    date: entry("01/01"),
+    thumbnail: { iv: "", chunkCount: 1 },
+    batchId,
+  });
+  const unsupported = (fileId: string, name: string, batchId = "b1") => ({
+    fileId,
+    fileName: entry(name),
+    date: entry("01/01"),
+    unsupportedFile: { iv: "", chunkCount: 1 },
+    batchId,
+  });
+  const names = (files: { fileId: string; fileName: { value: string } }[]) =>
+    Object.fromEntries(
+      files.map((f) => [f.fileId, { name: f.fileName.value, date: "01/01" }]),
+    );
+  const group = (
+    files: Parameters<typeof names>[0],
+    view: "history" | "date" = "history",
+  ) =>
+    groupFiles({
+      files: files as Parameters<typeof groupFiles>[0]["files"],
+      decodedFiles: names(files),
+      decodedBatches: { b1: { name: "RedMonkey", createdAt: 1 } },
+      thumbnails: new Map(),
+      view,
+    });
+
+  it("attaches an unsupported file to the supported file with the same basename", () => {
+    const groups = group([
+      unsupported("r1", "IMG_0001.CR3"),
+      supported("j1", "IMG_0001.jpg"),
+      unsupported("r2", "IMG_0002.CR3"),
+      supported("j2", "IMG_0002.JPG"),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].thumbnails.map((t) => t.id)).toEqual(["j1", "j2"]);
+    expect(groups[0].thumbnails[0].sidecars).toEqual([
+      { id: "r1", name: "IMG_0001.CR3" },
+    ]);
+    expect(groups[0].thumbnails[1].sidecars).toEqual([
+      { id: "r2", name: "IMG_0002.CR3" },
+    ]);
+    expect(groups[0].meta).toMatch(/2 photos$/);
+  });
+
+  it("matches basenames case-insensitively and across batches, but never two supported files", () => {
+    const groups = group([
+      supported("j1", "photo.jpg", "b1"),
+      unsupported("r1", "PHOTO.dng", "b2"),
+      supported("j2", "photo.png", "b1"),
+    ]);
+    const tiles = groups.flatMap((g) => g.thumbnails);
+    expect(tiles.map((t) => t.id)).toEqual(["j1", "j2"]);
+    expect(tiles[0].sidecars.map((s) => s.id)).toEqual(["r1"]);
+    expect(tiles[1].sidecars).toEqual([]);
+  });
+
+  it("keeps an unsupported file without a match as a tile of its own", () => {
+    const groups = group([
+      unsupported("r1", "notes.pdf"),
+      supported("j1", "IMG_0001.jpg"),
+    ]);
+    expect(groups[0].thumbnails.map((t) => t.id)).toEqual(["r1", "j1"]);
+    expect(groups[0].thumbnails[0].sidecars).toEqual([]);
+  });
+
+  it("attaches several sidecars to one tile, in upload order", () => {
+    const groups = group([
+      unsupported("r1", "a.cr3"),
+      supported("j1", "a.jpg"),
+      unsupported("r2", "a.xmp"),
+    ]);
+    expect(groups[0].thumbnails[0].sidecars.map((s) => s.id)).toEqual(["r1", "r2"]);
+  });
+
+  it("attaches in date view too, whatever the sidecar's own date", () => {
+    const files = [supported("j1", "a.jpg"), unsupported("r1", "a.cr3")];
+    const groups = groupFiles({
+      files: files as Parameters<typeof groupFiles>[0]["files"],
+      decodedFiles: {
+        j1: { name: "a.jpg", date: "01/01" },
+        r1: { name: "a.cr3", date: "02/02" },
+      },
+      decodedBatches: {},
+      thumbnails: new Map(),
+      view: "date",
+    });
+    expect(groups).toHaveLength(1);
+    expect(groups[0].thumbnails[0].sidecars.map((s) => s.id)).toEqual(["r1"]);
+  });
+});

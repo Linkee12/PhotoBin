@@ -10,10 +10,17 @@ import { useGridPinch } from "../hooks/useGridPinch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { UploadService } from "../services/UploadService";
 import { ThumbnailGroup } from "../Album";
-import { Panel, PushDown } from "./Panel";
+import { Panel } from "./Panel";
+import { pressable, pressableNoScale } from "../../../pressable";
+import {
+  SHEET_BAR_HEIGHT,
+  SUN_CENTER_BELOW_HEADER,
+  SUN_X,
+  sunBackground,
+  TOOLBAR_HEIGHT,
+} from "./layout";
 import { Menu } from "./Menu";
 import { toast } from "react-toastify";
-import { formatTimeLeft } from "../../../utils/formatTimeLeft";
 import { acquireWakeLock } from "../../../utils/wakeLock";
 import { isAbortError } from "../../../utils/retry";
 import { formatBytesPair } from "../../../utils/formatBytes";
@@ -48,6 +55,10 @@ type AlbumContentProps = {
   // selection
   selectedImages: string[];
   isSelected: (imageId: string) => boolean;
+  /** Whether every sidecar (RAW) of the tile is selected. */
+  areSidecarsSelected: (imageId: string) => boolean;
+  /** (De)selects the tile's sidecars, leaving the photo's own selection alone. */
+  onToggleSidecars: (imageId: string) => void;
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
   onOpen: (imageId: string) => void;
@@ -96,15 +107,7 @@ export function AlbumContent(props: AlbumContentProps) {
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const ref = useRef<HTMLInputElement>(null);
-  const { metadata, refreshMetadata, key, expiresAt } = useAlbumContext();
-  const [timeLeft, setTimeLeft] = useState(() => formatTimeLeft(expiresAt));
-
-  useEffect(() => {
-    setTimeLeft(formatTimeLeft(expiresAt));
-    if (expiresAt === null) return;
-    const id = setInterval(() => setTimeLeft(formatTimeLeft(expiresAt)), 60_000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
+  const { metadata, refreshMetadata, key, isEncrypted } = useAlbumContext();
 
   function setProgress(percent: number, uploadedBytes: number, totalBytes: number) {
     setUploadProgress({ percent, uploadedBytes, totalBytes });
@@ -238,11 +241,10 @@ export function AlbumContent(props: AlbumContentProps) {
   }
   return (
     <Panel variant={0} zIndex={1}>
-      {timeLeft && (
-        <RemainingTimeContainer>
-          <PushDown />
-          <RemainingTime>{timeLeft}</RemainingTime>
-        </RemainingTimeContainer>
+      {props.thumbnailGroups.length > 0 && (
+        <SunAnchor aria-hidden="true">
+          <PanelSun />
+        </SunAnchor>
       )}
       <DragNdrop
         onDroppedFiles={(files) => {
@@ -261,7 +263,11 @@ export function AlbumContent(props: AlbumContentProps) {
             isFadingOut={phase === "outro"}
             onClick={openFilePicker}
           >
-            <StyledUpload progress={shownPercent} active={phase !== "idle"} />
+            <StyledUpload
+              progress={shownPercent}
+              active={phase !== "idle"}
+              encrypted={isEncrypted}
+            />
             {uploadProgress ? (
               <UploadStats>
                 <Percent>{shownPercent}%</Percent>
@@ -326,6 +332,8 @@ export function AlbumContent(props: AlbumContentProps) {
               newFileIds={newFileIds}
               selectedImages={props.selectedImages}
               isSelected={props.isSelected}
+              areSidecarsSelected={props.areSidecarsSelected}
+              onToggleSidecars={props.onToggleSidecars}
               onSelect={props.onSelect}
               onDeSelect={props.onDeSelect}
               onOpen={props.onOpen}
@@ -469,13 +477,9 @@ const UploadAction = styled("button", {
   fontWeight: "bold",
   textTransform: "uppercase",
   letterSpacing: "0.04em",
-  cursor: "pointer",
+  ...pressable,
   "&:hover": {
     borderColor: "#8B8B8B",
-  },
-  "&:focus-visible": {
-    outline: "2px solid #DBDCD9",
-    outlineOffset: "2px",
   },
 });
 
@@ -529,15 +533,67 @@ const Spinner = styled("div", {
 });
 
 /** Centres the cloud block; the floating variant takes its horizontal position from here. */
+/**
+ * The lower part of the header's sun (`Header`): the disc and its glow set
+ * behind whatever the panel starts with — the sheet handle, the toolbar shelf
+ * and water, or the first group's band — all of which paint above it. Without
+ * it the disc would be cut flat at the header's edge. It ends with the toolbar
+ * row (the section bodies below are painted under it, so the glow must not
+ * reach them); an empty album has no toolbar and lets the glow fade out.
+ */
+const SunAnchor = styled("div", {
+  position: "relative",
+  width: "100%",
+  height: 0,
+});
+const PanelSun = styled("div", {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 0,
+  pointerEvents: "none",
+  "@toolbarInline": {
+    height: TOOLBAR_HEIGHT,
+    backgroundImage: sunBackground("transparent", SUN_X.inline, SUN_CENTER_BELOW_HEADER),
+  },
+  "@toolbarStacked": {
+    height: `calc(${SHEET_BAR_HEIGHT} * 2)`,
+    backgroundImage: sunBackground("transparent", SUN_X.stacked, SUN_CENTER_BELOW_HEADER),
+  },
+});
+
 const CloudSlot = styled("div", {
   display: "flex",
   justifyContent: "center",
   width: "100%",
 });
 
+// The container is the click target (see CloudContainer); the cloud answers.
+const StyledUpload = styled(Cloud, {
+  width: "12rem",
+  height: "12rem",
+  color: "#333333",
+  cursor: "pointer",
+  transition: "color 300ms, transform 0.15s ease",
+  [`&:hover ${DropHint}`]: {
+    strokeOpacity: 0.55,
+  },
+  "&:hover": {
+    color: "#3d3d3d",
+  },
+  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+});
+
 const CloudContainer = styled("div", {
   flexDirection: "column",
   alignItems: "center",
+  ...pressableNoScale,
+  [`&:hover ${StyledUpload}`]: { color: "#3d3d3d", transform: "scale(1.03)" },
+  [`&:hover ${DropHint}`]: { strokeOpacity: 0.55 },
+  [`&:active ${StyledUpload}`]: { transform: "scale(0.98)" },
+  "&:focus-visible": { outline: "none" },
+  [`&:focus-visible ${StyledUpload}`]: { color: "#3d3d3d" },
   transition: `opacity ${OUTRO_MS}ms ease-out`,
   "@media (prefers-reduced-motion: reduce)": {
     transition: "none",
@@ -616,20 +672,6 @@ const Bytes = styled("div", {
   whiteSpace: "nowrap",
 });
 
-const StyledUpload = styled(Cloud, {
-  width: "12rem",
-  height: "12rem",
-  color: "#333333",
-  cursor: "pointer",
-  transition: "color 300ms",
-  [`&:hover ${DropHint}`]: {
-    strokeOpacity: 0.55,
-  },
-  "&:hover": {
-    color: "#3d3d3d",
-  },
-});
-
 const UploadMask = styled("div", {
   position: "fixed",
   top: 0,
@@ -681,17 +723,4 @@ const DownloadText = styled("div", {});
 const DownloadPercent = styled("div", {
   fontSize: "1.5rem",
   color: "#DBDCD9",
-});
-const RemainingTimeContainer = styled("div", {
-  display: "flex",
-  flexDirection: "row",
-});
-const RemainingTime = styled("div", {
-  display: "flex",
-  alignItems: "center",
-  paddingRight: "2rem",
-  color: "#8B8B8B",
-  fontFamily: "SourceCodeVF",
-  fontSize: "0.8rem",
-  whiteSpace: "nowrap",
 });

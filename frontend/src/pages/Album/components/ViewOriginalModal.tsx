@@ -16,6 +16,9 @@ import { editedFileName, RotateService, Rotation } from "../services/RotateServi
 import { ThumbnailGroup } from "../Album";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { drawnSize, useZoomPan } from "../hooks/useZoomPan";
+import { Sidecar } from "../../../utils/groupFiles";
+import { extensionLabel, sidecarLabel, sidecarTitle } from "../../../utils/sidecars";
+import { pressable, pressableNoScale } from "../../../pressable";
 import { PartType } from "../services/ImageQueryService";
 
 type AlbumFile = Metadata["files"][number];
@@ -36,6 +39,52 @@ const ROTATE_ANIMATION_MS = 200;
 const REVOKE_DELAY_MS = 60_000;
 const PLACEHOLDER_GIF =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=";
+
+/** What the viewer's download button saves: the photo in one of its renditions, its attached files, or both. */
+type DownloadChoice = { photo?: "rotated" | "original"; sidecars?: boolean };
+type DownloadMenuItem = { label: string; choice: DownloadChoice };
+
+function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Chromium starts the download asynchronously; revoking right away can
+  // make the blob fetch fail. Revoke once the download has certainly begun.
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
+}
+
+/**
+ * The download menu's entries. Rotated photos offer both renditions; a photo
+ * with attached files (RAW) offers them alone and together with the photo.
+ */
+function downloadMenuItems(
+  fileName: string,
+  isRotated: boolean,
+  sidecars: Sidecar[],
+): DownloadMenuItem[] {
+  const photo = extensionLabel(fileName);
+  const items: DownloadMenuItem[] = isRotated
+    ? [
+        { label: `Download rotated ${photo}`, choice: { photo: "rotated" } },
+        { label: `Download original ${photo}`, choice: { photo: "original" } },
+      ]
+    : [{ label: `Download ${photo}`, choice: { photo: "rotated" } }];
+  if (sidecars.length > 0) {
+    const raw = sidecarLabel(sidecars);
+    items.push(
+      { label: `Download ${raw}`, choice: { sidecars: true } },
+      {
+        label: `Download ${photo} + ${raw}`,
+        choice: { photo: "rotated", sidecars: true },
+      },
+    );
+  }
+  return items;
+}
 
 /** The thumbnail URL the grid shows for `fileId`, if it has one. */
 function gridThumbnail(groups: ThumbnailGroup[], fileId: string): string | undefined {
@@ -101,6 +150,11 @@ type ViewOriginalModalProps = {
   isSelected: boolean;
   /** (de)selects the shown photo, same as tapping its tile's ring */
   onToggleSelect: () => void;
+  /** the unsupported files attached to the shown photo (its RAW) */
+  sidecars: Sidecar[];
+  areSidecarsSelected: boolean;
+  /** (de)selects the sidecars on their own, same as tapping the tile's badge */
+  onToggleSidecars: () => void;
 };
 // eslint-disable-next-line sonarjs/cognitive-complexity
 export function ViewOriginalModal(props: ViewOriginalModalProps) {
@@ -255,28 +309,48 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   }
 
   /** Images are fetched on demand: `edited` when rotated (unless `untouched`), else `original`. */
-  async function downloadImage(untouched: boolean) {
+  /**
+   * Saves the photo (`rotated`: the edited rendition when there is one) and/or
+   * its attached files (RAW), each as its own download.
+   */
+  async function downloadImage(what: DownloadChoice) {
     if (!metadata || !file || isPreparingDownload) return;
     setIsPreparingDownload(true);
     try {
-      const type = isRotated && !untouched ? "edited" : "original";
-      const result = await imageDownloadService.getImg(metadata.albumId, file, key, type);
-      if (!result) return;
-      const url = URL.createObjectURL(result.blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = type === "edited" ? editedFileName(result.fileName) : result.fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      // Chromium starts the download asynchronously; revoking right away can
-      // make the blob fetch fail. Revoke once the download has certainly begun.
-      setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
+      if (what.photo !== undefined)
+        await downloadPhoto(metadata.albumId, file, what.photo);
+      if (what.sidecars) await downloadSidecars(metadata);
     } catch (e) {
       console.error(e);
       setNotice("Download failed, please try again");
     } finally {
       setIsPreparingDownload(false);
+    }
+  }
+  async function downloadPhoto(
+    albumId: string,
+    photo: AlbumFile,
+    which: "rotated" | "original",
+  ) {
+    const type = isRotated && which === "rotated" ? "edited" : "original";
+    const result = await imageDownloadService.getImg(albumId, photo, key, type);
+    if (!result) return;
+    saveBlob(
+      result.blob,
+      type === "edited" ? editedFileName(result.fileName) : result.fileName,
+    );
+  }
+  async function downloadSidecars(album: Metadata) {
+    for (const sidecar of props.sidecars) {
+      const sidecarFile = album.files.find((f) => f.fileId === sidecar.id);
+      if (sidecarFile === undefined) continue;
+      const result = await imageDownloadService.getImg(
+        album.albumId,
+        sidecarFile,
+        key,
+        "unsupportedFile",
+      );
+      if (result) saveBlob(result.blob, result.fileName);
     }
   }
   useEffect(() => {
@@ -474,6 +548,21 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
             <SelectIcon as={props.isSelected ? Check : Circle} aria-hidden="true" />
             <SelectLabel>{props.isSelected ? "Selected" : "Select"}</SelectLabel>
           </SelectButton>
+          {props.sidecars.length > 0 && (
+            <SelectButton
+              type="button"
+              isSelected={props.areSidecarsSelected}
+              aria-pressed={props.areSidecarsSelected}
+              title={sidecarTitle(props.sidecars, props.areSidecarsSelected)}
+              onClick={() => props.onToggleSidecars()}
+            >
+              <SelectIcon
+                as={props.areSidecarsSelected ? Check : Circle}
+                aria-hidden="true"
+              />
+              <SidecarLabel>{sidecarLabel(props.sidecars)}</SidecarLabel>
+            </SelectButton>
+          )}
           <Button
             onClick={() => {
               if (!window.confirm("Delete this photo? This cannot be undone.")) {
@@ -488,6 +577,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           {isImage ? (
             <ImageActions
               fileName={fileName}
+              sidecars={props.sidecars}
               isRotated={isRotated}
               isRotating={isRotating}
               isPreparingDownload={isPreparingDownload}
@@ -571,25 +661,28 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
 
 function ImageActions(props: {
   fileName: string;
+  sidecars: Sidecar[];
   isRotated: boolean;
   isRotating: boolean;
   isPreparingDownload: boolean;
-  onDownload: (untouched: boolean) => void;
+  onDownload: (what: DownloadChoice) => void;
   onRotate: () => void;
 }) {
   const iconStyle = { opacity: props.isPreparingDownload ? 0.4 : 1 };
+  const items = downloadMenuItems(props.fileName, props.isRotated, props.sidecars);
   return (
     <>
-      {props.isRotated ? (
+      {items.length > 1 ? (
         <DownloadMenu
           fileName={props.fileName}
+          items={items}
           disabled={props.isPreparingDownload}
           onDownload={props.onDownload}
         />
       ) : (
         <Button
           disabled={props.isPreparingDownload}
-          onClick={() => props.onDownload(false)}
+          onClick={() => props.onDownload(items[0].choice)}
           title={`Download ${props.fileName}`}
         >
           <Icons as={SimpleCloud} style={iconStyle} />
@@ -611,15 +704,11 @@ function ImageActions(props: {
   );
 }
 
-const MENU_ITEMS = [
-  { label: "Download rotated", untouched: false },
-  { label: "Download original", untouched: true },
-];
-
 function DownloadMenu(props: {
   fileName: string;
+  items: DownloadMenuItem[];
   disabled: boolean;
-  onDownload: (untouched: boolean) => void;
+  onDownload: (what: DownloadChoice) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -665,27 +754,33 @@ function DownloadMenu(props: {
   return (
     <MenuWrap ref={wrapRef}>
       <Button
-        style={{ width: "auto" }}
+        disabled={props.disabled}
+        onClick={() => props.onDownload(props.items[0].choice)}
+        title={props.items[0].label}
+      >
+        <Icons as={SimpleCloud} style={{ opacity: props.disabled ? 0.4 : 1 }} />
+      </Button>
+      <ChevronButton
         disabled={props.disabled}
         aria-haspopup="menu"
         aria-expanded={isOpen}
+        aria-label="More download options"
+        title="More download options"
         onClick={() => setIsOpen((open) => !open)}
-        title={`Download ${props.fileName}`}
       >
-        <Icons as={SimpleCloud} style={{ opacity: props.disabled ? 0.4 : 1 }} />
         <Chevron viewBox="0 0 10 6" aria-hidden="true" isOpen={isOpen}>
           <path d="M1 1l4 4 4-4" />
         </Chevron>
-      </Button>
+      </ChevronButton>
       {isOpen && (
         <Menu ref={menuRef} role="menu" aria-label="Download">
-          {MENU_ITEMS.map((item) => (
+          {props.items.map((item) => (
             <MenuItem
               key={item.label}
               role="menuitem"
               onClick={() => {
                 setIsOpen(false);
-                props.onDownload(item.untouched);
+                props.onDownload(item.choice);
               }}
             >
               {item.label}
@@ -779,7 +874,7 @@ const FullScreenVideo = styled("video", {
   backgroundColor: "#000",
 });
 const Button = styled("button", {
-  cursor: "pointer",
+  ...pressable,
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
@@ -788,8 +883,13 @@ const Button = styled("button", {
   height: "2rem",
   size: "2rem",
   color: "#9A9A9A",
-  "&:hover": {
-    backgroundColor: "#000",
+  // The bar is black already: a lighter pill shows the hover.
+  "&:hover:not(:disabled)": {
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
+  },
+  "&:active:not(:disabled)": {
+    backgroundColor: "rgba(255, 255, 255, 0.24)",
+    transform: "scale(0.94)",
   },
   padding: "5px",
   fontSize: "2rem",
@@ -805,7 +905,7 @@ const Icons = styled("svg", {
 // Pill at the left of the top bar (see artwork/design.svg, viewer page):
 // ring + "Select" while unselected, check + "Selected" once selected.
 const SelectButton = styled("button", {
-  cursor: "pointer",
+  ...pressable,
   display: "flex",
   alignItems: "center",
   gap: "0.5rem",
@@ -820,12 +920,20 @@ const SelectButton = styled("button", {
   fontSize: "0.9rem",
   whiteSpace: "nowrap",
   userSelect: "none",
+  // Over the picture: the pill stays dark and lightens a step on hover.
   "&:hover": {
-    backgroundColor: "#000",
+    background: "rgba(70, 70, 70, 0.9)",
+  },
+  "&:active": {
+    background: "rgba(95, 95, 95, 0.95)",
   },
   variants: {
     isSelected: {
-      true: { background: "rgba(26, 26, 26, 0.95)", fontWeight: 600 },
+      true: {
+        background: "rgba(26, 26, 26, 0.95)",
+        fontWeight: 600,
+        "&:hover": { background: "rgba(70, 70, 70, 0.95)" },
+      },
       false: {},
     },
   },
@@ -841,6 +949,11 @@ const SelectIcon = styled("svg", {
 });
 const SelectLabel = styled("span", {
   "@narrow": { display: "none" },
+});
+// The attached file's extension; always shown, it is what the pill is about.
+const SidecarLabel = styled("span", {
+  fontSize: "0.75rem",
+  letterSpacing: "0.05em",
 });
 const ButtonBar = styled("div", {
   width: "100%",
@@ -882,10 +995,14 @@ const MenuWrap = styled("div", {
   position: "relative",
   display: "flex",
 });
+// Split button: the cloud saves the first (default) entry, the chevron opens the rest.
+const ChevronButton = styled(Button, {
+  width: "1.2rem",
+  marginLeft: "-0.4rem",
+});
 const Chevron = styled("svg", {
   width: "0.6rem",
   height: "0.4rem",
-  marginLeft: "0.2rem",
   fill: "none",
   stroke: "#fff",
   strokeWidth: 1.5,
@@ -914,7 +1031,7 @@ const Menu = styled("div", {
   zIndex: 4,
 });
 const MenuItem = styled("button", {
-  cursor: "pointer",
+  ...pressableNoScale,
   textAlign: "left",
   padding: "0.5rem 0.75rem",
   borderRadius: "0.35rem",
@@ -928,6 +1045,7 @@ const MenuItem = styled("button", {
     backgroundColor: "rgba(255, 255, 255, 0.12)",
     outline: "none",
   },
+  "&:active": { backgroundColor: "rgba(255, 255, 255, 0.2)" },
 });
 const Notice = styled("div", {
   position: "absolute",
@@ -957,10 +1075,14 @@ const NextButton = styled("button", {
   zIndex: 3,
   border: "none",
   background: "none",
-  "&:hover": {
+  cursor: "pointer",
+  "&:hover, &:focus-visible": {
     opacity: "1",
+    outline: "none",
   },
-  transition: "opacity 0.5s",
+  "&:active": { opacity: "1", filter: "brightness(0.7)" },
+  transition: "opacity 0.5s, filter 0.15s",
+  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
   variants: {
     isZoomed: {
       // While zoomed the whole screen is used for panning.

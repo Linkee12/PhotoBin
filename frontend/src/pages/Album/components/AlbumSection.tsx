@@ -1,7 +1,8 @@
 import { AlbumItem } from "./AlbumItem";
-import Check2 from "@assets/images/icons/check2.svg?react";
-import Check from "@assets/images/icons/check.svg?react";
+import { selectionIcon } from "./selectionIcon";
 import { styled } from "../../../stitches.config";
+import { pressable, pressableNoScale } from "../../../pressable";
+import { ACCENT_COLOR } from "../../../theme";
 import { PanelVariant, SectionPanel } from "./Panel";
 import { ThumbnailGroup } from "../Album";
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -19,6 +20,8 @@ type AlbumSectionProps = {
   /** Where the toolbar shares its row with this (first) group's header: render the header there. */
   headerSlot?: HTMLElement | null;
   isSelected: (imageId: string) => boolean;
+  areSidecarsSelected: (imageId: string) => boolean;
+  onToggleSidecars: (imageId: string) => void;
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
   onOpen: (imageId: string) => void;
@@ -29,6 +32,8 @@ type AlbumSectionProps = {
 export function AlbumSection(props: AlbumSectionProps) {
   const ids = props.group.thumbnails.map((thumb) => thumb.id);
   const includeAllImages = ids.every((id) => props.selectedImages.includes(id));
+  const includeSomeImages = ids.some((id) => props.selectedImages.includes(id));
+  const selectIcon = selectionIcon(includeAllImages, includeSomeImages);
   // Stable per-tile callbacks so memoised AlbumItems only re-render when their
   // own thumbnail or selection changes.
   const { onSelect, onDeSelect } = props;
@@ -50,15 +55,25 @@ export function AlbumSection(props: AlbumSectionProps) {
       header={
         <Header
           role="button"
+          tabIndex={0}
           aria-expanded={!props.isCollapsed}
           data-group-header={props.group.key}
           onClick={props.onToggleCollapsed}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              props.onToggleCollapsed();
+            }
+          }}
         >
-          <Chevron collapsed={props.isCollapsed} aria-hidden="true">
+          <Chevron collapsed={props.isCollapsed} aria-hidden="true" data-chevron>
             ▾
           </Chevron>
           <SelectAll
+            type="button"
             data-select-group
+            aria-pressed={includeAllImages}
             title={includeAllImages ? "Unselect group" : "Select group"}
             onClick={(e) => {
               e.stopPropagation();
@@ -66,7 +81,7 @@ export function AlbumSection(props: AlbumSectionProps) {
               else props.onSelect(ids);
             }}
           >
-            {includeAllImages ? <CheckIcon as={Check} /> : <CheckIcon as={Check2} />}
+            <CheckIcon as={selectIcon} />
           </SelectAll>
           <GroupName name={props.group.title} onRename={props.onRename} />
           {props.group.meta && <Meta data-group-meta>{props.group.meta}</Meta>}
@@ -91,6 +106,9 @@ export function AlbumSection(props: AlbumSectionProps) {
               imageSrc={image.thumbnail}
               isLoading={image.isLoading}
               fileName={image.name}
+              sidecars={image.sidecars}
+              areSidecarsSelected={props.areSidecarsSelected(image.id)}
+              onToggleSidecars={props.onToggleSidecars}
               isSelected={props.isSelected(image.id)}
               isSelectionMode={props.selectedImages.length > 0}
               isNew={props.newFileIds.includes(image.id)}
@@ -173,13 +191,17 @@ function GroupName(props: {
  * name column ends where the curve is still above the text.
  */
 const Header = styled("div", {
+  ...pressableNoScale,
   pointerEvents: "auto",
   boxSizing: "border-box",
   width: "100%",
   color: "#fff",
   fontFamily: "SourceCodeVF",
-  cursor: "pointer",
   userSelect: "none",
+  // The whole row toggles the group: the chevron answers to hover and press.
+  "&:hover [data-chevron]": { color: "#fff" },
+  "&:focus-visible": { outline: "none" },
+  "&:focus-visible [data-chevron]": { color: ACCENT_COLOR },
   display: "grid",
   columnGap: "0.5rem",
   rowGap: "0.1rem",
@@ -188,7 +210,7 @@ const Header = styled("div", {
   fontSize: "1.1rem",
   "@narrow": { paddingLeft: "1.28rem" },
   // Flush with the tiles' left edge (see `Images`).
-  "@wide": { paddingLeft: "1.9rem" },
+  "@wide": { paddingLeft: "2rem" },
   "@toolbarInline": {
     gridTemplateColumns: "auto auto minmax(0, 1fr)",
     paddingTop: "2rem",
@@ -210,7 +232,7 @@ const Chevron = styled("span", {
   fontSize: "0.8em",
   lineHeight: 1,
   color: "#7A7A7A",
-  transition: "transform 200ms",
+  transition: "transform 200ms, color 0.15s ease",
   "@media (prefers-reduced-motion: reduce)": { transition: "none" },
   variants: {
     collapsed: {
@@ -226,9 +248,11 @@ const Name = styled("span", {
   variants: {
     editable: {
       true: {
+        ...pressableNoScale,
         cursor: "text",
         borderBottom: "1px dashed transparent",
         "&:hover": { borderBottomColor: "#9A9A9A" },
+        "&:active": { borderBottomColor: "#fff" },
       },
       false: {},
     },
@@ -256,13 +280,19 @@ const Meta = styled("span", {
   gridRow: 2,
 });
 
-const SelectAll = styled("div", {
-  cursor: "pointer",
+const SelectAll = styled("button", {
+  ...pressable,
   flexShrink: 0,
   width: "1.2rem",
   height: "1.2rem",
   display: "flex",
   alignItems: "center",
+  background: "none",
+  border: "none",
+  padding: 0,
+  color: "#fff",
+  borderRadius: "50%",
+  "&:hover": { transform: "scale(1.1)" },
 });
 
 const Images = styled("div", {
@@ -286,7 +316,7 @@ const Images = styled("div", {
           gap: "10px",
           margin: "1rem 1.28rem 1.28rem 1.28rem",
         },
-        "@wide": { gap: "20px", margin: "1.9rem" },
+        "@wide": { gap: "20px", margin: "2rem" },
       },
       false: {},
     },
@@ -308,7 +338,7 @@ const Images = styled("div", {
     // As many columns as fit; each tile is at least 200px and grows up to the
     // cap set on the tile itself (see AlbumItem's Preview).
     gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 200px), 1fr))",
-    margin: "1.9rem 1.9rem 1.9rem 1.9rem",
+    margin: "2rem",
   },
 });
 

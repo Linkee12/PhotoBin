@@ -67,6 +67,16 @@ function revokeIfBlob(url: string | undefined) {
   if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
 }
 
+/** "Delete 3 photos and 1 attached file?" — attached files are selected RAWs. */
+function deleteQuestion(photos: number, attached: number): string {
+  const parts: string[] = [];
+  if (photos === 1) parts.push("this photo");
+  else if (photos > 1) parts.push(`${photos} photos`);
+  if (attached === 1) parts.push("1 attached file");
+  else if (attached > 1) parts.push(`${attached} attached files`);
+  return `Delete ${parts.join(" and ")}?`;
+}
+
 export default function Album() {
   const albumContext = useAlbumContext();
   const { metadata, key, refreshMetadata, decodedValues } = albumContext;
@@ -99,6 +109,28 @@ export default function Album() {
         view,
       }),
     [files, decodedValues, thumbnailUrls, view],
+  );
+  // A tile's sidecars (RAW next to its JPG). Selection is per file: picking a
+  // tile picks only the photo; the RAW has its own toggle (the tile's badge, the
+  // viewer's pill). "Download all" and a delete from the viewer take them along.
+  const { tileIds, sidecarsOf, sidecarIdsOf, sidecarIds } = useMemo(() => {
+    const tiles = thumbnailGroups.flatMap((group) => group.thumbnails);
+    const withSidecars = tiles.filter((tile) => tile.sidecars.length > 0);
+    return {
+      tileIds: tiles.map((tile) => tile.id),
+      sidecarsOf: new Map(withSidecars.map((tile) => [tile.id, tile.sidecars])),
+      sidecarIdsOf: new Map(
+        withSidecars.map((tile) => [tile.id, tile.sidecars.map((s) => s.id)]),
+      ),
+      sidecarIds: new Set(withSidecars.flatMap((tile) => tile.sidecars.map((s) => s.id))),
+    };
+  }, [thumbnailGroups]);
+  const allSidecarIds = useMemo(() => [...sidecarIds], [sidecarIds]);
+  const withSidecars = useCallback(
+    (ids: string[]) => [
+      ...new Set(ids.flatMap((id) => [id, ...(sidecarIdsOf.get(id) ?? [])])),
+    ],
+    [sidecarIdsOf],
   );
   const isEmptyAlbum = thumbnailGroups.length === 0;
   const isLoadingThumbnails = files.length > 0 && isEmptyAlbum;
@@ -247,12 +279,10 @@ export default function Album() {
   }
 
   function onDeleteSelected() {
-    const count = selectedImages.length;
-    const message =
-      count === 1
-        ? "Delete this photo? This cannot be undone."
-        : `Delete ${count} photos? This cannot be undone.`;
-    if (!window.confirm(message)) return;
+    const photos = selectedImages.filter((id) => !sidecarIds.has(id)).length;
+    const attached = selectedImages.length - photos;
+    if (!window.confirm(`${deleteQuestion(photos, attached)} This cannot be undone.`))
+      return;
     deleteImages(selectedImages).catch((reason) => {
       console.error(reason);
       toast.error("Failed to delete");
@@ -283,16 +313,20 @@ export default function Album() {
     runDownload(selectedImages).catch((e) => console.error(e));
   }
   function onDownloadAll(imageIds: string[]) {
-    runDownload(imageIds).catch((e) => console.error(e));
+    runDownload(withSidecars(imageIds)).catch((e) => console.error(e));
   }
 
   function onUncheckSelected() {
     setSelectedImages([]);
   }
+  /** Every photo (tile); the attached RAWs have their own "+RAW" toggle. */
   function onSelectAll() {
-    if (metadata?.files) {
-      setSelectedImages(metadata?.files.map((file) => file.fileId));
-    }
+    setSelectedImages((prev) => [...tileIds, ...prev.filter((id) => sidecarIds.has(id))]);
+  }
+  const selectedSidecarCount = selectedImages.filter((id) => sidecarIds.has(id)).length;
+  function onToggleAllSidecars() {
+    if (selectedSidecarCount === allSidecarIds.length) onDeSelect(allSidecarIds);
+    else onSelect(allSidecarIds);
   }
   /** Same as tapping a tile's ring: the album enters selection mode on the first pick. */
   function toggleSelected(id: string) {
@@ -302,14 +336,38 @@ export default function Album() {
         : [...selected, id],
     );
   }
-
   // Stable handlers: AlbumItem is memoised, so these must not change per render.
   const onSelect = useCallback((ids: string[]) => {
-    setSelectedImages((prev) => [...prev, ...ids]);
+    setSelectedImages((prev) => [...prev, ...ids.filter((id) => !prev.includes(id))]);
   }, []);
   const onDeSelect = useCallback((ids: string[]) => {
     setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
   }, []);
+  const isSelected = useCallback(
+    (id: string) => selectedImages.includes(id),
+    [selectedImages],
+  );
+  const areSidecarsSelected = useCallback(
+    (id: string) => {
+      const ids = sidecarIdsOf.get(id) ?? [];
+      return (
+        ids.length > 0 && ids.every((sidecarId) => selectedImages.includes(sidecarId))
+      );
+    },
+    [selectedImages, sidecarIdsOf],
+  );
+  const onToggleSidecars = useCallback(
+    (id: string) => {
+      const ids = sidecarIdsOf.get(id) ?? [];
+      if (ids.length === 0) return;
+      setSelectedImages((prev) =>
+        ids.every((sidecarId) => prev.includes(sidecarId))
+          ? prev.filter((imgId) => !ids.includes(imgId))
+          : [...prev, ...ids.filter((sidecarId) => !prev.includes(sidecarId))],
+      );
+    },
+    [sidecarIdsOf],
+  );
   const onOpen = useCallback((id: string) => {
     setFullscreenImage({ fileId: id });
     setShowOrigin(true);
@@ -356,9 +414,12 @@ export default function Album() {
             fileName={decodedValues.files[fullscreenImage.fileId]?.name ?? ""}
             onShowChange={setShowOrigin}
             onNext={(direction) => nextOriginImgId(direction)}
-            onDelete={() => deleteImages([fullscreenImage.fileId])}
+            onDelete={() => deleteImages(withSidecars([fullscreenImage.fileId]))}
             isSelected={selectedImages.includes(fullscreenImage.fileId)}
             onToggleSelect={() => toggleSelected(fullscreenImage.fileId)}
+            sidecars={sidecarsOf.get(fullscreenImage.fileId) ?? []}
+            areSidecarsSelected={areSidecarsSelected(fullscreenImage.fileId)}
+            onToggleSidecars={() => onToggleSidecars(fullscreenImage.fileId)}
           />
         )}
         <Header
@@ -368,7 +429,13 @@ export default function Album() {
           onSaveName={saveAlbumName}
           onSelectAll={onSelectAll}
           onUnselectAll={onUncheckSelected}
-          selectedAll={selectedImages.length === metadata?.files.length}
+          selectedAll={
+            tileIds.length > 0 && tileIds.every((id) => selectedImages.includes(id))
+          }
+          selectedSome={selectedImages.length > 0}
+          sidecarCount={allSidecarIds.length}
+          selectedSidecarCount={selectedSidecarCount}
+          onToggleAllSidecars={onToggleAllSidecars}
         />
         <AlbumContent
           uploadService={uploadService}
@@ -391,7 +458,9 @@ export default function Album() {
             })
           }
           selectedImages={selectedImages}
-          isSelected={(id) => selectedImages.includes(id)}
+          isSelected={isSelected}
+          areSidecarsSelected={areSidecarsSelected}
+          onToggleSidecars={onToggleSidecars}
           onSelect={onSelect}
           onDeSelect={onDeSelect}
           onOpen={onOpen}

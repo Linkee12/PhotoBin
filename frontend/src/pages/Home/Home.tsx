@@ -1,8 +1,9 @@
 /* eslint-disable promise/always-return */
 /* eslint-disable react/no-unescaped-entities */
 import { styled } from "../../stitches.config";
+import { pressable, pressableNoScale } from "../../pressable";
+import { ACCENT_COLOR } from "../../theme";
 import Header from "./components/Header";
-import Intro from "./components/Intro";
 import { useNavigate } from "react-router";
 import { useState } from "react";
 import { genKey } from "../../utils/key";
@@ -30,10 +31,27 @@ export default function Home() {
   return (
     <Container>
       <Header />
-      <IntroContainer>
-        <Intro />
-      </IntroContainer>
-      <PushDown style={{ height: "2.5em" }} />
+      <Start>
+        <Text css={{ "--color": "#808080" }}>
+          {encrypt ? "Start your E2E encrypted album" : "Start your unencrypted album"}
+        </Text>
+        <EncryptToggle>
+          <input
+            type="checkbox"
+            checked={encrypt}
+            onChange={(e) => setEncrypt(e.target.checked)}
+          />
+          Encrypt album (recommended)
+        </EncryptToggle>
+        <Button type="button" onClick={createAlbum}>
+          <Text as="span" css={{ "--weight": "bold", margin: "1em 0" }}>
+            NEW ALBUM
+          </Text>
+        </Button>
+      </Start>
+      {/* The panel's wave starts 3rem above its body: this leaves the same 3em
+          between the button and the wave as between the header and the text. */}
+      <PushDown style={{ height: "calc(2em + 3rem)" }} />
       <Panel variant={0} zIndex={0}>
         <PanelHeader>
           <PanelTitle>ABOUT</PanelTitle>
@@ -58,25 +76,8 @@ export default function Home() {
             Photobin is free and open-source!
           </Text>
         </P>
-        <PushDown style={{ height: "10em" }} />
+        <PushDown style={{ height: "2em" }} />
       </Panel>
-
-      <FloatingFooter>
-        <Text css={{ "--color": "#808080" }}>
-          {encrypt ? "Start your E2E encrypted album" : "Start your unencrypted album"}
-        </Text>
-        <EncryptToggle>
-          <input
-            type="checkbox"
-            checked={encrypt}
-            onChange={(e) => setEncrypt(e.target.checked)}
-          />
-          Encrypt album (recommended)
-        </EncryptToggle>
-        <Button onClick={createAlbum}>
-          <Text css={{ "--weight": "bold" }}>NEW ALBUM</Text>
-        </Button>
-      </FloatingFooter>
     </Container>
   );
 }
@@ -94,58 +95,47 @@ const Container = styled("div", {
   fontFamily: "Open Sans",
   fontSize: "clamp(14px, 1.5vw, 18px)",
 });
-const IntroContainer = styled("div", {
-  minHeight: "6em",
+// The call to action, right under the header.
+const Start = styled("div", {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
   margin: "1em",
+  minHeight: "6em",
 });
 
-const Button = styled("div", {
+const Button = styled("button", {
+  ...pressable,
   width: "min(80vw,25em)",
   fontWeight: "bold",
+  fontFamily: "inherit",
+  fontSize: "inherit",
+  color: "inherit",
+  border: "none",
+  padding: 0,
   display: "flex",
   justifyContent: "center",
   background:
     "radial-gradient(circle 150px at 50% 180%, #ffa021 40%, #9d6e2f  40%, #ffffff 300%)",
-  cursor: "pointer",
   borderRadius: "40px",
-  "&:hover": {
-    scale: 1.02,
-    transitionDuration: 1,
-  },
+  "&:hover": { transform: "scale(1.02)", filter: "brightness(1.08)" },
+  "&:active:not(:disabled)": { transform: "scale(0.98)" },
 });
 
 const EncryptToggle = styled("label", {
+  ...pressableNoScale,
   display: "flex",
   alignItems: "center",
   gap: "0.5em",
-  cursor: "pointer",
   fontSize: "0.9em",
   color: "#c0c0c0",
   marginBottom: "0.75em",
+  "&:hover": { color: "#fff" },
   "& input": {
-    accentColor: "#ffa021",
+    accentColor: ACCENT_COLOR,
     cursor: "pointer",
+    "&:focus-visible": { outline: `2px solid ${ACCENT_COLOR}`, outlineOffset: "2px" },
   },
-});
-
-const FloatingFooter = styled("div", {
-  position: "fixed",
-  bottom: 0,
-  left: 0,
-  right: 0,
-  display: "flex",
-  width: "100vw",
-  justifyContent: "center",
-  flexDirection: "column",
-  alignItems: "center",
-  flex: 1,
-  backgroundColor: "#333333",
-  borderRadius: "50vw 50vw 0 0 / 5vw 5vw 0 0",
-  paddingBottom: "1em",
-  height: "9.5em",
 });
 
 const Text = styled("p", {

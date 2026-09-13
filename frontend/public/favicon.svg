@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#181818"/>
+  <!-- The bird from the header (bird.svg), centred -->
+  <g transform="translate(1.15 9.35) scale(1)">
+    <path d="m-558 38.7.9-1.4 2-3.4c3.1.4 6.5 1 9.3 1.1a1.2 1.2 19.8 0 0 1-.5c1.6-2 3.3-5 5-7.6l10 2.4 1.6.4-1.6-.5-10.2-3.8a.7.8 31.3 0 0-.8.3c-2 2.3-4 4.8-5.5 7-2.8-.2-6-.2-9-.2a.7.5 6.3 0 0-.6.4l-1.4 4.3-.6 1.5z" fill="#fff" transform="translate(558 -25.4)"/>
+  </g>
+</svg>
