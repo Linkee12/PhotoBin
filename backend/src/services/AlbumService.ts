@@ -49,6 +49,15 @@ export class EditInProgressError extends Error {
   }
 }
 
+/** Thrown by writes into an album that does not exist (never created, expired or deleted). */
+export class AlbumNotFoundError extends Error {
+  readonly code = "ALBUM_NOT_FOUND";
+  constructor() {
+    super("Album not found");
+    this.name = "AlbumNotFoundError";
+  }
+}
+
 function isEnoent(err: unknown) {
   return (err as NodeJS.ErrnoException).code === "ENOENT";
 }
@@ -103,11 +112,13 @@ export class AlbumService {
     await this.createAlbum(albumId);
     this._metadataService.renameAlbum(albumId, newTitle);
   }
-  finalizeFile(
+  /** Rejects with AlbumNotFoundError so a finalize cannot resurrect a deleted album. */
+  async finalizeFile(
     albumId: string,
     fileMetadata: Metadata["files"][0],
     batch?: Batch & { batchId: string },
   ) {
+    await this._assertAlbumExists(albumId);
     this._metadataService.addFile(albumId, fileMetadata, batch);
   }
   renameBatch(albumId: string, batchId: string, name: EncryptedEntry) {
@@ -484,9 +495,14 @@ export class AlbumService {
     return resolved;
   }
 
+  private async _assertAlbumExists(albumId: string) {
+    if (!(await this.exists(albumId))) throw new AlbumNotFoundError();
+  }
+
   /**
    * Resolves (and creates) the directory a part is written to: the live
-   * `<type>` dir, or the edit staging dir when `editId` is given.
+   * `<type>` dir, or the edit staging dir when `editId` is given. The album
+   * itself must already exist: a part must not bring a deleted album back.
    */
   private async _preparePartPath(
     params: {
@@ -497,6 +513,7 @@ export class AlbumService {
     },
     name: string,
   ) {
+    await this._assertAlbumExists(params.albumId);
     let dir: string;
     if (params.editId !== undefined) {
       if (!this._isEditablePartType(params.fileType)) {

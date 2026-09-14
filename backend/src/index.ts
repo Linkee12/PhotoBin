@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import { createBuilder, success, initRpc, apiResponse } from "@cuple/server";
 import { z } from "zod";
 import {
+  AlbumNotFoundError,
   AlbumService,
   DEFAULT_ALBUM_TTL_MS,
   DEFAULT_EDIT_LOCK_TTL_MS,
@@ -87,10 +88,18 @@ app.put(
       });
       res.status(204).end();
     } catch (err) {
+      if (err instanceof AlbumNotFoundError) {
+        res.status(404).json({ message: err.message });
+        return;
+      }
       next(err);
     }
   },
 );
+/** The cuple-shaped 404 for writes into an album that does not exist. */
+function albumNotFound(err: AlbumNotFoundError) {
+  return apiResponse("not-found", 404, { message: err.message, code: err.code });
+}
 app.get(PART_ROUTE, async (req, res, next) => {
   try {
     const params = parsePartParams(req.params);
@@ -188,7 +197,12 @@ const routes = {
       }),
     )
     .post(async ({ data }) => {
-      await albumService.uploadFilePart(data.body);
+      try {
+        await albumService.uploadFilePart(data.body);
+      } catch (err) {
+        if (err instanceof AlbumNotFoundError) return albumNotFound(err);
+        throw err;
+      }
       return success({});
     }),
   editAlbumName: builder
@@ -214,11 +228,16 @@ const routes = {
       }),
     )
     .post(async ({ data }) => {
-      albumService.finalizeFile(
-        data.body.albumId,
-        data.body.fileMetadata,
-        data.body.batch,
-      );
+      try {
+        await albumService.finalizeFile(
+          data.body.albumId,
+          data.body.fileMetadata,
+          data.body.batch,
+        );
+      } catch (err) {
+        if (err instanceof AlbumNotFoundError) return albumNotFound(err);
+        throw err;
+      }
       return success({
         message: "File has been uploaded successfully!",
         // Echoed so a client can tell that the batch was actually recorded

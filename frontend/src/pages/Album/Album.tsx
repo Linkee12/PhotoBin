@@ -57,6 +57,7 @@ export default function Album() {
   const navigate = useNavigate();
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const [isDeleteAlbumOpen, setDeleteAlbumOpen] = useState(false);
+  const [isDeletingAlbum, setDeletingAlbum] = useState(false);
   const [showOrigin, setShowOrigin] = useState(false);
   const [title, setTitle] = useState("");
   const [view, setView] = useState<AlbumView>(readStoredView);
@@ -133,13 +134,19 @@ export default function Album() {
     });
   }
 
+  /** One delete at a time: a second confirm while the first is in flight is ignored. */
   async function deleteAlbum() {
-    if (albumId === undefined) return;
-    const response = await client.deleteAlbum.delete({ body: { albumId } });
-    if (response.result !== "success") throw new Error(response.message);
-    forgetVisitedAlbum(albumId);
-    navigate("/");
-    toast.success("Album deleted");
+    if (albumId === undefined || isDeletingAlbum) return;
+    setDeletingAlbum(true);
+    try {
+      const response = await client.deleteAlbum.delete({ body: { albumId } });
+      if (response.result !== "success") throw new Error(response.message);
+      forgetVisitedAlbum(albumId);
+      navigate("/");
+      toast.success("Album deleted");
+    } finally {
+      setDeletingAlbum(false);
+    }
   }
 
   async function runDownload(imageIds: string[]) {
@@ -264,7 +271,15 @@ export default function Album() {
           onDownloadSelected={() => void runDownload(selection.selectedImages)}
         />
         <Footer>
-          <FooterLink type="button" onClick={() => setDeleteAlbumOpen(true)}>
+          {/* An upload finishing after the delete would recreate nothing (the
+              server refuses writes into a missing album), but it would still
+              fail noisily: keep the two apart. */}
+          <FooterLink
+            type="button"
+            disabled={isUploading || isDeletingAlbum}
+            title={isUploading ? "Wait for the upload to finish" : undefined}
+            onClick={() => setDeleteAlbumOpen(true)}
+          >
             Delete this album
           </FooterLink>
         </Footer>
@@ -317,5 +332,5 @@ const FooterLink = styled("button", {
   color: "#8B8B8B",
   textDecoration: "underline",
   textUnderlineOffset: "0.2em",
-  "&:hover": { color: "#fff" },
+  "&:hover:not(:disabled)": { color: "#fff" },
 });

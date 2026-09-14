@@ -4,7 +4,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { AlbumService } from "./AlbumService";
+import { AlbumNotFoundError, AlbumService } from "./AlbumService";
 import { MetadataService } from "./MetadataService";
 
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
@@ -66,5 +66,59 @@ describe("deleteAlbum", () => {
 
   it("resolves when the album does not exist", async () => {
     await expect(albumService.deleteAlbum(albumId)).resolves.toBeUndefined();
+  });
+});
+
+describe("writes into a deleted album", () => {
+  const fileId = randomUUID();
+  const part = { iv: "aXY=", chunkCount: 1 };
+
+  beforeEach(async () => {
+    await albumService.createAlbum(albumId);
+    await albumService.deleteAlbum(albumId);
+  });
+
+  it("rejects a raw part and creates no directory", async () => {
+    await expect(
+      albumService.uploadFilePartRaw({
+        albumId,
+        fileId,
+        fileType: "original",
+        partName: "0",
+        bytes: Buffer.from("BYTES"),
+      }),
+    ).rejects.toBeInstanceOf(AlbumNotFoundError);
+    expect(fs.existsSync(albumPath())).toBe(false);
+  });
+
+  it("rejects a legacy part and creates no directory", async () => {
+    await expect(
+      albumService.uploadFilePart({
+        albumId,
+        fileId,
+        fileType: "original",
+        partName: "0",
+        encryptedFile: "QllURVM=",
+      }),
+    ).rejects.toBeInstanceOf(AlbumNotFoundError);
+    expect(fs.existsSync(albumPath())).toBe(false);
+  });
+
+  it("rejects a finalize and writes no metadata", async () => {
+    await expect(
+      albumService.finalizeFile(albumId, {
+        fileId,
+        fileName: { value: "", iv: "" },
+        date: { value: "", iv: "" },
+        original: part,
+      }),
+    ).rejects.toBeInstanceOf(AlbumNotFoundError);
+    expect(fs.existsSync(albumPath())).toBe(false);
+  });
+
+  it("still lets rename bring the album into existence", async () => {
+    await albumService.rename(albumId, { value: "back", iv: "" });
+    expect(await albumService.exists(albumId)).toBe(true);
+    expect(metadataService.get(albumId).albumName.value).toBe("back");
   });
 });
