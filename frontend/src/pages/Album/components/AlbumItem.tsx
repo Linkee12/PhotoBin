@@ -218,6 +218,9 @@ const Preview = styled("div", {
   width: "100%",
   aspectRatio: "3/2",
   margin: "0.5rem",
+  // A long press selects (useLongPressSelect): no callout, no text selection.
+  WebkitTouchCallout: "none",
+  userSelect: "none",
   // The pinch gesture (useGridPinch) draws the tile elsewhere with a transform
   // measured from its top-left corner.
   transformOrigin: "0 0",

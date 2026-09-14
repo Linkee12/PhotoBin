@@ -2,10 +2,18 @@ import { styled, TOOLBAR_INLINE_QUERY } from "../../../stitches.config";
 import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  MouseEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useGridPinch } from "../hooks/useGridPinch";
+import { useLongPressSelect } from "../hooks/useLongPressSelect";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { Uploaded, useUploadRun } from "../hooks/useUploadRun";
 import { ThumbnailGroup } from "../utils/groupFiles";
@@ -34,6 +42,8 @@ type AlbumContentProps = {
   isLoadingThumbnails: boolean;
   downloadProgress: number;
   thumbnailGroups: ThumbnailGroup[];
+  /** Every tile in grid order (the long-press range runs along it). */
+  tileIds: readonly string[];
   view: AlbumView;
   onChangeView: (view: AlbumView) => void;
   onRenameBatch: (batchId: string, name: string) => void;
@@ -104,6 +114,20 @@ export function AlbumContent(props: AlbumContentProps) {
     });
     if (fitted !== columns) setColumns(fitted);
   }, [columns, orientation, hasGroups, pinch.ref]);
+  const longPress = useLongPressSelect({
+    containerRef: pinch.ref,
+    tileIds: props.tileIds,
+    enabled: hasGroups,
+    isSelected: props.isSelected,
+    onSelect: props.onSelect,
+    onDeselect: props.onDeSelect,
+  });
+  // Both gestures swallow the click that follows their release.
+  const { onClickCapture: pinchClickCapture, ...pinchHandlers } = pinch.handlers;
+  const onClickCapture = (e: MouseEvent<HTMLDivElement>) => {
+    longPress.onClickCapture(e);
+    pinchClickCapture(e);
+  };
   // Where the toolbar is the wide shelf, the first group's header shares its
   // row (rendered into this slot); otherwise it heads its own band.
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
@@ -227,7 +251,12 @@ export function AlbumContent(props: AlbumContentProps) {
             onChangeView={props.onChangeView}
           />
         )}
-        <AlbumSections ref={pinch.ref} {...pinch.handlers}>
+        <AlbumSections
+          ref={pinch.ref}
+          {...pinchHandlers}
+          onClickCapture={onClickCapture}
+          onContextMenu={longPress.onContextMenu}
+        >
           <PinchOverlay ref={pinch.overlayRef} aria-hidden="true" />
           {props.thumbnailGroups.map((group, i) => (
             <AlbumSection
@@ -326,7 +355,8 @@ const UploadSection = styled("div", {
 const AlbumSections = styled("div", {
   display: "flex",
   flexDirection: "column",
-  // Two fingers pinch the grid (useGridPinch); one still scrolls the page.
+  // Two fingers pinch the grid (useGridPinch), a long press selects
+  // (useLongPressSelect); one finger still scrolls the page.
   touchAction: "pan-y",
 });
 
