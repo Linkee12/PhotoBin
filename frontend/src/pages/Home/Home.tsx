@@ -4,6 +4,7 @@ import { styled } from "../../stitches.config";
 import { pressable, pressableNoScale } from "../../pressable";
 import { ACCENT_COLOR } from "../../theme";
 import Header from "./components/Header";
+import VisitedAlbums from "./components/VisitedAlbums";
 import { useNavigate } from "react-router";
 import { useState } from "react";
 import { genKey } from "../../utils/key";
@@ -49,6 +50,7 @@ export default function Home() {
           </Text>
         </Button>
       </Start>
+      <VisitedAlbums />
       {/* The panel's wave starts 3rem above its body: this leaves the same 3em
           between the button and the wave as between the header and the text. */}
       <PushDown style={{ height: "calc(2em + 3rem)" }} />
