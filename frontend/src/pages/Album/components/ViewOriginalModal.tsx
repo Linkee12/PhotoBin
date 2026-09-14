@@ -175,10 +175,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     },
     canGoPrev: props.neighbourIds.prev !== undefined,
     canGoNext: props.neighbourIds.next !== undefined,
-    onSwipeMove: (dx) => moveStrip(dx, false),
-    // One slot of the strip (a third of it) is one screen.
-    onSwipeEnd: (direction) =>
-      moveStrip((-direction * (stripRef.current?.clientWidth ?? 0)) / 3, true),
+    onSwipeOffset: moveStrip,
     onSwipe: (direction) => goTo(direction),
     onPinchProgress: fadeViewer,
     onPinchClose: () => close(),

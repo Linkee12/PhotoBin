@@ -37,16 +37,15 @@ type UseZoomPanOptions = {
   /** Whether a swipe has somewhere to go (default true); an edge without a neighbour resists. */
   canGoPrev?: boolean;
   canGoNext?: boolean;
-  /** A horizontal drag at 1x is under way: the swipe strip belongs `dx` px to the right. */
-  onSwipeMove?: (dx: number) => void;
   /**
-   * The finger lifted after a drag at 1x: the strip animates to the neighbour
-   * (`1` next, `-1` previous) or snaps back (`0`).
+   * A horizontal drag at 1x: the swipe strip belongs `offset` px to the right.
+   * While the finger moves it follows at once; when it lifts, `animate` asks
+   * for the ride to the neighbour (one wrapper width away) or back to 0.
    */
-  onSwipeEnd?: (direction: -1 | 0 | 1) => void;
+  onSwipeOffset?: (offset: number, animate: boolean) => void;
   /**
-   * The strip has arrived at the neighbour (`SWIPE_ANIMATION_MS` after
-   * `onSwipeEnd`, at once with reduced motion): show that photo now.
+   * The strip has arrived at the neighbour (`SWIPE_ANIMATION_MS` after the
+   * animated `onSwipeOffset`, at once with reduced motion): show that photo now.
    */
   onSwipe?: (direction: 1 | -1) => void;
   /**
@@ -90,9 +89,9 @@ export function drawnSize(image: HTMLImageElement) {
  * go through React state. Only `isZoomed` is React state and it changes only when
  * the scale crosses 1x. The pointer handlers are meant for a full screen wrapper.
  *
- * At 1x a horizontal drag is a swipe: `onSwipeMove` / `onSwipeEnd` move the
- * caller's strip of neighbouring pictures, `onSwipe` switches the photo once the
- * strip has arrived. A pinch that begins at 1x may shrink the picture below 1x
+ * At 1x a horizontal drag is a swipe: `onSwipeOffset` moves the caller's strip
+ * of neighbouring pictures, `onSwipe` switches the photo once the strip has
+ * arrived. A pinch that begins at 1x may shrink the picture below 1x
  * to close the viewer (`onPinchProgress` / `onPinchClose`).
  *
  * `imageRef` is the `<img>` that is measured; `targetRef` is the element that
@@ -107,8 +106,7 @@ export function useZoomPan({
   pictureSize,
   canGoPrev = true,
   canGoNext = true,
-  onSwipeMove,
-  onSwipeEnd,
+  onSwipeOffset,
   onSwipe,
   onPinchProgress,
   onPinchClose,
@@ -121,8 +119,7 @@ export function useZoomPan({
     pictureSize,
     zoomable,
     edges: { canGoPrev, canGoNext },
-    onSwipeMove,
-    onSwipeEnd,
+    onSwipeOffset,
     onSwipe,
     onPinchProgress,
     onPinchClose,
@@ -310,7 +307,7 @@ export function useZoomPan({
   const cancelSwipe = useCallback(() => {
     if (swipeDx.current === null) return;
     swipeDx.current = null;
-    options.current.onSwipeEnd?.(0);
+    options.current.onSwipeOffset?.(0, true);
   }, []);
 
   const onPointerDown = useCallback(
@@ -402,8 +399,9 @@ export function useZoomPan({
       ) {
         // Swipe at 1x: the strip follows the finger sideways.
         swipeDx.current = point.x - downPosition.current.x;
-        options.current.onSwipeMove?.(
+        options.current.onSwipeOffset?.(
           stripOffset(swipeDx.current, options.current.edges),
+          false,
         );
       }
       done();
@@ -421,10 +419,11 @@ export function useZoomPan({
       if (scale <= PINCH_CLOSE_SCALE) options.current.onPinchClose?.();
       else options.current.onPinchProgress?.(0, true);
     } else if (swipeDx.current !== null) {
-      const { edges, onSwipeEnd, onSwipe } = options.current;
+      const { edges, onSwipeOffset, onSwipe } = options.current;
       const direction = swipeDecision(swipeDx.current, edges);
       swipeDx.current = null;
-      onSwipeEnd?.(direction);
+      // The strip rides one screen to the neighbour, or back to the middle.
+      onSwipeOffset?.(-direction * (wrapperRef.current?.clientWidth ?? 0), true);
       if (direction === 0 || !onSwipe) return;
       // The strip is on its way to the neighbour; switch when it has arrived.
       if (prefersReducedMotion()) {
