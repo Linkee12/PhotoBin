@@ -51,9 +51,10 @@ type UseZoomPanOptions = {
   onSwipe?: (direction: 1 | -1) => void;
   /**
    * A pinch that started at 1x is shrinking the picture: `t` grows from 0 (1x)
-   * to 1 (`PINCH_CLOSE_SCALE`), and is 0 again once the fingers lift without closing.
+   * to 1 (`PINCH_CLOSE_SCALE`), one call per move. Once the fingers lift without
+   * closing it is called with 0 and `animate` (the picture springs back).
    */
-  onPinchProgress?: (t: number) => void;
+  onPinchProgress?: (t: number, animate: boolean) => void;
   /** The fingers lifted after pinching the picture well below 1x. */
   onPinchClose?: () => void;
 };
@@ -138,7 +139,9 @@ export function useZoomPan({
   const [isZoomed, setIsZoomed] = useState(false);
 
   const pointers = useRef(new Map<number, Point>());
-  // `atRest`: the pinch began at 1x, so it may shrink the picture to close the viewer.
+  // `atRest`: the pinch began at 1x (or below it, i.e. inside an earlier at-rest
+  // pinch whose finger was lifted and put down again), so it may shrink the
+  // picture to close the viewer.
   const pinch = useRef<{ distance: number; mid: Point; atRest: boolean } | null>(null);
   const downPosition = useRef<Point | null>(null);
   const downOnImage = useRef(false);
@@ -242,9 +245,10 @@ export function useZoomPan({
     reset();
   }, [resetKey, enabled, reset]);
 
-  // The image element may be (re)mounted after the transform was last painted
-  // (e.g. switching from a video to a photo), so make sure it carries the current
-  // transform after every commit. This is a cheap string comparison.
+  // The transform target may be (re)mounted after the transform was last painted
+  // (the zoom layer is not rendered for an unsupported file, so it is a fresh
+  // element after switching from one to a photo), so make sure it carries the
+  // current transform after every commit. This is a cheap string comparison.
   useEffect(() => {
     paint();
   });
@@ -286,25 +290,21 @@ export function useZoomPan({
   );
 
   // React registers wheel listeners as passive, so preventDefault has to go through
-  // a native, non-passive listener. The wrapper can be remounted (e.g. after a
-  // video was shown in between), so the element is tracked in state and the
-  // listener follows it.
-  const [wrapperEl, setWrapperEl] = useState<HTMLDivElement | null>(null);
-  const wrapperRefCallback = useCallback((el: HTMLDivElement | null) => {
-    wrapperRef.current = el;
-    setWrapperEl(el);
-  }, []);
+  // a native, non-passive listener. The wrapper is mounted for the hook's whole
+  // life (every kind of file renders inside it), so the ref is set by the time
+  // this effect runs.
   useEffect(() => {
-    if (!wrapperEl || !enabled || !zoomable) return;
+    const wrapper = wrapperRef.current;
+    if (!wrapper || !enabled || !zoomable) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       setSettling(false);
       const factor = Math.exp(-e.deltaY * WHEEL_SENSITIVITY);
       zoomAround(toLocal(e), transformRef.current.scale * factor);
     };
-    wrapperEl.addEventListener("wheel", onWheel, { passive: false });
-    return () => wrapperEl.removeEventListener("wheel", onWheel);
-  }, [wrapperEl, enabled, zoomable, setSettling, toLocal, zoomAround]);
+    wrapper.addEventListener("wheel", onWheel, { passive: false });
+    return () => wrapper.removeEventListener("wheel", onWheel);
+  }, [enabled, zoomable, setSettling, toLocal, zoomAround]);
 
   /** A second finger (or a cancel) interrupts the swipe: the strip snaps back. */
   const cancelSwipe = useCallback(() => {
@@ -339,7 +339,7 @@ export function useZoomPan({
         pinch.current = {
           distance: distance(a, b),
           mid: midpoint(a, b),
-          atRest: transformRef.current.scale === 1,
+          atRest: transformRef.current.scale <= 1,
         };
         dragged.current = true;
       }
@@ -381,7 +381,10 @@ export function useZoomPan({
         pinch.current = next;
         zoomAround(next.mid, scale, base);
         if (next.atRest) {
-          options.current.onPinchProgress?.(closeProgress(transformRef.current.scale));
+          options.current.onPinchProgress?.(
+            closeProgress(transformRef.current.scale),
+            false,
+          );
         }
       } else if (pointers.current.size === 1 && current.scale > 1 && dragged.current) {
         setTransform(
@@ -416,7 +419,7 @@ export function useZoomPan({
       setSettling(true);
       setTransform(IDENTITY);
       if (scale <= PINCH_CLOSE_SCALE) options.current.onPinchClose?.();
-      else options.current.onPinchProgress?.(0);
+      else options.current.onPinchProgress?.(0, true);
     } else if (swipeDx.current !== null) {
       const { edges, onSwipeEnd, onSwipe } = options.current;
       const direction = swipeDecision(swipeDx.current, edges);
@@ -468,7 +471,7 @@ export function useZoomPan({
         cancelSwipe();
         if (transformRef.current.scale < 1) {
           setTransform(IDENTITY);
-          options.current.onPinchProgress?.(0);
+          options.current.onPinchProgress?.(0, false);
         }
         return;
       }
@@ -492,7 +495,7 @@ export function useZoomPan({
   }, []);
 
   return {
-    wrapperRef: wrapperRefCallback,
+    wrapperRef,
     targetRef,
     imageRef,
     isZoomed,

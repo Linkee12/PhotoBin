@@ -145,17 +145,20 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         : "none";
     strip.style.transform = `translateX(${offset}px)`;
   }
-  /** How far the viewer has faded away under a pinch: 0 is fully there, 1 is gone. */
-  function fadeViewer(t: number) {
+  /**
+   * How far the viewer has faded away under a pinch: 0 is fully there, 1 is
+   * gone. `animate` eases there (the fingers lifted and the picture springs back).
+   */
+  function fadeViewer(t: number, animate: boolean) {
     const container = containerRef.current;
     const bar = buttonBarRef.current;
     if (!container || !bar) return;
-    const back = t === 0 && !prefersReducedMotion();
-    container.style.transition = back
+    const ease = animate && !prefersReducedMotion();
+    container.style.transition = ease
       ? `background-color ${PINCH_SETTLE_MS}ms ease-out`
       : "none";
     container.style.backgroundColor = `rgba(0, 0, 0, ${1 - t})`;
-    bar.style.transition = back ? `opacity ${PINCH_SETTLE_MS}ms ease-out` : "none";
+    bar.style.transition = ease ? `opacity ${PINCH_SETTLE_MS}ms ease-out` : "none";
     bar.style.opacity = `${1 - t}`;
   }
 
@@ -202,7 +205,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
 
   function close() {
     rotation.flush();
-    fadeViewer(0);
+    fadeViewer(0, false);
     props.onShowChange(false);
   }
 
