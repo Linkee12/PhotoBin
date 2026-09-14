@@ -7,9 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { toast } from "react-toastify";
 import { client } from "../../cuple";
+import { Footer, FOOTER_HEIGHT } from "../../components/Footer";
+import { pressableNoScale } from "../../pressable";
+import { forgetVisitedAlbum } from "../../services/visitedAlbums";
+import { DeleteAlbumDialog } from "./components/DeleteAlbumDialog";
 import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
@@ -50,7 +54,9 @@ function storeView(view: AlbumView) {
 export default function Album() {
   const { metadata, key, refreshMetadata, decodedValues } = useAlbumContext();
   const { albumId } = useParams();
+  const navigate = useNavigate();
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
+  const [isDeleteAlbumOpen, setDeleteAlbumOpen] = useState(false);
   const [showOrigin, setShowOrigin] = useState(false);
   const [title, setTitle] = useState("");
   const [view, setView] = useState<AlbumView>(readStoredView);
@@ -125,6 +131,15 @@ export default function Album() {
       console.error(reason);
       toast.error("Failed to delete");
     });
+  }
+
+  async function deleteAlbum() {
+    if (albumId === undefined) return;
+    const response = await client.deleteAlbum.delete({ body: { albumId } });
+    if (response.result !== "success") throw new Error(response.message);
+    forgetVisitedAlbum(albumId);
+    navigate("/");
+    toast.success("Album deleted");
   }
 
   async function runDownload(imageIds: string[]) {
@@ -248,6 +263,22 @@ export default function Album() {
           onUncheckSelected={selection.clear}
           onDownloadSelected={() => void runDownload(selection.selectedImages)}
         />
+        <Footer>
+          <FooterLink type="button" onClick={() => setDeleteAlbumOpen(true)}>
+            Delete this album
+          </FooterLink>
+        </Footer>
+        <DeleteAlbumDialog
+          open={isDeleteAlbumOpen}
+          title={title}
+          onClose={() => setDeleteAlbumOpen(false)}
+          onConfirm={() => {
+            deleteAlbum().catch((error: unknown) => {
+              console.error(error);
+              toast.error("Failed to delete the album");
+            });
+          }}
+        />
       </Container>
     </ThumbnailVisibilityProvider>
   );
@@ -256,6 +287,10 @@ export default function Album() {
 const Container = styled("div", {
   width: "100%",
   minHeight: "100vh",
+  boxSizing: "border-box",
+  // Room for the footer, which is anchored to this box.
+  position: "relative",
+  paddingBottom: FOOTER_HEIGHT,
   fontFamily: "Open Sans",
   display: "flex",
   flexDirection: "column",
@@ -269,4 +304,18 @@ const Container = styled("div", {
       },
     },
   },
+});
+
+/** A quiet text link; the footer's only content. */
+const FooterLink = styled("button", {
+  ...pressableNoScale,
+  background: "none",
+  border: "none",
+  padding: "0.5rem",
+  fontFamily: "inherit",
+  fontSize: "0.85rem",
+  color: "#8B8B8B",
+  textDecoration: "underline",
+  textUnderlineOffset: "0.2em",
+  "&:hover": { color: "#fff" },
 });
