@@ -1,15 +1,29 @@
-import { styled } from "../../../stitches.config";
-import { Cloud } from "@assets/images/cloud";
+import { styled, TOOLBAR_INLINE_QUERY } from "../../../stitches.config";
+import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useAlbumContext } from "../hooks/useAlbumContext";
-import { UploadService } from "../services/UploadService";
-import { ThumbnailGroup } from "../Album";
-import { Panel, PushDown } from "./Panel";
-import { Menu } from "./Menu";
-import { toast } from "react-toastify";
-import { formatTimeLeft } from "../../../utils/formatTimeLeft";
+import { useGridPinch } from "../hooks/useGridPinch";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import { Uploaded, useUploadRun } from "../hooks/useUploadRun";
+import { ThumbnailGroup } from "../utils/groupFiles";
+import { Panel } from "./Panel";
+import { pressable, pressableNoScale } from "../../../pressable";
+import {
+  SHEET_BAR_HEIGHT,
+  SUN_CENTER_BELOW_HEADER,
+  SUN_X,
+  sunBackground,
+  TOOLBAR_HEIGHT,
+} from "../layout";
+import { AlbumToolbar } from "./AlbumToolbar";
+import { formatBytesPair } from "../../../utils/formatBytes";
+import { AlbumView } from "../utils/groupFiles";
+
+/** Fade of the upload indicator and mask once the batch is done. */
+const OUTRO_MS = 300;
 
 type AlbumContentProps = {
   showUploader: boolean;
@@ -18,120 +32,194 @@ type AlbumContentProps = {
   isLoadingThumbnails: boolean;
   downloadProgress: number;
   thumbnailGroups: ThumbnailGroup[];
-  uploadService: UploadService;
+  view: AlbumView;
+  onChangeView: (view: AlbumView) => void;
+  onRenameBatch: (batchId: string, name: string) => void;
 
   // selection
   selectedImages: string[];
   isSelected: (imageId: string) => boolean;
+  /** Whether every sidecar (RAW) of the tile is selected. */
+  areSidecarsSelected: (imageId: string) => boolean;
+  /** (De)selects the tile's sidecars, leaving the photo's own selection alone. */
+  onToggleSidecars: (imageId: string) => void;
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
   onOpen: (imageId: string) => void;
-  onDownloadAll: (files: string[]) => void;
+  onDownloadAll: () => void;
   onUploadStarted: () => void;
   onUploadFinished: () => void;
-  onAddThumbnail: (thumbnail: {
-    date: string;
-    id: string;
-    name: string;
-    thumbnail: string | undefined;
-    isVideo: boolean;
-  }) => void;
+  /** A file finished uploading; its thumbnail is known before metadata lists it. */
+  onUploaded: (uploaded: Uploaded) => void;
 };
 
 export function AlbumContent(props: AlbumContentProps) {
-  const [maskHeight, setMaskHeight] = useState(0);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  // Tiles per row, once the user has pinched the grid; `null` is the CSS auto
+  // layout. The scroll position that keeps the pinched tile in place is applied
+  // after the grid has been relaid with the new count.
+  const [columns, setColumns] = useState<number | null>(null);
+  const pendingScrollTop = useRef<number | null>(null);
+  const onPinchCommit = useCallback((next: number, scrollTop: number) => {
+    pendingScrollTop.current = scrollTop;
+    // Called from an animation frame, where React would otherwise render in a
+    // later task and the browser could paint the plain grid in between.
+    flushSync(() => setColumns(next));
+  }, []);
+  useLayoutEffect(() => {
+    if (pendingScrollTop.current === null) return;
+    window.scrollTo({ top: pendingScrollTop.current, behavior: "auto" });
+    pendingScrollTop.current = null;
+  }, [columns]);
+  const pinch = useGridPinch({
+    enabled: props.thumbnailGroups.length > 0,
+    columns,
+    onCommit: onPinchCommit,
+    onOpen: props.onOpen,
+  });
+  // Where the toolbar is the wide shelf, the first group's header shares its
+  // row (rendered into this slot); otherwise it heads its own band.
+  const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const ref = useRef<HTMLInputElement>(null);
-  const { metadata, refreshMetadata, key, expiresAt } = useAlbumContext();
-  const [timeLeft, setTimeLeft] = useState(() => formatTimeLeft(expiresAt));
-
-  useEffect(() => {
-    setTimeLeft(formatTimeLeft(expiresAt));
-    if (expiresAt === null) return;
-    const id = setInterval(() => setTimeLeft(formatTimeLeft(expiresAt)), 60_000);
-    return () => clearInterval(id);
-  }, [expiresAt]);
-
-  function setProgress(percentage: number) {
-    const height = 445 * (percentage / 100);
-    setMaskHeight(height);
+  const { metadata, refreshMetadata, key, isEncrypted } = useAlbumContext();
+  const run = useUploadRun({
+    albumId: metadata?.albumId,
+    key,
+    isUploading: props.isUploading,
+    onUploadStarted: props.onUploadStarted,
+    onUploadFinished: props.onUploadFinished,
+    onUploaded: props.onUploaded,
+    refreshMetadata,
+  });
+  const { phase, failedFiles, newFileIds } = run;
+  function uploadImages(files: File[]) {
+    run.upload(files).catch((e) => console.error(e));
   }
-
-  async function uploadImages(files: File[]) {
-    if (!metadata) {
-      toast.error("Album is still loading, please try again");
-      return;
-    }
-    props.onUploadStarted();
-    try {
-      const results = upload({
-        uploadService: props.uploadService,
-        files,
-        key,
-        metadata,
-      });
-
-      for await (const result of results) {
-        if (result.result === "progress") {
-          setProgress(result.progress);
-        } else {
-          if (result.thumbnail !== undefined) {
-            props.onAddThumbnail(result.thumbnail);
-          }
-        }
-      }
-      refreshMetadata();
-    } catch (e) {
-      console.error(e);
-      toast.error("Upload failed");
-    } finally {
-      props.onUploadFinished();
-      setMaskHeight(0);
-    }
+  // A group that receives freshly uploaded tiles opens so the pulse is visible.
+  useEffect(() => {
+    if (newFileIds.length === 0) return;
+    const receiving = props.thumbnailGroups
+      .filter((group) => group.thumbnails.some((thumb) => newFileIds.includes(thumb.id)))
+      .map((group) => group.key);
+    if (!receiving.some((key) => collapsedGroups.has(key))) return;
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      for (const key of receiving) next.delete(key);
+      return next;
+    });
+  }, [newFileIds, props.thumbnailGroups]);
+  function renameHandler(batchId: string | undefined) {
+    if (batchId === undefined) return undefined;
+    return (name: string) => props.onRenameBatch(batchId, name);
+  }
+  function toggleCollapsed(groupKey: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
   }
   function openFilePicker() {
-    if (!ref.current) return;
-    ref.current.click();
+    ref.current?.click();
   }
-  function getAllId(): string[] {
-    return props.thumbnailGroups.flatMap((group) =>
-      group.thumbnails.map((file) => file.id),
-    );
-  }
+  const hasFailedFiles = failedFiles.length > 0;
+  let cloudText = "Drop photos here";
+  if (props.isUploading) cloudText = "Preparing your photos";
+  else if (hasFailedFiles)
+    cloudText = `${failedFiles.length} of your files didn't upload`;
   return (
     <Panel variant={0} zIndex={1}>
-      {timeLeft && (
-        <RemainingTimeContainer>
-          <PushDown />
-          <RemainingTime>{timeLeft}</RemainingTime>
-        </RemainingTimeContainer>
-      )}
       {props.thumbnailGroups.length > 0 && (
-        <Menu
-          onDownloadAll={() => props.onDownloadAll(getAllId())}
-          onAddPhoto={openFilePicker}
-          isBusy={props.isUploading || props.isDownloading}
-        />
+        <SunAnchor aria-hidden="true">
+          <PanelSun />
+        </SunAnchor>
       )}
       <DragNdrop
         onDroppedFiles={(files) => {
-          if (files != null) {
-            const fileArr = Array.from(files);
-            uploadImages(fileArr).catch((e) => console.error(e));
-          }
+          if (files != null) uploadImages(Array.from(files));
         }}
       >
-        <AlbumSections>
+        {/* Drop hero / upload indicator / retry notice, before the toolbar so the
+            first group's band still overlaps the toolbar shelf, not this. */}
+        <CloudSlot>
+          <CloudContainer
+            placement={props.showUploader ? "floating" : "inline"}
+            isVisible={props.showUploader || hasFailedFiles}
+            isFadingOut={phase === "outro"}
+            onClick={openFilePicker}
+          >
+            <StyledUpload
+              progress={run.shownPercent}
+              active={phase !== "idle"}
+              encrypted={isEncrypted}
+            />
+            {run.bytes ? (
+              <UploadStats>
+                <Percent>{run.shownPercent}%</Percent>
+                <Bytes>{formatBytesPair(run.bytes.uploaded, run.bytes.total)}</Bytes>
+              </UploadStats>
+            ) : (
+              <Text>
+                {cloudText}
+                {!props.isUploading && !hasFailedFiles && (
+                  <TextHint>or click to browse</TextHint>
+                )}
+              </Text>
+            )}
+            {phase === "uploading" && (
+              <UploadAction
+                onClick={(e) => {
+                  e.stopPropagation();
+                  run.cancel();
+                }}
+              >
+                Cancel upload
+              </UploadAction>
+            )}
+            {phase === "idle" && hasFailedFiles && (
+              <UploadAction
+                onClick={(e) => {
+                  e.stopPropagation();
+                  run.retryFailed().catch((e) => console.error(e));
+                }}
+              >
+                Retry failed uploads ({failedFiles.length})
+              </UploadAction>
+            )}
+          </CloudContainer>
+        </CloudSlot>
+        {props.thumbnailGroups.length > 0 && (
+          <AlbumToolbar
+            headerSlotRef={setHeaderSlot}
+            onDownloadAll={props.onDownloadAll}
+            onAddPhoto={openFilePicker}
+            isBusy={props.isUploading || props.isDownloading}
+            view={props.view}
+            onChangeView={props.onChangeView}
+          />
+        )}
+        <AlbumSections ref={pinch.ref} {...pinch.handlers}>
+          <PinchOverlay ref={pinch.overlayRef} aria-hidden="true" />
           {props.thumbnailGroups.map((group, i) => (
             <AlbumSection
-              key={i}
+              key={group.key}
               group={group}
               index={i}
-              isUploading={props.isUploading}
+              isCollapsed={collapsedGroups.has(group.key)}
+              onToggleCollapsed={() => toggleCollapsed(group.key)}
+              onRename={renameHandler(group.batchId)}
+              headerSlot={i === 0 && toolbarInline ? headerSlot : null}
+              newFileIds={newFileIds}
               selectedImages={props.selectedImages}
               isSelected={props.isSelected}
+              areSidecarsSelected={props.areSidecarsSelected}
+              onToggleSidecars={props.onToggleSidecars}
               onSelect={props.onSelect}
               onDeSelect={props.onDeSelect}
               onOpen={props.onOpen}
+              columns={columns}
             />
           ))}
           {props.isLoadingThumbnails && (
@@ -140,7 +228,7 @@ export function AlbumContent(props: AlbumContentProps) {
             </LoadingThumbnails>
           )}
         </AlbumSections>
-        <UploadMask show={props.isUploading} />
+        <UploadMask show={phase === "uploading" || phase === "done"} />
         <DownloadMask show={props.isDownloading}>
           <DownloadText>Preparing your files</DownloadText>
           {props.downloadProgress > 0 && (
@@ -148,20 +236,17 @@ export function AlbumContent(props: AlbumContentProps) {
           )}
         </DownloadMask>
         <UploadSection isEmpty={props.thumbnailGroups.length > 0}>
-          <CloudContainer isVisible={props.showUploader} onClick={openFilePicker}>
-            <StyledUpload height={maskHeight} />
-            <Text>Drop your photos here to upload</Text>
-          </CloudContainer>
           <input
             type="file"
             style={{ display: "none" }}
             ref={ref}
             multiple
             onChange={(e) => {
-              if (e.target.files != null) {
-                const array = Array.from(e.target.files);
-                uploadImages(array).catch((e) => console.error(e));
-              }
+              if (e.target.files == null) return;
+              const picked = Array.from(e.target.files);
+              // Reset so picking the same file again (to resume it) fires onChange.
+              e.target.value = "";
+              uploadImages(picked);
             }}
           ></input>
         </UploadSection>
@@ -170,39 +255,30 @@ export function AlbumContent(props: AlbumContentProps) {
   );
 }
 
-async function* upload(params: {
-  uploadService: UploadService;
-  files: File[];
-  key: string;
-  metadata: { albumId: string };
-}) {
-  const arrLength = params.files.length;
-  const totalSize = params.files.reduce((acc, file) => file.size + acc, 0);
-  let currentSize = 0;
-  for (let i = 0; i < arrLength; ++i) {
-    const uploadData = params.uploadService.upload(params.files[i], {
-      albumId: params.metadata.albumId,
-      key: params.key,
-    });
-    for await (const response of uploadData) {
-      if (response.result === "progress") {
-        currentSize += response.bytes;
-        yield { result: "progress", progress: (currentSize / totalSize) * 100 };
-      } else {
-        yield {
-          thumbnail: {
-            result: "thumbnail",
-            thumbnail: response.thumbnail,
-            id: response.fileId,
-            name: response.name,
-            date: response.date,
-            isVideo: response.isVideo,
-          },
-        };
-      }
-    }
-  }
-}
+/**
+ * Cancel / retry, part of the cloud block right under the stats so it can
+ * never collide with the indicator. Same pill as the toolbar buttons.
+ */
+const UploadAction = styled("button", {
+  marginTop: "1rem",
+  display: "flex",
+  alignItems: "center",
+  background: "#0e0e0e",
+  color: "#fff",
+  border: "solid 2px #333333",
+  borderRadius: "1.5rem",
+  height: "2.5rem",
+  padding: "0.5rem 1.2rem",
+  fontFamily: "Open Sans",
+  fontSize: "0.7rem",
+  fontWeight: "bold",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  ...pressable,
+  "&:hover": {
+    borderColor: "#8B8B8B",
+  },
+});
 
 const UploadSection = styled("div", {
   flex: 1,
@@ -221,9 +297,20 @@ const UploadSection = styled("div", {
 });
 
 const AlbumSections = styled("div", {
-  backgroundColor: "rgba(51, 51, 51,0.2)",
   display: "flex",
   flexDirection: "column",
+  // Two fingers pinch the grid (useGridPinch); one still scrolls the page.
+  touchAction: "pan-y",
+});
+
+/** Darkens the album under the tile growing to full screen; opacity is driven by the pinch. */
+const PinchOverlay = styled("div", {
+  position: "fixed",
+  inset: 0,
+  background: "#000",
+  opacity: 0,
+  pointerEvents: "none",
+  zIndex: 5,
 });
 
 const LoadingThumbnails = styled("div", {
@@ -242,13 +329,88 @@ const Spinner = styled("div", {
   animation: "spin 1s linear infinite",
 });
 
+/** Centres the cloud block; the floating variant takes its horizontal position from here. */
+/**
+ * The lower part of the header's sun (`Header`): the disc and its glow set
+ * behind whatever the panel starts with — the sheet handle, the toolbar shelf
+ * and water, or the first group's band — all of which paint above it. Without
+ * it the disc would be cut flat at the header's edge. It ends with the toolbar
+ * row (the section bodies below are painted under it, so the glow must not
+ * reach them); an empty album has no toolbar and lets the glow fade out.
+ */
+const SunAnchor = styled("div", {
+  position: "relative",
+  width: "100%",
+  height: 0,
+});
+const PanelSun = styled("div", {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 0,
+  pointerEvents: "none",
+  "@toolbarInline": {
+    height: TOOLBAR_HEIGHT,
+    backgroundImage: sunBackground("transparent", SUN_X.inline, SUN_CENTER_BELOW_HEADER),
+  },
+  "@toolbarStacked": {
+    height: `calc(${SHEET_BAR_HEIGHT} * 2)`,
+    backgroundImage: sunBackground("transparent", SUN_X.stacked, SUN_CENTER_BELOW_HEADER),
+  },
+});
+
+const CloudSlot = styled("div", {
+  display: "flex",
+  justifyContent: "center",
+  width: "100%",
+});
+
+// The container is the click target (see CloudContainer); the cloud answers.
+const StyledUpload = styled(Cloud, {
+  width: "12rem",
+  height: "12rem",
+  color: "#333333",
+  cursor: "pointer",
+  transition: "color 300ms, transform 0.15s ease",
+  [`&:hover ${DropHint}`]: {
+    strokeOpacity: 0.55,
+  },
+  "&:hover": {
+    color: "#3d3d3d",
+  },
+  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+});
+
 const CloudContainer = styled("div", {
   flexDirection: "column",
   alignItems: "center",
-  position: "absolute",
-  top: "18rem",
-  transition: "display 0.3s",
+  ...pressableNoScale,
+  [`&:hover ${StyledUpload}`]: { color: "#3d3d3d", transform: "scale(1.03)" },
+  [`&:hover ${DropHint}`]: { strokeOpacity: 0.55 },
+  [`&:active ${StyledUpload}`]: { transform: "scale(0.98)" },
+  "&:focus-visible": { outline: "none" },
+  [`&:focus-visible ${StyledUpload}`]: { color: "#3d3d3d" },
+  transition: `opacity ${OUTRO_MS}ms ease-out`,
+  "@media (prefers-reduced-motion: reduce)": {
+    transition: "none",
+  },
   variants: {
+    placement: {
+      // Hero of an empty album, and the progress indicator over the dimmed album.
+      floating: {
+        position: "absolute",
+        top: "18rem",
+        // Above the upload mask, which comes later in the DOM.
+        zIndex: 2,
+      },
+      // After failures in a filled album: in flow above the toolbar, about
+      // where the floating indicator was.
+      inline: {
+        position: "static",
+        padding: "3rem 1rem 1.5rem",
+      },
+    },
     isVisible: {
       true: {
         display: "flex",
@@ -257,26 +419,54 @@ const CloudContainer = styled("div", {
         display: "none",
       },
     },
+    isFadingOut: {
+      true: {
+        opacity: 0,
+        pointerEvents: "none",
+      },
+      false: {
+        opacity: 1,
+      },
+    },
   },
 });
 
 const Text = styled("div", {
   textAlign: "center",
-  width: "12rem",
+  width: "14rem",
+  fontFamily: "Open Sans",
   fontSize: "1rem",
-  marginTop: "0.5rem",
+  marginTop: "0.75rem",
   color: "#DBDCD9",
 });
 
-const StyledUpload = styled(Cloud, {
-  width: "12rem",
-  height: "12rem",
-  color: "#333333",
-  cursor: "pointer",
-  transition: "color 300ms",
-  "&:hover": {
-    color: "#444444",
-  },
+const TextHint = styled("div", {
+  fontSize: "0.8rem",
+  color: "#8B8B8B",
+  marginTop: "0.15rem",
+});
+
+const UploadStats = styled("div", {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  marginTop: "0.75rem",
+  fontFamily: "Open Sans",
+  fontVariantNumeric: "tabular-nums",
+});
+
+const Percent = styled("div", {
+  fontSize: "1.6rem",
+  fontWeight: 600,
+  lineHeight: 1.1,
+  color: "#F2F2F0",
+});
+
+const Bytes = styled("div", {
+  fontSize: "0.8rem",
+  color: "#8B8B8B",
+  marginTop: "0.25rem",
+  whiteSpace: "nowrap",
 });
 
 const UploadMask = styled("div", {
@@ -285,13 +475,18 @@ const UploadMask = styled("div", {
   width: "100%",
   height: "100%",
   backgroundColor: "rgba(0, 0, 0,0.5)",
+  transition: `opacity ${OUTRO_MS}ms ease-out`,
+  "@media (prefers-reduced-motion: reduce)": {
+    transition: "none",
+  },
   variants: {
     show: {
       true: {
-        display: "flex",
+        opacity: 1,
       },
       false: {
-        display: "none",
+        opacity: 0,
+        pointerEvents: "none",
       },
     },
   },
@@ -325,17 +520,4 @@ const DownloadText = styled("div", {});
 const DownloadPercent = styled("div", {
   fontSize: "1.5rem",
   color: "#DBDCD9",
-});
-const RemainingTimeContainer = styled("div", {
-  display: "flex",
-  flexDirection: "row",
-});
-const RemainingTime = styled("div", {
-  display: "flex",
-  alignItems: "center",
-  paddingRight: "2rem",
-  color: "#8B8B8B",
-  fontSize: "0.8rem",
-  fontWeight: "bold",
-  whiteSpace: "nowrap",
 });

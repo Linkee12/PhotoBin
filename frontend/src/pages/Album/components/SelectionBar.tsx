@@ -1,18 +1,21 @@
 import { styled } from "../../../stitches.config";
+import { pressable } from "../../../pressable";
 import Cloud from "@assets/images/icons/cloud.svg?react";
 import SimpleCloud from "@assets/images/icons/cloud2.svg?react";
 import Trash from "@assets/images/icons/trash.svg?react";
 import UnCheckAll from "@assets/images/icons/unCheckAll.svg?react";
-export default function Toolbar(props: {
-  selectedImages: string[];
+/** The bottom bar of the selection: delete, download and clear the selected files. */
+export function SelectionBar(props: {
+  selectedCount: number;
   isBusy: boolean;
   onDeleteSelected: () => void;
   onUncheckSelected: () => void;
   onDownloadSelected: () => void;
 }) {
   return (
-    <ToolBar isVisible={props.selectedImages.length > 0}>
+    <ToolBar isVisible={props.selectedCount > 0}>
       <Button
+        title="Delete selected"
         onClick={() => {
           props.onDeleteSelected();
         }}
@@ -25,7 +28,7 @@ export default function Toolbar(props: {
       <Button disabled title="Save to remote storage (coming soon)">
         <ToolbarIcons as={Cloud} />
       </Button>
-      {props.selectedImages.length} item(s) selected
+      {props.selectedCount} item(s) selected
       <Button>
         <ToolbarIcons as={UnCheckAll} onClick={() => props.onUncheckSelected()} />
       </Button>
@@ -36,9 +39,6 @@ export default function Toolbar(props: {
 const ToolbarIcons = styled("svg", {
   height: "1.5rem",
   width: "2rem",
-  "&:hover": {
-    color: "#fff",
-  },
 });
 const ToolBar = styled("div", {
   width: "330px",
@@ -65,22 +65,15 @@ const ToolBar = styled("div", {
   },
 });
 const Button = styled("button", {
-  cursor: "pointer",
+  ...pressable,
   display: "flex",
   alignItems: "center",
   width: "2rem",
   height: "2rem",
   size: "2rem",
   color: "#9A9A9A",
-  "&:hover": {
+  "&:hover:not(:disabled)": {
     color: "#fff",
-  },
-  "&:disabled": {
-    cursor: "not-allowed",
-    opacity: 0.4,
-  },
-  "&:disabled:hover": {
-    color: "#9A9A9A",
   },
   fontSize: "2rem",
   background: "none",

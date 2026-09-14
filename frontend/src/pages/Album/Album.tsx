@@ -1,137 +1,145 @@
 import { styled } from "../../stitches.config";
-import { useEffect, useState } from "react";
-import { CanvasService } from "./services/CanvasService";
-import { UploadService } from "./services/UploadService";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useParams } from "react-router";
-import Toolbar from "./components/Toolbar";
+import { toast } from "react-toastify";
 import { client } from "../../cuple";
-import { ImageQueryService } from "./services/ImageQueryService";
+import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
-import { useAlbumContext } from "./hooks/useAlbumContext";
-import { DownloadService } from "./services/DownloadService";
-import { CryptoService } from "./services/CryptoService";
-import { groupThumbnailsByDate } from "../../utils/groupThumbnailsByDate";
-import { Metadata } from "../../../../backend/src/services/MetadataService";
 import { AlbumContent } from "./components/AlbumContent";
-import { toast } from "react-toastify";
+import { useAlbumContext } from "./hooks/useAlbumContext";
+import { useSelection } from "./hooks/useSelection";
+import { useThumbnails } from "./hooks/useThumbnails";
+import { ThumbnailVisibilityProvider } from "./hooks/useThumbnailVisibility";
+import { downloadService, uploadService } from "./services";
+import {
+  ALBUM_VIEWS,
+  AlbumView,
+  DEFAULT_ALBUM_VIEW,
+  groupFiles,
+} from "./utils/groupFiles";
 
-const imageResizeService = new CanvasService();
-const cryptoService = new CryptoService();
-const uploadService = new UploadService(imageResizeService, cryptoService);
-const imageQueryService = new ImageQueryService(cryptoService);
-const downloadService = new DownloadService(imageQueryService);
+const VIEW_STORAGE_KEY = "photobin:albumView";
+/** Tiles requested as soon as the album opens, before the grid is laid out. */
+const EAGER_THUMBNAILS = 12;
 
-export type Thumbnail = {
-  thumbnail: string | undefined;
-  id: string;
-  name: string;
-  isVideo: boolean;
-};
-export type ThumbnailGroup = {
-  date: string;
-  thumbnails: Thumbnail[];
-};
+function readStoredView(): AlbumView {
+  try {
+    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
+    return ALBUM_VIEWS.find((view) => view === stored) ?? DEFAULT_ALBUM_VIEW;
+  } catch {
+    return DEFAULT_ALBUM_VIEW;
+  }
+}
+
+function storeView(view: AlbumView) {
+  try {
+    localStorage.setItem(VIEW_STORAGE_KEY, view);
+  } catch {
+    // Persisting the view is a convenience; ignore storage errors.
+  }
+}
 
 export default function Album() {
-  const albumContext = useAlbumContext();
-  const { metadata, key, refreshMetadata, decodedValues } = albumContext;
-  const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
+  const { metadata, key, refreshMetadata, decodedValues } = useAlbumContext();
   const { albumId } = useParams();
-  const [title, setTitle] = useState("");
-  const [thumbnails, setThumbnails] = useState<ThumbnailGroup[]>([]);
-  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const [showOrigin, setShowOrigin] = useState(false);
+  const [title, setTitle] = useState("");
+  const [view, setView] = useState<AlbumView>(readStoredView);
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const [emptyAlbum, setEmptyAlbum] = useState(false);
-  const [isLoadingThumbnails, setIsLoadingThumbnails] = useState(false);
-  const showUploader = (thumbnails.length === 0 && emptyAlbum) || isUploading;
+  const files = useMemo(() => metadata?.files ?? [], [metadata]);
+
+  // Thumbnails are loaded (or announced by an upload) per file; the grouped
+  // view is derived from metadata + that map, so switching views is free.
+  const thumbnails = useThumbnails({ albumId, key, files });
+  const thumbnailGroups = useMemo(
+    () =>
+      groupFiles({
+        files,
+        decodedFiles: decodedValues.files,
+        decodedBatches: decodedValues.batches,
+        thumbnails: thumbnails.thumbnailUrls,
+        view,
+      }),
+    [files, decodedValues, thumbnails.thumbnailUrls, view],
+  );
+  const tileIds = useMemo(
+    () => thumbnailGroups.flatMap((group) => group.thumbnails.map((tile) => tile.id)),
+    [thumbnailGroups],
+  );
+  const selection = useSelection(thumbnailGroups);
+  const isEmptyAlbum = thumbnailGroups.length === 0;
+  const isLoadingThumbnails = files.length > 0 && isEmptyAlbum;
+  const showUploader = (metadata !== undefined && files.length === 0) || isUploading;
 
   useEffect(() => {
-    let cancelled = false;
-    if (metadata !== undefined && albumId !== undefined) {
-      setTitle(decodedValues.albumName);
-      setEmptyAlbum(metadata?.files.length === 0);
-      const oldThumbnailIds = new Set();
-      thumbnails.forEach((thumb) =>
-        thumb.thumbnails.forEach((t) => oldThumbnailIds.add(t.id)),
-      );
+    setTitle(decodedValues.albumName);
+  }, [decodedValues.albumName]);
 
-      const newThumbnails = metadata.files.filter(
-        (file) => !oldThumbnailIds.has(file.fileId),
-      );
-      const loadThumbnails = async () => {
-        for await (const thumb of getThumbnails(newThumbnails)) {
-          if (cancelled) break;
-          setThumbnails((prev) => {
-            const grouped = groupThumbnailsByDate([thumb]);
-            return mergeThumbnailGroups(prev, grouped);
-          });
-        }
-      };
+  // The first tiles of a freshly opened album are on screen in any layout; ask
+  // for them as soon as the file list is known instead of after the whole
+  // grid has been laid out and observed. Everything else (including later
+  // metadata refreshes) waits for the IntersectionObserver.
+  const eagerRequested = useRef(false);
+  useLayoutEffect(() => {
+    if (eagerRequested.current || files.length === 0) return;
+    eagerRequested.current = true;
+    const eager = thumbnailGroups
+      .flatMap((group) => group.thumbnails)
+      .filter((thumb) => thumb.isLoading)
+      .slice(0, EAGER_THUMBNAILS);
+    for (const thumb of eager) thumbnails.loader.request(thumb.id);
+  }, [files, thumbnails.loader]);
 
-      loadThumbnails();
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [metadata]);
+  function changeView(next: AlbumView) {
+    setView(next);
+    storeView(next);
+  }
 
   async function deleteImages(ids: string[]) {
     if (albumId === undefined) return;
-    const responses = await client.deleteImages.delete({
-      body: {
-        albumId: albumId,
-        ids: ids,
-      },
-    });
-
-    if (responses.result !== "success") {
+    const response = await client.deleteImages.delete({ body: { albumId, ids } });
+    if (response.result !== "success") {
       toast.error("Failed to delete");
       return;
     }
-
-    setThumbnails((prev) => {
-      const next = prev
-        .map((group) => ({
-          ...group,
-          // eslint-disable-next-line sonarjs/no-nested-functions
-          thumbnails: group.thumbnails.filter((element) => !ids.includes(element.id)),
-        }))
-        .filter((group) => group.thumbnails.length > 0);
-      if (next.length === 0) setEmptyAlbum(true);
-      return next;
-    });
-    setSelectedImages((prev) => prev.filter((imgId) => !ids.includes(imgId)));
+    thumbnails.dropThumbnails(ids);
+    selection.deselect(ids);
     refreshMetadata();
   }
 
-  function onDeleteSelected() {
-    const count = selectedImages.length;
-    const message =
-      count === 1
-        ? "Delete this photo? This cannot be undone."
-        : `Delete ${count} photos? This cannot be undone.`;
-    if (!window.confirm(message)) return;
-    deleteImages(selectedImages).catch((reason) => {
+  /** Confirms, then deletes `ids` exactly as given. */
+  function confirmAndDelete(ids: string[]) {
+    if (!window.confirm(selection.deleteQuestion(ids))) return;
+    deleteImages(ids).catch((reason) => {
       console.error(reason);
       toast.error("Failed to delete");
     });
   }
 
   async function runDownload(imageIds: string[]) {
+    if (metadata === undefined) return;
     setIsDownloading(true);
     setDownloadProgress(0);
     try {
-      if (metadata) {
-        await downloadService.download({
-          albumContext,
-          selectedImages: imageIds,
-          onProgress: setDownloadProgress,
-        });
-      }
+      await downloadService.download({
+        albumId: metadata.albumId,
+        albumName: decodedValues.albumName,
+        files: metadata.files,
+        key,
+        selectedImages: imageIds,
+        onProgress: setDownloadProgress,
+      });
     } catch (e) {
       console.error(e);
       toast.error("Download failed");
@@ -141,150 +149,107 @@ export default function Album() {
     }
   }
 
-  function onDownloadSelected() {
-    runDownload(selectedImages).catch((e) => console.error(e));
-  }
-  function onDownloadAll(imageIds: string[]) {
-    runDownload(imageIds).catch((e) => console.error(e));
-  }
+  const onOpen = useCallback((id: string) => {
+    setFullscreenImage({ fileId: id });
+    setShowOrigin(true);
+  }, []);
 
-  function onUncheckSelected() {
-    setSelectedImages([]);
-  }
-  function onSelectAll() {
-    if (metadata?.files) {
-      setSelectedImages(metadata?.files.map((file) => file.fileId));
-    }
-  }
-
-  async function* getThumbnails(thumbnails: Metadata["files"]) {
-    if (albumId === undefined) return;
-    for (const file of thumbnails) {
-      const result = await imageQueryService.getImg(
-        albumId,
-        file,
-        key,
-        file.thumbnail !== undefined ? "thumbnail" : "unsupportedFile",
-      );
-      if (result === undefined) return;
-      yield {
-        thumbnail: result.img,
-        id: result.id,
-        date: result.date,
-        name: result.fileName,
-        isVideo: !!file.originalVideo,
-      };
-    }
-  }
-  function mergeThumbnailGroups(prev: ThumbnailGroup[], newGroups: ThumbnailGroup[]) {
-    const merged = [...prev];
-
-    for (const newGroup of newGroups) {
-      const existingGroup = merged.find((g) => g.date === newGroup.date);
-      if (existingGroup) {
-        existingGroup.thumbnails = [...existingGroup.thumbnails, ...newGroup.thumbnails];
-      } else {
-        merged.push(newGroup);
-      }
-    }
-
-    return merged;
-  }
-  function nextOriginImgId(direction: number) {
-    const ids: string[] = [];
-    thumbnails.forEach((group) => group.thumbnails.forEach((i) => ids.push(i.id)));
-    const currentIdx = ids.findIndex((id) => id === fullscreenImage?.fileId);
-
-    let nextIdx;
-    if (currentIdx + direction > ids.length - 1) {
-      nextIdx = 0;
-    } else if (currentIdx + direction < 0) {
-      nextIdx = ids.length - 1;
-    } else {
-      nextIdx = currentIdx + direction;
-    }
-    setFullscreenImage({ fileId: ids[nextIdx] });
+  /** Steps the viewer to the next/previous tile, wrapping around; sidecars have no tile. */
+  function showNeighbour(direction: number) {
+    const currentIdx = tileIds.findIndex((id) => id === fullscreenImage?.fileId);
+    const nextIdx = (currentIdx + direction + tileIds.length) % tileIds.length;
+    setFullscreenImage({ fileId: tileIds[nextIdx] });
   }
 
   function saveAlbumName() {
-    if (metadata !== undefined) {
-      uploadService.saveName(metadata.albumId, title, key);
-    }
+    if (metadata === undefined) return;
+    uploadService.saveName(metadata.albumId, title, key).catch((e) => {
+      console.error(e);
+      toast.error("Failed to rename the album");
+    });
   }
+  async function renameBatch(batchId: string, name: string) {
+    if (metadata === undefined) return;
+    try {
+      await uploadService.renameBatch(metadata.albumId, batchId, name, key);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to rename");
+    }
+    refreshMetadata();
+  }
+
+  const viewed = fullscreenImage && selection.index.tiles.get(fullscreenImage.fileId);
   return (
-    <Container isEmptyAlbum={thumbnails.length === 0}>
-      {fullscreenImage && (
-        <ViewOriginalModal
-          fileId={fullscreenImage.fileId}
-          visible={showOrigin}
-          thumbnails={thumbnails}
-          fileName={
-            thumbnails.map((thumbnailsGroup) =>
-              thumbnailsGroup.thumbnails.find(
-                (thumb) => thumb.id === fullscreenImage.fileId,
-              ),
-            )[0]?.name ?? ""
-          }
-          onShowChange={setShowOrigin}
-          onNext={(direction) => nextOriginImgId(direction)}
-          onDelete={() => deleteImages([fullscreenImage.fileId])}
+    <ThumbnailVisibilityProvider value={thumbnails.visibility}>
+      <Container isEmptyAlbum={isEmptyAlbum}>
+        {viewed && (
+          <ViewOriginalModal
+            fileId={viewed.id}
+            visible={showOrigin}
+            thumbnails={thumbnailGroups}
+            fileName={decodedValues.files[viewed.id]?.name ?? ""}
+            onShowChange={setShowOrigin}
+            onNext={showNeighbour}
+            // "Delete this photo and its attachments", not "delete the selection".
+            onDelete={() => deleteImages(selection.withSidecars([viewed.id]))}
+            isSelected={selection.isSelected(viewed.id)}
+            onToggleSelect={() => selection.toggle(viewed.id)}
+            sidecars={viewed.sidecars}
+            areSidecarsSelected={selection.areSidecarsSelected(viewed.id)}
+            onToggleSidecars={() => selection.toggleSidecars(viewed.id)}
+          />
+        )}
+        <Header
+          isEmptyAlbum={isEmptyAlbum}
+          title={title}
+          onChangeTitle={setTitle}
+          onSaveName={saveAlbumName}
+          onSelectAll={selection.selectAll}
+          onUnselectAll={selection.clear}
+          selectedAll={selection.selectedAll}
+          selectedSome={selection.selectedSome}
+          sidecarCount={selection.sidecarCount}
+          selectedSidecarCount={selection.selectedSidecarCount}
+          onToggleAllSidecars={selection.toggleAllSidecars}
         />
-      )}
-      <Header
-        isEmptyAlbum={thumbnails.length === 0}
-        title={title}
-        onChangeTitle={setTitle}
-        onSaveName={saveAlbumName}
-        onSelectAll={onSelectAll}
-        onUnselectAll={onUncheckSelected}
-        selectedAll={selectedImages.length === metadata?.files.length}
-      />
-      <AlbumContent
-        uploadService={uploadService}
-        showUploader={showUploader}
-        isUploading={isUploading}
-        isDownloading={isDownloading}
-        isLoadingThumbnails={isLoadingThumbnails && thumbnails.length === 0}
-        downloadProgress={downloadProgress}
-        onUploadStarted={() => setIsUploading(true)}
-        onUploadFinished={() => setIsUploading(false)}
-        onDownloadAll={(files: string[]) => onDownloadAll(files)}
-        thumbnailGroups={thumbnails}
-        onAddThumbnail={(result) => {
-          setThumbnails((thumbnails) => {
-            const group = thumbnails.find((g) => g.date === result.date);
-
-            if (!group) {
-              const newGroup = { date: result.date, thumbnails: [result] };
-              thumbnails.push(newGroup);
-              return thumbnails;
-            }
-
-            group.thumbnails.push(result);
-            return thumbnails;
-          });
-        }}
-        selectedImages={selectedImages}
-        isSelected={(id) => selectedImages.includes(id)}
-        onSelect={(id: string[]) => setSelectedImages([...selectedImages, ...id])}
-        onDeSelect={(id: string[]) => {
-          if (id) {
-            setSelectedImages(selectedImages.filter((imgId) => !id.includes(imgId)));
+        <AlbumContent
+          showUploader={showUploader}
+          isUploading={isUploading}
+          isDownloading={isDownloading}
+          isLoadingThumbnails={isLoadingThumbnails}
+          downloadProgress={downloadProgress}
+          onUploadStarted={() => setIsUploading(true)}
+          onUploadFinished={() => setIsUploading(false)}
+          // "Download all" takes every tile's sidecars along.
+          onDownloadAll={() => void runDownload(selection.withSidecars(tileIds))}
+          thumbnailGroups={thumbnailGroups}
+          view={view}
+          onChangeView={changeView}
+          onRenameBatch={renameBatch}
+          onUploaded={(uploaded) =>
+            thumbnails.setLoadedThumbnail(uploaded.fileId, {
+              url: uploaded.thumbnail,
+              iv: uploaded.thumbnailIv,
+            })
           }
-        }}
-        onOpen={(id) => {
-          setFullscreenImage({ fileId: id });
-          setShowOrigin(true);
-        }}
-      />
-      <Toolbar
-        isBusy={isDownloading || isUploading}
-        selectedImages={selectedImages}
-        onDeleteSelected={onDeleteSelected}
-        onUncheckSelected={onUncheckSelected}
-        onDownloadSelected={onDownloadSelected}
-      />
-    </Container>
+          selectedImages={selection.selectedImages}
+          isSelected={selection.isSelected}
+          areSidecarsSelected={selection.areSidecarsSelected}
+          onToggleSidecars={selection.toggleSidecars}
+          onSelect={selection.select}
+          onDeSelect={selection.deselect}
+          onOpen={onOpen}
+        />
+        <SelectionBar
+          isBusy={isDownloading || isUploading}
+          selectedCount={selection.selectedImages.length}
+          onDeleteSelected={() => confirmAndDelete(selection.selectedImages)}
+          onUncheckSelected={selection.clear}
+          onDownloadSelected={() => void runDownload(selection.selectedImages)}
+        />
+      </Container>
+    </ThumbnailVisibilityProvider>
   );
 }
 

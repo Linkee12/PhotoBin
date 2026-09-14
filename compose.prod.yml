@@ -1,0 +1,27 @@
+# Production stack: `make prod-install`, `make prod-start` (see README).
+# Ports and environment live in compose.prod.override.yml (gitignored, created
+# from compose.prod.override.yml.sample by `make prod-install`).
+name: photobin-prod
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    volumes:
+      # Album storage (metadata + encrypted parts). Back this directory up.
+      - ./data/albums:/app/albums
+    networks:
+      - photobin
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - photobin
+
+networks:
+  photobin:

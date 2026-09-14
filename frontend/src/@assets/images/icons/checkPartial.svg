@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Some selected: the ring of circle.svg with a dot inside -->
+<svg
+   width="7.0098996mm"
+   height="7.0099082mm"
+   viewBox="0 0 7.0098996 7.0099082"
+   version="1.1"
+   fill="currentcolor"
+   xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(-103.59059,-130.57809)">
+    <g style="fill:#fff;stroke:none" transform="matrix(0.01009025,0,0,0.01009025,104.51243,131.49994)">
+      <title>Partially selected</title>
+      <path d="M 256,8 C 119.033,8 8,119.033 8,256 8,392.967 119.033,504 256,504 392.967,504 504,392.967 504,256 504,119.033 392.967,8 256,8 Z m 0,48 c 110.532,0 200,89.451 200,200 0,110.532 -89.451,200 -200,200 C 145.468,456 56,366.549 56,256 56,145.468 145.451,56 256,56" />
+      <circle cx="256" cy="256" r="104" />
+    </g>
+  </g>
+</svg>

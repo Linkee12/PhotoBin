@@ -1,0 +1,19 @@
+# Serves the built SPA and forwards /api/* to the backend (the same /api
+# prefix the Vite dev server proxies). TLS is left to the reverse proxy in
+# front of this container; see README "Production".
+:80 {
+	encode zstd gzip
+
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy backend:3001
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server {
+			precompressed gzip
+		}
+	}
+}

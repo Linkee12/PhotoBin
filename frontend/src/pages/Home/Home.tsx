@@ -1,22 +1,57 @@
 /* eslint-disable promise/always-return */
 /* eslint-disable react/no-unescaped-entities */
 import { styled } from "../../stitches.config";
+import { pressable, pressableNoScale } from "../../pressable";
+import { ACCENT_COLOR } from "../../theme";
 import Header from "./components/Header";
-import Intro from "./components/Intro";
 import { useNavigate } from "react-router";
+import { useState } from "react";
 import { genKey } from "../../utils/key";
 import { Panel, PanelHeader, PushDown } from "../Album/components/Panel";
 
 export default function Home() {
   const navigate = useNavigate();
+  const [encrypt, setEncrypt] = useState(true);
+
+  function createAlbum() {
+    const albumId = crypto.randomUUID();
+    if (!encrypt) {
+      navigate(`/bin/${albumId}`);
+      return;
+    }
+    genKey()
+      .then((albumKey) => {
+        navigate(`/bin/${albumId}#${albumKey}`);
+      })
+      .catch((e) => {
+        console.error(e);
+      });
+  }
 
   return (
     <Container>
       <Header />
-      <IntroContainer>
-        <Intro />
-      </IntroContainer>
-      <PushDown style={{ height: "2.5em" }} />
+      <Start>
+        <Text css={{ "--color": "#808080" }}>
+          {encrypt ? "Start your E2E encrypted album" : "Start your unencrypted album"}
+        </Text>
+        <EncryptToggle>
+          <input
+            type="checkbox"
+            checked={encrypt}
+            onChange={(e) => setEncrypt(e.target.checked)}
+          />
+          Encrypt album (recommended)
+        </EncryptToggle>
+        <Button type="button" onClick={createAlbum}>
+          <Text as="span" css={{ "--weight": "bold", margin: "1em 0" }}>
+            NEW ALBUM
+          </Text>
+        </Button>
+      </Start>
+      {/* The panel's wave starts 3rem above its body: this leaves the same 3em
+          between the button and the wave as between the header and the text. */}
+      <PushDown style={{ height: "calc(2em + 3rem)" }} />
       <Panel variant={0} zIndex={0}>
         <PanelHeader>
           <PanelTitle>ABOUT</PanelTitle>
@@ -32,31 +67,17 @@ export default function Home() {
             doesn't send the key to the server because everything after "#" is ignored in
             an http request.
           </Text>
+          <Text>
+            You can also create an <b>unencrypted</b> album. Its photos are stored as-is,
+            so the server (and anyone with access to it) can read them. Only do this when
+            you don't need privacy from the server.
+          </Text>
           <Text css={{ "--size": "1.2em", "--weight": "bold" }}>
             Photobin is free and open-source!
           </Text>
         </P>
-        <PushDown style={{ height: "8em" }} />
+        <PushDown style={{ height: "2em" }} />
       </Panel>
-
-      <FloatingFooter>
-        <Text css={{ "--color": "#808080" }}>Start your E2E encrypted album</Text>
-        <Button
-          onClick={() => {
-            genKey()
-              .then((key) => {
-                const albumId = crypto.randomUUID();
-                const albumKey = key;
-                navigate(`/bin/${albumId}#${albumKey}`);
-              })
-              .catch((e) => {
-                console.error(e);
-              });
-          }}
-        >
-          <Text css={{ "--weight": "bold" }}>NEW ALBUM</Text>
-        </Button>
-      </FloatingFooter>
     </Container>
   );
 }
@@ -74,44 +95,47 @@ const Container = styled("div", {
   fontFamily: "Open Sans",
   fontSize: "clamp(14px, 1.5vw, 18px)",
 });
-const IntroContainer = styled("div", {
-  minHeight: "6em",
+// The call to action, right under the header.
+const Start = styled("div", {
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
   margin: "1em",
+  minHeight: "6em",
 });
 
-const Button = styled("div", {
+const Button = styled("button", {
+  ...pressable,
   width: "min(80vw,25em)",
   fontWeight: "bold",
+  fontFamily: "inherit",
+  fontSize: "inherit",
+  color: "inherit",
+  border: "none",
+  padding: 0,
   display: "flex",
   justifyContent: "center",
   background:
     "radial-gradient(circle 150px at 50% 180%, #ffa021 40%, #9d6e2f  40%, #ffffff 300%)",
-  cursor: "pointer",
   borderRadius: "40px",
-  "&:hover": {
-    scale: 1.02,
-    transitionDuration: 1,
-  },
+  "&:hover": { transform: "scale(1.02)", filter: "brightness(1.08)" },
+  "&:active:not(:disabled)": { transform: "scale(0.98)" },
 });
 
-const FloatingFooter = styled("div", {
-  position: "fixed",
-  bottom: 0,
-  left: 0,
-  right: 0,
+const EncryptToggle = styled("label", {
+  ...pressableNoScale,
   display: "flex",
-  width: "100vw",
-  justifyContent: "center",
-  flexDirection: "column",
   alignItems: "center",
-  flex: 1,
-  backgroundColor: "#333333",
-  borderRadius: "50vw 50vw 0 0 / 5vw 5vw 0 0",
-  paddingBottom: "1em",
-  height: "8em",
+  gap: "0.5em",
+  fontSize: "0.9em",
+  color: "#c0c0c0",
+  marginBottom: "0.75em",
+  "&:hover": { color: "#fff" },
+  "& input": {
+    accentColor: ACCENT_COLOR,
+    cursor: "pointer",
+    "&:focus-visible": { outline: `2px solid ${ACCENT_COLOR}`, outlineOffset: "2px" },
+  },
 });
 
 const Text = styled("p", {

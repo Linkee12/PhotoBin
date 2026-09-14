@@ -1,6 +1,7 @@
 import BirdUrl from "@assets/images/icons/bird.svg?no-inline";
 import GitUrl from "@assets/images/icons/git.svg?no-inline";
 import { styled } from "../../../stitches.config";
+import { pressable } from "../../../pressable";
 
 export default function Header() {
   return (
@@ -44,10 +45,15 @@ const BirdImg = styled("img", {
   objectFit: "cover",
 });
 const GitLink = styled("a", {
+  ...pressable,
+  display: "inline-block",
+  borderRadius: "8px",
+  opacity: 0.85,
+  "&:hover": { opacity: 1, transform: "scale(1.06)" },
   img: {
+    display: "block",
     height: "40px",
     objectFit: "cover",
-    cursor: "pointer",
   },
 });
 const Icon = styled("div", {
