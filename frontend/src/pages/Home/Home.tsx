@@ -12,10 +12,6 @@ export default function Home() {
   const navigate = useNavigate();
   const [encrypt, setEncrypt] = useState(true);
 
-  function createAlbum() {
-    navigate(encrypt ? "/new" : "/new?plain");
-  }
-
   return (
     <Container>
       <Header />
@@ -31,7 +27,10 @@ export default function Home() {
           />
           Encrypt album (recommended)
         </EncryptToggle>
-        <PrimaryButton type="button" onClick={createAlbum}>
+        <PrimaryButton
+          type="button"
+          onClick={() => navigate(encrypt ? "/new" : "/new?plain")}
+        >
           <Text as="span" css={{ "--weight": "bold", margin: "1em 0" }}>
             NEW ALBUM
           </Text>

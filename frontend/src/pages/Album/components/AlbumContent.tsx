@@ -4,6 +4,7 @@ import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { Spinner } from "../../../components/Spinner";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useGridPinch } from "../hooks/useGridPinch";
 import { useLongPressSelect } from "../hooks/useLongPressSelect";
@@ -367,15 +368,6 @@ const LoadingThumbnails = styled("div", {
   justifyContent: "center",
   alignItems: "center",
   padding: "4rem",
-});
-
-const Spinner = styled("div", {
-  width: "3rem",
-  height: "3rem",
-  border: "5px solid rgba(255, 255, 255, 0.2)",
-  borderTop: "5px solid #DBDCD9",
-  borderRadius: "50%",
-  animation: "spin 1s linear infinite",
 });
 
 /** Centres the cloud block; the floating variant takes its horizontal position from here. */

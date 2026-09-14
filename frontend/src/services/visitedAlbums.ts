@@ -1,3 +1,5 @@
+import { readItem, writeItem } from "../utils/storage";
+
 /**
  * The albums this browser has opened, for the "your albums" list on the home
  * page. One localStorage record keyed by albumId; `url` is the full album URL
@@ -31,7 +33,7 @@ function isEntry(value: unknown): value is Stored[string] {
 /** Malformed, missing or unreadable storage counts as empty. */
 function read(storage: Storage): Stored {
   try {
-    const parsed: unknown = JSON.parse(storage.getItem(VISITED_STORAGE_KEY) ?? "{}");
+    const parsed: unknown = JSON.parse(readItem(VISITED_STORAGE_KEY, storage) ?? "{}");
     if (typeof parsed !== "object" || parsed === null) return {};
     return Object.fromEntries(Object.entries(parsed).filter(([, v]) => isEntry(v)));
   } catch {
@@ -40,11 +42,7 @@ function read(storage: Storage): Stored {
 }
 
 function write(storage: Storage, stored: Stored) {
-  try {
-    storage.setItem(VISITED_STORAGE_KEY, JSON.stringify(stored));
-  } catch {
-    // Storage full or blocked: the list is a convenience, not a record.
-  }
+  writeItem(VISITED_STORAGE_KEY, JSON.stringify(stored), storage);
 }
 
 /** Most recently visited first; albums past their expiry are left out. */

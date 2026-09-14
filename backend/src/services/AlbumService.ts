@@ -83,14 +83,9 @@ export class AlbumService {
   }
   /** Creates the album directory and its default metadata; an existing album is left as is. */
   async createAlbum(albumId: string) {
-    const dir = this._safePath(albumId);
-    await fs.mkdir(dir, { recursive: true });
-    try {
-      await fs.access(this._safePath(albumId, METADATA_FILE));
-    } catch {
-      // `get` yields the default metadata for a missing file.
-      this._metadataService.save(albumId, this._metadataService.get(albumId));
-    }
+    await fs.mkdir(this._safePath(albumId), { recursive: true });
+    // `get` yields the existing metadata, or the default for a missing file.
+    this._metadataService.save(albumId, this._metadataService.get(albumId));
   }
   exists(albumId: string) {
     return this._checkDirectoryExists(this._safePath(albumId));

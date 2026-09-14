@@ -24,10 +24,10 @@ export function DeleteAlbumDialog(props: {
 
   return (
     <Dialog open={props.open} title="Delete this album?" onClose={props.onClose}>
-      <Text>
+      <p>
         Every photo in it is deleted for everyone you shared the link with. This cannot be
         undone.
-      </Text>
+      </p>
       {/* method="dialog": Enter in the input submits and closes; a disabled
           button blocks the implicit submission. */}
       <Form method="dialog" onSubmit={props.onConfirm}>
@@ -55,12 +55,6 @@ export function DeleteAlbumDialog(props: {
     </Dialog>
   );
 }
-
-const Text = styled("p", {
-  margin: 0,
-  color: "#c0c0c0",
-  lineHeight: 1.5,
-});
 
 const Form = styled("form", {
   display: "flex",

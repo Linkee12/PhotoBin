@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { toast } from "react-toastify";
 import { styled } from "../../stitches.config";
+import { Spinner } from "../../components/Spinner";
 import { pressableNoScale } from "../../pressable";
 import { ACCENT_COLOR } from "../../theme";
 import { client } from "../../cuple";
@@ -41,7 +42,7 @@ export default function New() {
         </>
       ) : (
         <>
-          <Spinner />
+          <Spinner css={{ color: ACCENT_COLOR }} />
           <Text>Creating your album…</Text>
         </>
       )}
@@ -65,16 +66,6 @@ const Page = styled("div", {
   justifyContent: "center",
   gap: "1.5rem",
   fontFamily: "Open Sans",
-});
-
-const Spinner = styled("div", {
-  width: "3rem",
-  height: "3rem",
-  border: "5px solid rgba(255, 255, 255, 0.2)",
-  borderTop: `5px solid ${ACCENT_COLOR}`,
-  borderRadius: "50%",
-  animation: "spin 1s linear infinite",
-  "@media (prefers-reduced-motion: reduce)": { animation: "none" },
 });
 
 const Text = styled("p", {

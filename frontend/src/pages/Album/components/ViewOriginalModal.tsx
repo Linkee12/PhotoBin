@@ -8,6 +8,7 @@ import Rotate from "@assets/images/icons/rotate.svg?react";
 import Check from "@assets/images/icons/check.svg?react";
 import Circle from "@assets/images/icons/circle.svg?react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Spinner } from "../../../components/Spinner";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { drawnSize, useZoomPan } from "../hooks/useZoomPan";
 import { useViewerMedia } from "../hooks/useViewerMedia";
@@ -404,7 +405,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
                 )}
                 {media.isLoadingVideo && (
                   <LoadingOverlay>
-                    <Spinner />
+                    <Spinner css={{ color: "#fff" }} />
                   </LoadingOverlay>
                 )}
               </ZoomLayer>
@@ -877,14 +878,6 @@ const NextButton = styled("button", {
   },
 });
 
-const Spinner = styled("div", {
-  width: "3rem",
-  height: "3rem",
-  border: "5px solid rgba(255, 255, 255, 0.3)",
-  borderTop: "5px solid white",
-  borderRadius: "50%",
-  animation: "spin 1s linear infinite",
-});
 const LoadingOverlay = styled("div", {
   position: "absolute",
   top: 0,

@@ -10,9 +10,9 @@ import {
 import { useNavigate, useParams } from "react-router";
 import { toast } from "react-toastify";
 import { client } from "../../cuple";
-import { Footer, FOOTER_HEIGHT } from "../../components/Footer";
 import { pressableNoScale } from "../../pressable";
 import { forgetVisitedAlbum } from "../../services/visitedAlbums";
+import { readItem, writeItem } from "../../utils/storage";
 import { DeleteAlbumDialog } from "./components/DeleteAlbumDialog";
 import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
@@ -35,20 +35,8 @@ const VIEW_STORAGE_KEY = "photobin:albumView";
 const EAGER_THUMBNAILS = 12;
 
 function readStoredView(): AlbumView {
-  try {
-    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
-    return ALBUM_VIEWS.find((view) => view === stored) ?? DEFAULT_ALBUM_VIEW;
-  } catch {
-    return DEFAULT_ALBUM_VIEW;
-  }
-}
-
-function storeView(view: AlbumView) {
-  try {
-    localStorage.setItem(VIEW_STORAGE_KEY, view);
-  } catch {
-    // Persisting the view is a convenience; ignore storage errors.
-  }
+  const stored = readItem(VIEW_STORAGE_KEY);
+  return ALBUM_VIEWS.find((view) => view === stored) ?? DEFAULT_ALBUM_VIEW;
 }
 
 export default function Album() {
@@ -110,7 +98,7 @@ export default function Album() {
 
   function changeView(next: AlbumView) {
     setView(next);
-    storeView(next);
+    writeItem(VIEW_STORAGE_KEY, next);
   }
 
   async function deleteImages(ids: string[]) {
@@ -317,6 +305,9 @@ export default function Album() {
   );
 }
 
+/** The footer's height; the page reserves it as bottom padding so the footer never covers content. */
+const FOOTER_HEIGHT = "4rem";
+
 const Container = styled("div", {
   width: "100%",
   minHeight: "100vh",
@@ -337,6 +328,18 @@ const Container = styled("div", {
       },
     },
   },
+});
+
+/** Sits at the very bottom of the page, even when the page is shorter than the viewport. */
+const Footer = styled("footer", {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  height: FOOTER_HEIGHT,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 });
 
 /** A quiet text link; the footer's only content. */

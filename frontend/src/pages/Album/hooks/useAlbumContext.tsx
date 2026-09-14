@@ -2,12 +2,14 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { client } from "../../../cuple";
-import { forgetVisitedAlbum } from "../../../services/visitedAlbums";
+import {
+  forgetVisitedAlbum,
+  rememberVisitedAlbum,
+} from "../../../services/visitedAlbums";
 import { cryptoService } from "../services";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { toast } from "react-toastify";
 import { DecodedBatches, DecodedFiles } from "../utils/groupFiles";
-import { rememberVisitedAlbum } from "../../../services/visitedAlbums";
 
 export type DecodedValues = {
   albumName: string;

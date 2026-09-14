@@ -16,9 +16,9 @@ import { formatTimeLeft } from "../../../utils/formatTimeLeft";
 
 /**
  * The albums this browser has opened, newest visit first. A card reopens
- * the album with a full navigation: the stored URL carries the key in its
- * hash, and only a real load re-runs the album context for it. The URL is
- * never shown.
+ * the album with `window.location.assign`: the stored URL is absolute
+ * (origin, path and the key in its hash, as the address bar had it), which
+ * the router's `navigate` does not take. The URL is never shown.
  */
 export default function VisitedAlbums() {
   const [albums, setAlbums] = useState(() => listVisitedAlbums());
