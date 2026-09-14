@@ -9,6 +9,8 @@ import { useGridPinch } from "../hooks/useGridPinch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { Uploaded, useUploadRun } from "../hooks/useUploadRun";
 import { ThumbnailGroup } from "../utils/groupFiles";
+import { readStoredColumns, storeColumns } from "../utils/columnsStore";
+import { clampColumns } from "../utils/pinchGrid";
 import { Panel } from "./Panel";
 import { pressable, pressableNoScale } from "../../../pressable";
 import {
@@ -56,27 +58,52 @@ type AlbumContentProps = {
 export function AlbumContent(props: AlbumContentProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   // Tiles per row, once the user has pinched the grid; `null` is the CSS auto
-  // layout. The scroll position that keeps the pinched tile in place is applied
-  // after the grid has been relaid with the new count.
-  const [columns, setColumns] = useState<number | null>(null);
+  // layout. The count is remembered per orientation, so turning the phone
+  // swaps to the count pinched in that orientation. The scroll position that
+  // keeps the pinched tile in place is applied after the grid has been relaid
+  // with the new count.
+  const orientation = useMediaQuery("(orientation: portrait)") ? "portrait" : "landscape";
+  const [columns, setColumns] = useState<number | null>(() =>
+    readStoredColumns(orientation),
+  );
+  useEffect(() => setColumns(readStoredColumns(orientation)), [orientation]);
   const pendingScrollTop = useRef<number | null>(null);
-  const onPinchCommit = useCallback((next: number, scrollTop: number) => {
-    pendingScrollTop.current = scrollTop;
-    // Called from an animation frame, where React would otherwise render in a
-    // later task and the browser could paint the plain grid in between.
-    flushSync(() => setColumns(next));
-  }, []);
+  const onPinchCommit = useCallback(
+    (next: number, scrollTop: number) => {
+      pendingScrollTop.current = scrollTop;
+      storeColumns(orientation, next);
+      // Called from an animation frame, where React would otherwise render in a
+      // later task and the browser could paint the plain grid in between.
+      flushSync(() => setColumns(next));
+    },
+    [orientation],
+  );
   useLayoutEffect(() => {
     if (pendingScrollTop.current === null) return;
     window.scrollTo({ top: pendingScrollTop.current, behavior: "auto" });
     pendingScrollTop.current = null;
   }, [columns]);
+  const hasGroups = props.thumbnailGroups.length > 0;
   const pinch = useGridPinch({
-    enabled: props.thumbnailGroups.length > 0,
+    enabled: hasGroups,
     columns,
     onCommit: onPinchCommit,
     onOpen: props.onOpen,
   });
+  // A remembered count may not fit this window (pinched on a wider one, or
+  // the desktop window was resized): once a grid is laid out, keep the count
+  // within the ladder the pinch itself uses.
+  useLayoutEffect(() => {
+    if (columns === null) return;
+    const images = pinch.ref.current?.querySelector<HTMLElement>("[data-images]");
+    if (!images) return;
+    const gap = parseFloat(getComputedStyle(images).columnGap) || 0;
+    const fitted = clampColumns(columns, {
+      width: images.getBoundingClientRect().width,
+      gap,
+    });
+    if (fitted !== columns) setColumns(fitted);
+  }, [columns, orientation, hasGroups, pinch.ref]);
   // Where the toolbar is the wide shelf, the first group's header shares its
   // row (rendered into this slot); otherwise it heads its own band.
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
