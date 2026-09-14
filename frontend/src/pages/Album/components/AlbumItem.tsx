@@ -5,10 +5,11 @@ import Play from "@assets/images/icons/play.svg?react";
 import { keyframes, styled } from "../../../stitches.config";
 import { memo, MouseEvent, useEffect, useRef } from "react";
 import { useThumbnailRequest } from "../hooks/useThumbnailVisibility";
-import { Sidecar } from "../../../utils/groupFiles";
+import { Sidecar } from "../utils/groupFiles";
 import { ACCENT_COLOR } from "../../../theme";
 import { pressable, pressableNoScale, pressDim } from "../../../pressable";
-import { sidecarLabel, sidecarTitle } from "../../../utils/sidecars";
+import { sidecarLabel, sidecarTitle } from "../utils/sidecars";
+import { prefersReducedMotion } from "../../../utils/reducedMotion";
 
 /** Length of the "just uploaded" highlight pulse. */
 export const PULSE_MS = 800;
@@ -44,9 +45,8 @@ export const AlbumItem = memo(function AlbumItem(props: AlbumItemProps) {
   useThumbnailRequest(ref, props.id, props.isLoading);
   useEffect(() => {
     if (!props.scrollIntoView) return;
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     ref.current?.scrollIntoView({
-      behavior: reduceMotion ? "auto" : "smooth",
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
       block: "nearest",
     });
   }, [props.scrollIntoView]);
@@ -230,8 +230,13 @@ const Preview = styled("div", {
   position: "relative",
 });
 
+// The overlays sit above the picture explicitly: on hover the picture gets a
+// `filter`, which lifts it into the positioned layer in DOM order.
+const OVERLAY_Z_INDEX = 1;
+
 const SelectIcon = styled("svg", {
   position: "absolute",
+  zIndex: OVERLAY_Z_INDEX,
   top: "5px",
   left: "5px",
   width: "26px",
@@ -251,6 +256,7 @@ const SelectIcon = styled("svg", {
 });
 const ZoomIcon = styled(Zoom, {
   position: "absolute",
+  zIndex: OVERLAY_Z_INDEX,
   width: "30px",
   height: "30px",
   bottom: "5px",
@@ -265,6 +271,7 @@ const ZoomIcon = styled(Zoom, {
 
 const PlayIcon = styled(Play, {
   position: "absolute",
+  zIndex: OVERLAY_Z_INDEX,
   width: "48px",
   height: "48px",
   color: "#fff",
@@ -284,7 +291,7 @@ const SidecarBadge = styled("div", {
   fontWeight: 700,
   letterSpacing: "0.05em",
   ...pressable,
-  zIndex: 1,
+  zIndex: OVERLAY_Z_INDEX,
   "&:hover": { transform: "scale(1.06)" },
   variants: {
     isSelected: {

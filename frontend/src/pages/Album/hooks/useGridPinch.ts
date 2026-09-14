@@ -13,7 +13,9 @@ import {
   pinchStep,
   Rect,
   TILE_ASPECT,
-} from "../../../utils/pinchGrid";
+} from "../utils/pinchGrid";
+import { distance, Point } from "../../../utils/geometry";
+import { prefersReducedMotion } from "../../../utils/reducedMotion";
 
 /** Progress a pinch must reach when the fingers lift for the step to commit. */
 const COMMIT_PROGRESS = 0.5;
@@ -24,7 +26,6 @@ const ANIMATED_SCREENS = 1;
 /** Above the tiles and below the anchored tile while it grows to full screen. */
 const OVERLAY_Z_INDEX = 5;
 
-type Point = { x: number; y: number };
 type Direction = -1 | 1;
 
 type TileState = {
@@ -77,10 +78,6 @@ type Options = {
   onOpen: (fileId: string) => void;
 };
 
-function distance(a: Point, b: Point) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
 function documentRect(el: Element): Rect {
   const r = el.getBoundingClientRect();
   return {
@@ -110,10 +107,6 @@ function measuredColumns(images: HTMLElement): number {
   if (style.display !== "grid") return 1;
   const tracks = style.gridTemplateColumns.trim().split(/\s+/).filter(Boolean);
   return Math.max(1, tracks.length);
-}
-
-function reduceMotion() {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 /**
@@ -188,7 +181,7 @@ export function useGridPinch(options: Options) {
     (to: number, ms: number, done: () => void) => {
       const g = gesture.current;
       if (!g) return;
-      if (reduceMotion() || ms === 0) {
+      if (prefersReducedMotion() || ms === 0) {
         g.progress = to;
         paint();
         done();

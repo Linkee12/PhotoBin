@@ -1,3 +1,5 @@
+import { isProfiling } from "../../../utils/profile";
+
 /**
  * Diagnostics for pointer gestures, enabled with `?profile` in the URL.
  *
@@ -25,7 +27,7 @@ const NOOP: GestureProfiler = {
 };
 
 export function createGestureProfiler(label: string): GestureProfiler {
-  if (!new URLSearchParams(window.location.search).has("profile")) return NOOP;
+  if (!isProfiling()) return NOOP;
 
   let overlay: HTMLPreElement | null = null;
   let events = 0;

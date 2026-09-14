@@ -11,9 +11,12 @@ import {
 import { PartType, partTypeSchema } from "../utils/zod";
 
 const DEFAULT_ALBUMS_ROOT = path.resolve("./albums");
-const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
-const TEN_MINUTES_MS = 10 * 60 * 1000;
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+/** Album lifetime (`ALBUM_TTL_MS`). */
+export const DEFAULT_ALBUM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+/** Age at which an edit lock is considered abandoned (`EDIT_LOCK_TTL_MS`). */
+export const DEFAULT_EDIT_LOCK_TTL_MS = 10 * 60 * 1000;
+/** Age at which an unfinalized upload directory is deleted (`ORPHAN_TTL_MS`). */
+export const DEFAULT_ORPHAN_TTL_MS = 24 * 60 * 60 * 1000;
 const METADATA_FILE = "metadata.json";
 /** Parts uploaded through the binary route are stored as raw bytes with this suffix. */
 const RAW_SUFFIX = ".bin";
@@ -59,12 +62,12 @@ export class AlbumService {
   private _orphanTtlMs: number;
   constructor(
     private _metadataService: MetadataService,
-    private _ttlMs: number = ONE_MONTH_MS,
+    private _ttlMs: number = DEFAULT_ALBUM_TTL_MS,
     options: { albumsRoot?: string; editLockTtlMs?: number; orphanTtlMs?: number } = {},
   ) {
     this._albumsRoot = options.albumsRoot ?? DEFAULT_ALBUMS_ROOT;
-    this._editLockTtlMs = options.editLockTtlMs ?? TEN_MINUTES_MS;
-    this._orphanTtlMs = options.orphanTtlMs ?? ONE_DAY_MS;
+    this._editLockTtlMs = options.editLockTtlMs ?? DEFAULT_EDIT_LOCK_TTL_MS;
+    this._orphanTtlMs = options.orphanTtlMs ?? DEFAULT_ORPHAN_TTL_MS;
   }
   getMetaData(albumId: string) {
     return this._metadataService.get(albumId);

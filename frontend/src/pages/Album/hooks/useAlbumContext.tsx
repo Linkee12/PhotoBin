@@ -2,10 +2,10 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { client } from "../../../cuple";
-import { CryptoService } from "../services/CryptoService";
+import { cryptoService } from "../services";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { toast } from "react-toastify";
-import { DecodedBatches, DecodedFiles } from "../../../utils/groupFiles";
+import { DecodedBatches, DecodedFiles } from "../utils/groupFiles";
 
 export type DecodedValues = {
   albumName: string;
@@ -40,8 +40,6 @@ export function useAlbumContext() {
   const albumContext = useContext(AlbumContext);
   return albumContext;
 }
-
-const cryptoService = new CryptoService();
 
 /** Empty or missing hash means the album was created without encryption. */
 function getKeyFromHash(): string | null {

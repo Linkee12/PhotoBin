@@ -30,6 +30,7 @@ import {
   splitIntoChunks,
   UPLOAD_CONCURRENCY,
 } from "./PartTransport";
+import { isProfiling } from "../../../utils/profile";
 
 export const THUMBNAIL_SIZE = { width: 300, height: 200 };
 /** The reduced rendition only feeds the fullscreen viewer, so cap it at screen-ish size. */
@@ -162,19 +163,9 @@ export class UploadService {
   }
 
   async saveName(albumId: string, name: string, key: string | null) {
-    const cryptedName = await this._cryptoService.encrypString(name, key);
-    const iv = uint8ArrayToBase64(cryptedName.iv);
-    const value = arrayBufferToBase64(cryptedName.encryptedText);
-    client.editAlbumName.post({
-      body: { albumId, albumName: { iv, value } },
-    });
-  }
-
-  async addAlbumName(albumId: string, albumName: { value: string; iv: string }) {
-    const res = await client.editAlbumName.post({
-      body: { albumId, albumName },
-    });
-    if (res.result !== "success") return { isSuccess: false };
+    const albumName = await this._encryptText(name, key);
+    const res = await client.editAlbumName.post({ body: { albumId, albumName } });
+    if (res.result !== "success") throw new Error(`Rename failed (${res.statusCode})`);
   }
 
   private async _prepare(
@@ -183,7 +174,7 @@ export class UploadService {
     pending: PendingUpload | undefined,
     batch: UploadBatch,
   ): Promise<PreparedUpload> {
-    const profile = new URLSearchParams(window.location.search).has("profile");
+    const profile = isProfiling();
     const log = (label: string, start: number) => {
       if (profile)
         console.log(
@@ -338,7 +329,7 @@ export class UploadService {
       signal?: AbortSignal;
     },
   ) {
-    const profile = new URLSearchParams(window.location.search).has("profile");
+    const profile = isProfiling();
     const missing: number[] = [];
     for (let i = 0; i < part.chunks.length; i++) {
       if (part.sent.has(i) || ctx.onServer.has(i.toString())) {

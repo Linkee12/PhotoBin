@@ -2,7 +2,6 @@
 
 /** Background of the toolbar shelf and the narrow bottom sheet. */
 export const SHELF_COLOR = "#0E0E0E";
-export { ACCENT_COLOR } from "../../../theme";
 /** Height of every toolbar control: the view toggle and the buttons. */
 export const CONTROL_HEIGHT = "2.25rem";
 /** Ground and the two alternating group body colours (see `PanelVariant`). */

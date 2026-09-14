@@ -7,55 +7,26 @@ import Prev from "@assets/images/icons/prev.svg?react";
 import Rotate from "@assets/images/icons/rotate.svg?react";
 import Check from "@assets/images/icons/check.svg?react";
 import Circle from "@assets/images/icons/circle.svg?react";
-import { ImageQueryService } from "../services/ImageQueryService";
 import { useEffect, useRef, useState } from "react";
 import { useAlbumContext } from "../hooks/useAlbumContext";
-import { CryptoService } from "../services/CryptoService";
-import { CanvasService } from "../services/CanvasService";
-import { editedFileName, RotateService, Rotation } from "../services/RotateService";
-import { ThumbnailGroup } from "../Album";
-import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { drawnSize, useZoomPan } from "../hooks/useZoomPan";
-import { Sidecar } from "../../../utils/groupFiles";
-import { extensionLabel, sidecarLabel, sidecarTitle } from "../../../utils/sidecars";
+import { useViewerMedia } from "../hooks/useViewerMedia";
+import { rotatedFitScale, useOptimisticRotation } from "../hooks/useOptimisticRotation";
+import { imageQueryService } from "../services";
+import { downloadFileName, downloadPart } from "../services/renditions";
+import { Sidecar, ThumbnailGroup } from "../utils/groupFiles";
+import { extensionLabel, sidecarLabel, sidecarTitle } from "../utils/sidecars";
+import { saveBlob } from "../../../utils/saveBlob";
 import { pressable, pressableNoScale } from "../../../pressable";
-import { PartType } from "../services/ImageQueryService";
 
-type AlbumFile = Metadata["files"][number];
 type Size = { width: number; height: number };
 
-const cryptoService = new CryptoService();
-const canvasService = new CanvasService();
-const imageDownloadService = new ImageQueryService(cryptoService);
-const rotateService = new RotateService(
-  canvasService,
-  cryptoService,
-  imageDownloadService,
-);
 const NOTICE_TIMEOUT_MS = 4000;
-/** Clicks within this window are coalesced into a single rotation request. */
-const ROTATE_DEBOUNCE_MS = 700;
 const ROTATE_ANIMATION_MS = 200;
-const REVOKE_DELAY_MS = 60_000;
-const PLACEHOLDER_GIF =
-  "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=";
 
 /** What the viewer's download button saves: the photo in one of its renditions, its attached files, or both. */
 type DownloadChoice = { photo?: "rotated" | "original"; sidecars?: boolean };
 type DownloadMenuItem = { label: string; choice: DownloadChoice };
-
-function saveBlob(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  // Chromium starts the download asynchronously; revoking right away can
-  // make the blob fetch fail. Revoke once the download has certainly begun.
-  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
-}
 
 /**
  * The download menu's entries. Rotated photos offer both renditions; a photo
@@ -95,47 +66,8 @@ function gridThumbnail(groups: ThumbnailGroup[], fileId: string): string | undef
   return undefined;
 }
 
-/** Decodes `src` up front so swapping it into the <img> paints in the same frame. */
-async function decodeImage(src: string): Promise<Size> {
-  const img = new Image();
-  img.src = src;
-  try {
-    await img.decode();
-  } catch {
-    // e.g. a GIF placeholder that cannot be decoded; fall through with whatever we have.
-  }
-  return { width: img.naturalWidth, height: img.naturalHeight };
-}
-
-/**
- * Scale needed for an image that is shown with `object-fit: contain` in a
- * `viewport`-sized box to still fit after a quarter turn.
- */
-function rotatedFitScale(natural: Size, viewport: Size, quarterTurns: number) {
-  if (quarterTurns % 2 === 0) return 1;
-  if (!natural.width || !natural.height) return 1;
-  const fit = Math.min(viewport.width / natural.width, viewport.height / natural.height);
-  const shownWidth = natural.width * fit;
-  const shownHeight = natural.height * fit;
-  return Math.min(1, viewport.width / shownHeight, viewport.height / shownWidth);
-}
-
 function viewportSize(): Size {
   return { width: window.innerWidth, height: window.innerHeight };
-}
-
-/**
- * Which part feeds the viewer for a photo. Small originals are uploaded without
- * a reduced rendition; a rotated photo always has one (rotation re-renders it),
- * so falling back to `original` only happens for unrotated photos. Returns the
- * rotation already baked into that part so the CSS turns can be derived.
- */
-function viewerPart(file: AlbumFile): { type: PartType; rotation: Rotation } {
-  if (file.reduced !== undefined)
-    return { type: "reduced", rotation: file.rotation ?? 0 };
-  if (file.edited !== undefined && (file.rotation ?? 0) !== 0)
-    return { type: "edited", rotation: file.rotation ?? 0 };
-  return { type: "original", rotation: 0 };
 }
 
 type ViewOriginalModalProps = {
@@ -156,54 +88,45 @@ type ViewOriginalModalProps = {
   /** (de)selects the sidecars on their own, same as tapping the tile's badge */
   onToggleSidecars: () => void;
 };
-// eslint-disable-next-line sonarjs/cognitive-complexity
+
 export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const { metadata, key, refreshMetadata } = useAlbumContext();
-  const [url, setUrl] = useState<string | undefined>(PLACEHOLDER_GIF);
-  const [downloadUrl, setDownloadUrl] = useState<string | undefined>(undefined);
-  const [fileName, setFileName] = useState("");
-  const [isVideoReady, setIsVideoReady] = useState(false);
-  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
-  const [isRotating, setIsRotating] = useState(false);
   const [isPreparingDownload, setIsPreparingDownload] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [viewport, setViewport] = useState<Size>(viewportSize);
   const file = metadata?.files.find((file) => file.fileId === props.fileId);
   const isImage = file?.original !== undefined && file.originalVideo === undefined;
   const isRotated = isImage && (file.rotation ?? 0) !== 0 && file.edited !== undefined;
 
-  // --- Optimistic rotation -------------------------------------------------
-  // The displayed image is rotated with CSS immediately; the server is asked
-  // once, after the clicks settle, to re-render at the final absolute rotation.
-  /** Quarter turns applied with CSS on top of the image currently in `url`. */
-  const [cssTurns, setCssTurns] = useState(0);
-  /** Animate the CSS turn (clicks) or apply it instantly (image swap). */
-  const [animateTurn, setAnimateTurn] = useState(false);
-  const [naturalSize, setNaturalSize] = useState<Size>({ width: 0, height: 0 });
-  const [viewport, setViewport] = useState<Size>(viewportSize);
-  /** Absolute rotation the user wants for the current file (server + unsent clicks). */
-  const targetRotationRef = useRef<Rotation>(0);
-  /** Rotation not yet sent to the server; at most one job, always for the latest target. */
-  const pendingJobRef = useRef<{ file: AlbumFile; target: Rotation } | null>(null);
-  const inFlightRef = useRef(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  /** Rotations confirmed by the server since the last metadata refresh. */
-  const serverRotationsRef = useRef(new Map<string, Rotation>());
-  const shownFileIdRef = useRef<string | undefined>(undefined);
-  const flushRotationRef = useRef<() => void>(() => undefined);
-  /** Object URLs created here (reduced/edited/video/unsupported blobs), revoked when replaced. */
-  const ownedUrlsRef = useRef(new Set<string>());
-
-  // --- Zoom / pan ------------------------------------------------------------
   // The zoom transform goes on a layer around the image (`targetRef`), the
   // rotation transform on the image itself, so neither overwrites the other.
-  const fitScale = rotatedFitScale(naturalSize, viewport, cssTurns);
+  const rotation = useOptimisticRotation({
+    fileId: props.fileId,
+    file,
+    albumId: metadata?.albumId,
+    key,
+    onSaved: refreshMetadata,
+    onNotice: setNotice,
+    onTurn: () => zoom.reset(),
+  });
+  const media = useViewerMedia({
+    fileId: props.fileId,
+    file,
+    albumId: metadata?.albumId,
+    key,
+    gridThumbnail: gridThumbnail(props.thumbnails, props.fileId),
+    onImageSwapped: rotation.onImageSwapped,
+  });
+  // Until the new photo's own image is in, the turns still belong to the previous one.
+  const shownTurns = media.isSwitching ? 0 : rotation.cssTurns;
+  const fitScale = rotatedFitScale(media.naturalSize, viewport, shownTurns);
   const zoom = useZoomPan({
     resetKey: props.fileId,
     enabled: props.visible,
     pictureSize: (image) => {
       const drawn = drawnSize(image);
       // A quarter turn swaps the drawn edges and applies the fit scale.
-      return cssTurns % 2 === 0
+      return shownTurns % 2 === 0
         ? drawn
         : { width: drawn.height * fitScale, height: drawn.width * fitScale };
     },
@@ -224,91 +147,16 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  function serverRotation(target: AlbumFile): Rotation {
-    return serverRotationsRef.current.get(target.fileId) ?? target.rotation ?? 0;
-  }
-
-  function rotate() {
-    if (!metadata || !file || !isImage) return;
-    const target = ((targetRotationRef.current + 1) % 4) as Rotation;
-    targetRotationRef.current = target;
-    pendingJobRef.current = { file, target };
-    // A rotation changes the drawn bounds, so any zoom/pan is meaningless after it.
-    zoom.reset();
-    setAnimateTurn(true);
-    setCssTurns((turns) => turns + 1);
-    scheduleFlush();
-  }
-
-  function scheduleFlush() {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(
-      () => flushRotationRef.current(),
-      ROTATE_DEBOUNCE_MS,
-    );
-  }
-
-  /** Reverts the optimistic turns of `job` back to what the server has. */
-  function revertRotation(job: { file: AlbumFile }, server: Rotation) {
-    if (job.file.fileId !== shownFileIdRef.current) return;
-    if (pendingJobRef.current?.file.fileId === job.file.fileId)
-      pendingJobRef.current = null;
-    const delta = (targetRotationRef.current - server + 4) % 4;
-    targetRotationRef.current = server;
-    setAnimateTurn(true);
-    setCssTurns((turns) => turns - delta);
-  }
-
-  /** Sends the pending rotation now (one request at a time). */
-  function flushRotation() {
-    clearTimeout(debounceRef.current);
-    const job = pendingJobRef.current;
-    if (!job || inFlightRef.current || !metadata) return;
-    pendingJobRef.current = null;
-    const server = serverRotation(job.file);
-    if (job.target === server) return;
-    inFlightRef.current = true;
-    setIsRotating(true);
-    rotateService
-      .rotateTo(metadata.albumId, job.file, key, job.target)
-      .then((res) => {
-        if (res.result === "edit-in-progress") {
-          revertRotation(job, server);
-          setNotice("Someone is editing this photo, try again shortly");
-        } else {
-          serverRotationsRef.current.set(job.file.fileId, job.target);
-          refreshMetadata();
-        }
-      })
-      .catch((e: unknown) => {
-        console.error(e);
-        revertRotation(job, server);
-        setNotice("Rotation failed, please try again");
-      })
-      .finally(() => {
-        inFlightRef.current = false;
-        setIsRotating(false);
-        // Clicks made while the request was in flight: send them as one more request.
-        if (pendingJobRef.current) scheduleFlush();
-      });
-  }
-  flushRotationRef.current = flushRotation;
-
-  // A pending rotation must not be lost when the modal goes away.
-  useEffect(() => () => flushRotationRef.current(), []);
-
   function close() {
-    flushRotation();
+    rotation.flush();
     props.onShowChange(false);
   }
 
   function goTo(direction: number) {
-    flushRotation();
+    rotation.flush();
     props.onNext(direction);
-    setIsVideoReady(false);
   }
 
-  /** Images are fetched on demand: `edited` when rotated (unless `untouched`), else `original`. */
   /**
    * Saves the photo (`rotated`: the edited rendition when there is one) and/or
    * its attached files (RAW), each as its own download.
@@ -317,9 +165,23 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     if (!metadata || !file || isPreparingDownload) return;
     setIsPreparingDownload(true);
     try {
-      if (what.photo !== undefined)
-        await downloadPhoto(metadata.albumId, file, what.photo);
-      if (what.sidecars) await downloadSidecars(metadata);
+      const targets = [
+        ...(what.photo === undefined ? [] : [{ file, photo: what.photo }]),
+        ...(what.sidecars ? props.sidecars : [])
+          .map((sidecar) => metadata.files.find((f) => f.fileId === sidecar.id))
+          .filter((f) => f !== undefined)
+          .map((f) => ({ file: f, photo: "rotated" as const })),
+      ];
+      for (const target of targets) {
+        const type = downloadPart(target.file, target.photo);
+        const result = await imageQueryService.getImg(
+          metadata.albumId,
+          target.file,
+          key,
+          type,
+        );
+        if (result) saveBlob(result.blob, downloadFileName(type, result.fileName));
+      }
     } catch (e) {
       console.error(e);
       setNotice("Download failed, please try again");
@@ -327,35 +189,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       setIsPreparingDownload(false);
     }
   }
-  async function downloadPhoto(
-    albumId: string,
-    photo: AlbumFile,
-    which: "rotated" | "original",
-  ) {
-    const type = isRotated && which === "rotated" ? "edited" : "original";
-    const result = await imageDownloadService.getImg(albumId, photo, key, type);
-    if (!result) return;
-    saveBlob(
-      result.blob,
-      type === "edited" ? editedFileName(result.fileName) : result.fileName,
-    );
-  }
-  async function downloadSidecars(album: Metadata) {
-    for (const sidecar of props.sidecars) {
-      const sidecarFile = album.files.find((f) => f.fileId === sidecar.id);
-      if (sidecarFile === undefined) continue;
-      const result = await imageDownloadService.getImg(
-        album.albumId,
-        sidecarFile,
-        key,
-        "unsupportedFile",
-      );
-      if (result) saveBlob(result.blob, result.fileName);
-    }
-  }
+
   useEffect(() => {
     const body = document.body;
-
     if (props.visible) {
       body.style.height = "100vh";
       body.style.overflow = "hidden";
@@ -389,149 +225,10 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [props.visible, props.onShowChange, props.onNext, isZoomed]);
 
-  const thumbnailsRef = useRef(props.thumbnails);
-  thumbnailsRef.current = props.thumbnails;
-
-  useEffect(() => {
-    let cancelled = false;
-    setDownloadUrl(undefined);
-
-    /** Swaps the displayed image and drops the CSS turns it already contains, in one render. */
-    async function showImage(src: string, rotation: Rotation) {
-      const size = await decodeImage(src);
-      if (cancelled) return;
-      setNaturalSize(size);
-      setUrl(src);
-      setCssTurns((targetRotationRef.current - rotation + 4) % 4);
-      setAnimateTurn(false);
-    }
-
-    // eslint-disable-next-line sonarjs/cognitive-complexity
-    async function updateOriginalImageDataUrl() {
-      if (!metadata || metadata.albumId === undefined || file === undefined) return;
-      if (shownFileIdRef.current !== props.fileId) {
-        // New photo: start from its thumbnail and forget the previous photo's turns.
-        targetRotationRef.current = serverRotation(file);
-        await showImage(
-          gridThumbnail(thumbnailsRef.current, props.fileId) ?? PLACEHOLDER_GIF,
-          serverRotation(file),
-        );
-        if (cancelled) return;
-        // Only now does `url` belong to this photo (see `isSwitching` in the render).
-        shownFileIdRef.current = props.fileId;
-      }
-      try {
-        if (file.original !== undefined) {
-          const part = viewerPart(file);
-          const reduced = await imageDownloadService.getImg(
-            metadata.albumId,
-            file,
-            key,
-            part.type,
-          );
-          if (reduced?.img !== undefined && cancelled) URL.revokeObjectURL(reduced.img);
-          if (!cancelled && reduced?.img !== undefined) {
-            ownedUrlsRef.current.add(reduced.img);
-            await showImage(reduced.img, part.rotation);
-            setFileName(reduced.fileName);
-          }
-
-          if (file.originalVideo !== undefined) {
-            setIsLoadingVideo(true);
-            const video = await imageDownloadService.getImg(
-              metadata.albumId,
-              file,
-              key,
-              "originalVideo",
-            );
-            if (video?.img !== undefined && cancelled) URL.revokeObjectURL(video.img);
-            if (!cancelled && video?.img !== undefined) {
-              ownedUrlsRef.current.add(video.img);
-              setUrl(video.img);
-              setDownloadUrl(video.img);
-              setFileName(video.fileName);
-              setIsVideoReady(true);
-            }
-            if (!cancelled) setIsLoadingVideo(false);
-          }
-        } else if (file.unsupportedFile !== undefined) {
-          const unsupported = await imageDownloadService.getImg(
-            metadata.albumId,
-            file,
-            key,
-            "unsupportedFile",
-          );
-          if (!cancelled && unsupported !== undefined) {
-            setUrl("");
-            setFileName(unsupported.fileName);
-            const unsupportedUrl = URL.createObjectURL(unsupported.blob);
-            ownedUrlsRef.current.add(unsupportedUrl);
-            setDownloadUrl(unsupportedUrl);
-          }
-        } else {
-          if (!cancelled) setUrl("");
-        }
-      } catch (e) {
-        if (!cancelled) console.error(e);
-      }
-    }
-    updateOriginalImageDataUrl();
-
-    return () => {
-      cancelled = true;
-    };
-    // Keyed on the part ivs (not `file`) so a metadata refresh that did not
-    // replace the parts does not refetch and re-swap the image.
-  }, [
-    props.fileId,
-    file?.reduced?.iv,
-    file?.edited?.iv,
-    file?.originalVideo?.iv,
-    file?.unsupportedFile?.iv,
-    key,
-    metadata?.albumId,
-  ]);
-
-  // Object URLs are revoked once they stop being displayed. The displayed
-  // `url` is revoked only when it is replaced (a video's `downloadUrl` aliases
-  // it, and the <img> may be remounted with the old src for one render when
-  // switching between the video and the photo layouts).
-  // Only URLs this modal created are revoked; thumbnails belong to the grid.
-  const urlRef = useRef(url);
-  urlRef.current = url;
-  useEffect(() => {
-    return () => {
-      if (url !== undefined && ownedUrlsRef.current.delete(url)) URL.revokeObjectURL(url);
-    };
-  }, [url]);
-  useEffect(() => {
-    return () => {
-      if (
-        downloadUrl !== undefined &&
-        downloadUrl !== urlRef.current &&
-        ownedUrlsRef.current.delete(downloadUrl)
-      ) {
-        URL.revokeObjectURL(downloadUrl);
-      }
-    };
-  }, [downloadUrl]);
-
   const stop = (e: React.MouseEvent) => e.stopPropagation();
-  // Until the effect above has swapped in the new photo, `url` and the turns
-  // still belong to the previous one: draw the new photo's thumbnail (already
-  // decoded by the grid) unturned instead, so opening never blinks.
-  const isSwitching = shownFileIdRef.current !== props.fileId;
-  const shownUrl = isSwitching
-    ? (gridThumbnail(props.thumbnails, props.fileId) ?? PLACEHOLDER_GIF)
-    : url;
-  const shownTurns = isSwitching ? 0 : cssTurns;
   const imageTransform = {
-    transform: `rotate(${shownTurns * 90}deg) scale(${rotatedFitScale(
-      naturalSize,
-      viewport,
-      shownTurns,
-    )})`,
-    transition: animateTurn ? `transform ${ROTATE_ANIMATION_MS}ms ease` : "none",
+    transform: `rotate(${shownTurns * 90}deg) scale(${fitScale})`,
+    transition: rotation.animateTurn ? `transform ${ROTATE_ANIMATION_MS}ms ease` : "none",
   };
 
   return (
@@ -576,22 +273,22 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           </Button>
           {isImage ? (
             <ImageActions
-              fileName={fileName}
+              fileName={media.fileName}
               sidecars={props.sidecars}
               isRotated={isRotated}
-              isRotating={isRotating}
+              isRotating={rotation.isSaving}
               isPreparingDownload={isPreparingDownload}
               onDownload={downloadImage}
-              onRotate={rotate}
+              onRotate={rotation.rotate}
             />
           ) : // eslint-disable-next-line sonarjs/no-nested-conditional
-          downloadUrl ? (
+          media.downloadUrl ? (
             <Button
               as="a"
               style={{ padding: "0px" }}
-              href={downloadUrl}
-              download={fileName}
-              title={`Download ${fileName}`}
+              href={media.downloadUrl}
+              download={media.fileName}
+              title={`Download ${media.fileName}`}
             >
               <Icons as={SimpleCloud} />
             </Button>
@@ -618,11 +315,18 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       </NextButton>
       {file?.originalVideo ? (
         <>
-          <FullScreenImg src={shownUrl} />
-          {isVideoReady && (
-            <FullScreenVideo src={url} autoPlay muted loop controls onClick={stop} />
+          <FullScreenImg src={media.shownUrl} />
+          {media.videoUrl && (
+            <FullScreenVideo
+              src={media.videoUrl}
+              autoPlay
+              muted
+              loop
+              controls
+              onClick={stop}
+            />
           )}
-          {isLoadingVideo && (
+          {media.isLoadingVideo && (
             <LoadingOverlay>
               <Spinner />
             </LoadingOverlay>
@@ -634,7 +338,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           <ZoomLayer ref={zoom.targetRef}>
             <ZoomableImg
               ref={zoom.imageRef}
-              src={shownUrl}
+              src={media.shownUrl}
               draggable={false}
               style={imageTransform}
             />

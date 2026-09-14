@@ -2,7 +2,13 @@ import express from "express";
 import dotenv from "dotenv";
 import { createBuilder, success, initRpc, apiResponse } from "@cuple/server";
 import { z } from "zod";
-import { AlbumService, EditInProgressError } from "./services/AlbumService";
+import {
+  AlbumService,
+  DEFAULT_ALBUM_TTL_MS,
+  DEFAULT_EDIT_LOCK_TTL_MS,
+  DEFAULT_ORPHAN_TTL_MS,
+  EditInProgressError,
+} from "./services/AlbumService";
 import {
   batchUpsertSchema,
   editPatchSchema,
@@ -18,14 +24,11 @@ import { MetadataService } from "./services/MetadataService";
 import fs from "fs";
 dotenv.config();
 
-const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ONE_HOUR_MS = 60 * 60 * 1000;
-const TEN_MINUTES_MS = 10 * 60 * 1000;
-const albumTtlMs = Number(process.env["ALBUM_TTL_MS"]) || ONE_MONTH_MS;
-const orphanTtlMs = Number(process.env["ORPHAN_TTL_MS"]) || ONE_DAY_MS;
+const albumTtlMs = Number(process.env["ALBUM_TTL_MS"]) || DEFAULT_ALBUM_TTL_MS;
+const orphanTtlMs = Number(process.env["ORPHAN_TTL_MS"]) || DEFAULT_ORPHAN_TTL_MS;
 const cleanupIntervalMs = Number(process.env["CLEANUP_INTERVAL_MS"]) || ONE_HOUR_MS;
-const editLockTtlMs = Number(process.env["EDIT_LOCK_TTL_MS"]) || TEN_MINUTES_MS;
+const editLockTtlMs = Number(process.env["EDIT_LOCK_TTL_MS"]) || DEFAULT_EDIT_LOCK_TTL_MS;
 
 const app = express();
 const port = 3001;

@@ -5,15 +5,15 @@ import SlideDown from "@assets/images/icons/slideDown.svg?react";
 import AddIcon from "@assets/images/icons/addIcon.svg?react";
 import { styled } from "../../../stitches.config";
 import { Ref, useState } from "react";
-import { AlbumView } from "../../../utils/groupFiles";
+import { AlbumView } from "../utils/groupFiles";
+import { ACCENT_COLOR } from "../../../theme";
 import {
-  ACCENT_COLOR,
   CONTROL_HEIGHT,
   SHEET_BAR_HEIGHT,
   SHELF_COLOR,
   TOOLBAR_HEIGHT,
   WAVE_HEIGHT,
-} from "./layout";
+} from "../layout";
 import { WaveEdge } from "./Panel";
 import { pressable, pressableNoScale } from "../../../pressable";
 import { useAlbumContext } from "../hooks/useAlbumContext";
@@ -34,7 +34,7 @@ const MENU_ICON_CENTER_BELOW_CURVE_PX = 24;
 /** Share of the toolbar row the first group's header gets: the part of the wave with the most water above it. */
 const HEADER_SHARE = "33.333%";
 
-type MenuProps = {
+type AlbumToolbarProps = {
   /**
    * Receives the element the first group's header is rendered into on
    * `@toolbarInline`, where it shares the toolbar row with the buttons.
@@ -75,7 +75,49 @@ function ViewToggle(props: { view: AlbumView; onChangeView: (view: AlbumView) =>
   );
 }
 
-export function Menu(props: MenuProps) {
+type ControlsProps = Pick<
+  AlbumToolbarProps,
+  "onDownloadAll" | "onAddPhoto" | "isBusy" | "view" | "onChangeView"
+>;
+
+/**
+ * The three controls, in the wide row (`data-toolbar-control`, measured by
+ * the layout check) or in the bottom sheet, where a button fills the width
+ * with its label centred between a spacer and the icon, is only tabbable
+ * while the sheet is open, and closes the sheet once used.
+ */
+function Controls(
+  props: ControlsProps & { sheet?: { isOpen: boolean; close: () => void } },
+) {
+  const { sheet } = props;
+  const inRow = sheet === undefined;
+  const control = inRow
+    ? { "data-toolbar-control": true }
+    : { tabIndex: sheet.isOpen ? 0 : -1 };
+  const act = (action: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    action();
+    sheet?.close();
+  };
+  const toggle = <ViewToggle view={props.view} onChangeView={props.onChangeView} />;
+  return (
+    <>
+      {inRow ? <div data-toolbar-control>{toggle}</div> : toggle}
+      <Button disabled={props.isBusy} onClick={act(props.onDownloadAll)} {...control}>
+        {!inRow && <div />}
+        <span>DOWNLOAD ALL</span>
+        <LandscapeDownloadIcon />
+      </Button>
+      <Button accent onClick={act(props.onAddPhoto)} {...control}>
+        {!inRow && <div />}
+        <span>ADD PHOTO</span>
+        <AddIcon />
+      </Button>
+    </>
+  );
+}
+
+export function AlbumToolbar(props: AlbumToolbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const timeLeft = useTimeLeft(useAlbumContext().expiresAt);
 
@@ -88,21 +130,7 @@ export function Menu(props: MenuProps) {
           <HeaderSlot ref={props.headerSlotRef} />
         </Wave>
         <ToolbarControls>
-          <div data-toolbar-control>
-            <ViewToggle view={props.view} onChangeView={props.onChangeView} />
-          </div>
-          <Button
-            disabled={props.isBusy}
-            onClick={props.onDownloadAll}
-            data-toolbar-control
-          >
-            <span>DOWNLOAD ALL</span>
-            <LandscapeDownloadIcon />
-          </Button>
-          <Button onClick={props.onAddPhoto} data-toolbar-control accent>
-            <span>ADD PHOTO</span>
-            <AddIcon />
-          </Button>
+          <Controls {...props} />
         </ToolbarControls>
       </Toolbar>
       <PortraitButtonsContainer
@@ -132,33 +160,7 @@ export function Menu(props: MenuProps) {
         <Sheet isOpen={isOpen} aria-hidden={!isOpen}>
           <SheetContent>
             <Buttons>
-              <ViewToggle view={props.view} onChangeView={props.onChangeView} />
-              <Button
-                disabled={props.isBusy}
-                tabIndex={isOpen ? 0 : -1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onDownloadAll();
-                  setIsOpen(false);
-                }}
-              >
-                <div />
-                <span>DOWNLOAD ALL</span>
-                <LandscapeDownloadIcon />
-              </Button>
-              <Button
-                accent
-                tabIndex={isOpen ? 0 : -1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  props.onAddPhoto();
-                  setIsOpen(false);
-                }}
-              >
-                <div />
-                <span>ADD PHOTO</span>
-                <AddIcon />
-              </Button>
+              <Controls {...props} sheet={{ isOpen, close: () => setIsOpen(false) }} />
             </Buttons>
             <SlideIconDown as={SlideDown} />
           </SheetContent>
@@ -292,7 +294,6 @@ const HandleTimeLeft = styled("div", {
   position: "absolute",
   top: 0,
   right: "2rem",
-  height: WAVE_HEIGHT,
   display: "flex",
   alignItems: "center",
   color: "#8B8B8B",

@@ -6,6 +6,7 @@ import {
   PartTransport,
   PartType,
 } from "./PartTransport";
+import { isProfiling } from "../../../utils/profile";
 
 export type { PartType };
 
@@ -15,9 +16,10 @@ export class ImageQueryService {
   constructor(private _cryptoService: CryptoService) {}
 
   /**
-   * Fetches, reassembles and decrypts one rendition of a file. `withText: false`
-   * skips decrypting the file name and date (the album already has them
-   * decoded) — use it for thumbnails, where only the object URL is needed.
+   * Fetches, reassembles and decrypts one rendition of a file into a `Blob`.
+   * The caller decides whether it needs an object URL for it (and owns that
+   * URL). `withText: false` skips decrypting the file name and date (the
+   * album already has them decoded) — use it for thumbnails.
    */
   async getImg(
     albumId: string,
@@ -28,7 +30,7 @@ export class ImageQueryService {
   ) {
     const part = file[type];
     if (!part) return;
-    const profile = new URLSearchParams(window.location.search).has("profile");
+    const profile = isProfiling();
 
     const tFetch = performance.now();
     const chunks = await mapWithConcurrency(part.chunkCount, DOWNLOAD_CONCURRENCY, (i) =>
@@ -51,13 +53,7 @@ export class ImageQueryService {
     const fileName = withText
       ? await this._cryptoService.decryptText(file.fileName.value, key, file.fileName.iv)
       : "";
-    return {
-      img: type === "unsupportedFile" ? undefined : URL.createObjectURL(blob),
-      id: file.fileId,
-      fileName: fileName,
-      blob,
-      date,
-    };
+    return { id: file.fileId, fileName, blob, date };
   }
 
   private _combineChunks(chunks: ArrayBuffer[]): ArrayBuffer {

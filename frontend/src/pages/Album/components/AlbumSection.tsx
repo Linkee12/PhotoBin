@@ -4,7 +4,7 @@ import { styled } from "../../../stitches.config";
 import { pressable, pressableNoScale } from "../../../pressable";
 import { ACCENT_COLOR } from "../../../theme";
 import { PanelVariant, SectionPanel } from "./Panel";
-import { ThumbnailGroup } from "../Album";
+import { ThumbnailGroup } from "../utils/groupFiles";
 import { KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 
 type AlbumSectionProps = {

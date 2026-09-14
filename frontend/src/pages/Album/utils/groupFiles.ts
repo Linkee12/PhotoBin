@@ -1,5 +1,5 @@
-import { Metadata } from "../../../backend/src/services/MetadataService";
-import { formatDateTime } from "./formatDateTime";
+import { Metadata } from "../../../../../backend/src/services/MetadataService";
+import { formatDateTime } from "../../../utils/formatDateTime";
 
 export type AlbumView = "history" | "date";
 export const ALBUM_VIEWS: AlbumView[] = ["history", "date"];

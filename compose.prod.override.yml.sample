@@ -1,0 +1,18 @@
+# Copied to compose.prod.override.yml by `make prod-install`; edit that copy.
+# Everything here is optional except the frontend port mapping.
+services:
+  frontend:
+    ports:
+      # Plain HTTP. Put your TLS reverse proxy (Caddy, nginx, Traefik) in front of it.
+      - "8080:80"
+
+  backend:
+    environment:
+      # Album lifetime (default 30 days).
+      ALBUM_TTL_MS: 2592000000
+      # How often expired albums and orphaned uploads are removed (default 1 hour).
+      CLEANUP_INTERVAL_MS: 3600000
+      # Unfinalized upload directories older than this are removed (default 24 hours).
+      ORPHAN_TTL_MS: 86400000
+      # A photo edit lock older than this is taken over (default 10 minutes).
+      EDIT_LOCK_TTL_MS: 600000

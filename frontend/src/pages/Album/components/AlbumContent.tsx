@@ -2,14 +2,13 @@ import { styled, TOOLBAR_INLINE_QUERY } from "../../../stitches.config";
 import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
-import { PULSE_MS } from "./AlbumItem";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useGridPinch } from "../hooks/useGridPinch";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { UploadService } from "../services/UploadService";
-import { ThumbnailGroup } from "../Album";
+import { Uploaded, useUploadRun } from "../hooks/useUploadRun";
+import { ThumbnailGroup } from "../utils/groupFiles";
 import { Panel } from "./Panel";
 import { pressable, pressableNoScale } from "../../../pressable";
 import {
@@ -18,26 +17,12 @@ import {
   SUN_X,
   sunBackground,
   TOOLBAR_HEIGHT,
-} from "./layout";
-import { Menu } from "./Menu";
-import { toast } from "react-toastify";
-import { acquireWakeLock } from "../../../utils/wakeLock";
-import { isAbortError } from "../../../utils/retry";
+} from "../layout";
+import { AlbumToolbar } from "./AlbumToolbar";
 import { formatBytesPair } from "../../../utils/formatBytes";
-import { randomBatchName } from "../../../utils/batchName";
-import { AlbumView } from "../../../utils/groupFiles";
-import { UploadBatch } from "../services/PendingUploadStore";
+import { AlbumView } from "../utils/groupFiles";
 
-type UploadProgress = { percent: number; uploadedBytes: number; totalBytes: number };
-
-/**
- * idle      → nothing running
- * uploading → batch in flight; the indicator never shows 100 % here
- * done      → batch succeeded: fill snaps to 100 % on the still-dimmed album
- * outro     → indicator and mask fade out while the new tiles pulse
- */
-type UploadPhase = "idle" | "uploading" | "done" | "outro";
-const DONE_MS = 500;
+/** Fade of the upload indicator and mask once the batch is done. */
 const OUTRO_MS = 300;
 
 type AlbumContentProps = {
@@ -50,7 +35,6 @@ type AlbumContentProps = {
   view: AlbumView;
   onChangeView: (view: AlbumView) => void;
   onRenameBatch: (batchId: string, name: string) => void;
-  uploadService: UploadService;
 
   // selection
   selectedImages: string[];
@@ -62,22 +46,14 @@ type AlbumContentProps = {
   onSelect: (imagesId: string[]) => void;
   onDeSelect: (imagesId: string[]) => void;
   onOpen: (imageId: string) => void;
-  onDownloadAll: (files: string[]) => void;
+  onDownloadAll: () => void;
   onUploadStarted: () => void;
   onUploadFinished: () => void;
   /** A file finished uploading; its thumbnail is known before metadata lists it. */
-  onUploaded: (uploaded: {
-    fileId: string;
-    thumbnail: string | undefined;
-    thumbnailIv: string | undefined;
-  }) => void;
+  onUploaded: (uploaded: Uploaded) => void;
 };
 
 export function AlbumContent(props: AlbumContentProps) {
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
-  const [phase, setPhase] = useState<UploadPhase>("idle");
-  const [newFileIds, setNewFileIds] = useState<string[]>([]);
-  const [failedFiles, setFailedFiles] = useState<File[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   // Tiles per row, once the user has pinched the grid; `null` is the CSS auto
   // layout. The scroll position that keeps the pinched tile in place is applied
@@ -105,93 +81,20 @@ export function AlbumContent(props: AlbumContentProps) {
   // row (rendered into this slot); otherwise it heads its own band.
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const ref = useRef<HTMLInputElement>(null);
   const { metadata, refreshMetadata, key, isEncrypted } = useAlbumContext();
-
-  function setProgress(percent: number, uploadedBytes: number, totalBytes: number) {
-    setUploadProgress({ percent, uploadedBytes, totalBytes });
-  }
-
-  async function uploadImages(files: File[]) {
-    if (!metadata) {
-      toast.error("Album is still loading, please try again");
-      return;
-    }
-    if (props.isUploading || phase !== "idle" || files.length === 0) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const releaseWakeLock = acquireWakeLock();
-    window.addEventListener("beforeunload", warnBeforeUnload);
-    props.onUploadStarted();
-    setPhase("uploading");
-    setFailedFiles([]);
-    const failed: File[] = [];
-    const uploaded: string[] = [];
-    let cancelled = false;
-    let completed = false;
-    try {
-      // Every picked set of files is its own batch with a fresh fantasy name;
-      // resumed or retried files keep the batch they were first picked with.
-      const batch = await props.uploadService.createBatch(randomBatchName(), key);
-      const results = upload({
-        uploadService: props.uploadService,
-        files,
-        key,
-        metadata,
-        batch,
-        signal: controller.signal,
-      });
-
-      for await (const result of results) {
-        if (result.result === "progress") {
-          setProgress(result.progress, result.uploadedBytes, result.totalBytes);
-        } else if (result.result === "failed") {
-          failed.push(result.file);
-        } else if (result.result === "cancelled") {
-          cancelled = true;
-          failed.push(...result.remaining);
-        } else {
-          uploaded.push(result.fileId);
-          props.onUploaded(result);
-          // The tile shows as soon as metadata lists the file.
-          refreshMetadata();
-        }
-      }
-      completed = true;
-      if (cancelled) {
-        toast.info("Upload cancelled");
-      } else if (failed.length > 0) {
-        toast.error(`${failed.length} of ${files.length} files failed`);
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error("Upload failed");
-    } finally {
-      abortRef.current = null;
-      window.removeEventListener("beforeunload", warnBeforeUnload);
-      releaseWakeLock();
-      setFailedFiles(failed);
-      refreshMetadata();
-      if (completed && !cancelled && uploaded.length > 0) {
-        await playOutro(uploaded);
-      }
-      setPhase("idle");
-      setUploadProgress(null);
-      props.onUploadFinished();
-    }
-  }
-  /**
-   * 100 % flash on the dimmed album → indicator and mask fade out while the
-   * new tiles scroll into view and pulse. Unlocks ~1.3 s after the batch ends.
-   */
-  async function playOutro(fileIds: string[]) {
-    setPhase("done");
-    await wait(DONE_MS);
-    setPhase("outro");
-    setNewFileIds(fileIds);
-    await wait(PULSE_MS);
-    setNewFileIds([]);
+  const run = useUploadRun({
+    albumId: metadata?.albumId,
+    key,
+    isUploading: props.isUploading,
+    onUploadStarted: props.onUploadStarted,
+    onUploadFinished: props.onUploadFinished,
+    onUploaded: props.onUploaded,
+    refreshMetadata,
+  });
+  const { phase, failedFiles, newFileIds } = run;
+  function uploadImages(files: File[]) {
+    run.upload(files).catch((e) => console.error(e));
   }
   // A group that receives freshly uploaded tiles opens so the pulse is visible.
   useEffect(() => {
@@ -218,27 +121,14 @@ export function AlbumContent(props: AlbumContentProps) {
       return next;
     });
   }
-  function cancelUpload() {
-    abortRef.current?.abort();
-  }
-  function retryFailedUploads() {
-    uploadImages(failedFiles).catch((e) => console.error(e));
-  }
   function openFilePicker() {
-    if (!ref.current) return;
-    ref.current.click();
+    ref.current?.click();
   }
-  const shownPercent = displayedPercent(phase, uploadProgress?.percent ?? 0);
   const hasFailedFiles = failedFiles.length > 0;
   let cloudText = "Drop photos here";
   if (props.isUploading) cloudText = "Preparing your photos";
   else if (hasFailedFiles)
     cloudText = `${failedFiles.length} of your files didn't upload`;
-  function getAllId(): string[] {
-    return props.thumbnailGroups.flatMap((group) =>
-      group.thumbnails.map((file) => file.id),
-    );
-  }
   return (
     <Panel variant={0} zIndex={1}>
       {props.thumbnailGroups.length > 0 && (
@@ -248,10 +138,7 @@ export function AlbumContent(props: AlbumContentProps) {
       )}
       <DragNdrop
         onDroppedFiles={(files) => {
-          if (files != null) {
-            const fileArr = Array.from(files);
-            uploadImages(fileArr).catch((e) => console.error(e));
-          }
+          if (files != null) uploadImages(Array.from(files));
         }}
       >
         {/* Drop hero / upload indicator / retry notice, before the toolbar so the
@@ -264,19 +151,14 @@ export function AlbumContent(props: AlbumContentProps) {
             onClick={openFilePicker}
           >
             <StyledUpload
-              progress={shownPercent}
+              progress={run.shownPercent}
               active={phase !== "idle"}
               encrypted={isEncrypted}
             />
-            {uploadProgress ? (
+            {run.bytes ? (
               <UploadStats>
-                <Percent>{shownPercent}%</Percent>
-                <Bytes>
-                  {formatBytesPair(
-                    uploadProgress.uploadedBytes,
-                    uploadProgress.totalBytes,
-                  )}
-                </Bytes>
+                <Percent>{run.shownPercent}%</Percent>
+                <Bytes>{formatBytesPair(run.bytes.uploaded, run.bytes.total)}</Bytes>
               </UploadStats>
             ) : (
               <Text>
@@ -290,7 +172,7 @@ export function AlbumContent(props: AlbumContentProps) {
               <UploadAction
                 onClick={(e) => {
                   e.stopPropagation();
-                  cancelUpload();
+                  run.cancel();
                 }}
               >
                 Cancel upload
@@ -300,7 +182,7 @@ export function AlbumContent(props: AlbumContentProps) {
               <UploadAction
                 onClick={(e) => {
                   e.stopPropagation();
-                  retryFailedUploads();
+                  run.retryFailed().catch((e) => console.error(e));
                 }}
               >
                 Retry failed uploads ({failedFiles.length})
@@ -309,9 +191,9 @@ export function AlbumContent(props: AlbumContentProps) {
           </CloudContainer>
         </CloudSlot>
         {props.thumbnailGroups.length > 0 && (
-          <Menu
+          <AlbumToolbar
             headerSlotRef={setHeaderSlot}
-            onDownloadAll={() => props.onDownloadAll(getAllId())}
+            onDownloadAll={props.onDownloadAll}
             onAddPhoto={openFilePicker}
             isBusy={props.isUploading || props.isDownloading}
             view={props.view}
@@ -360,102 +242,17 @@ export function AlbumContent(props: AlbumContentProps) {
             ref={ref}
             multiple
             onChange={(e) => {
-              if (e.target.files != null) {
-                const array = Array.from(e.target.files);
-                // Reset so picking the same file again (to resume it) fires onChange.
-                e.target.value = "";
-                uploadImages(array).catch((e) => console.error(e));
-              }
+              if (e.target.files == null) return;
+              const picked = Array.from(e.target.files);
+              // Reset so picking the same file again (to resume it) fires onChange.
+              e.target.value = "";
+              uploadImages(picked);
             }}
           ></input>
         </UploadSection>
       </DragNdrop>
     </Panel>
   );
-}
-
-/**
- * Never shows 100 % while the batch is still running: the last steps
- * (finalize, metadata refresh) happen after the bytes are sent.
- */
-function displayedPercent(phase: UploadPhase, percent: number): number {
-  if (phase === "idle") return 0;
-  if (phase === "uploading") return Math.min(Math.floor(percent), 99);
-  return 100;
-}
-
-function wait(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
-}
-
-function warnBeforeUnload(e: BeforeUnloadEvent) {
-  e.preventDefault();
-  // Legacy browsers (e.g. Chrome < 119) only show the prompt when returnValue is set.
-  e.returnValue = true;
-}
-
-type BatchYield =
-  | { result: "progress"; progress: number; uploadedBytes: number; totalBytes: number }
-  | { result: "failed"; file: File }
-  | { result: "cancelled"; remaining: File[] }
-  | {
-      result: "finish";
-      fileId: string;
-      thumbnail: string | undefined;
-      thumbnailIv: string | undefined;
-    };
-
-/**
- * Uploads files one after another. A file that fails after retries is reported
- * and the batch continues; an abort stops the batch and reports what is left.
- */
-async function* upload(params: {
-  uploadService: UploadService;
-  files: File[];
-  key: string | null;
-  metadata: { albumId: string };
-  batch: UploadBatch;
-  signal: AbortSignal;
-}): AsyncGenerator<BatchYield> {
-  const arrLength = params.files.length;
-  const totalSize = params.files.reduce((acc, file) => file.size + acc, 0);
-  let currentSize = 0;
-  for (let i = 0; i < arrLength; ++i) {
-    const file = params.files[i];
-    try {
-      const uploadData = params.uploadService.upload(file, {
-        albumId: params.metadata.albumId,
-        key: params.key,
-        batch: params.batch,
-        signal: params.signal,
-      });
-      for await (const response of uploadData) {
-        if (response.result === "progress") {
-          currentSize += response.bytes;
-          yield {
-            result: "progress",
-            progress: Math.min(100, (currentSize / totalSize) * 100),
-            uploadedBytes: currentSize,
-            totalBytes: totalSize,
-          };
-        } else {
-          yield {
-            result: "finish",
-            fileId: response.fileId,
-            thumbnail: response.thumbnail,
-            thumbnailIv: response.thumbnailIv,
-          };
-        }
-      }
-    } catch (e) {
-      if (isAbortError(e)) {
-        yield { result: "cancelled", remaining: params.files.slice(i) };
-        return;
-      }
-      console.error(`Upload of ${file.name} failed`, e);
-      yield { result: "failed", file };
-    }
-  }
 }
 
 /**

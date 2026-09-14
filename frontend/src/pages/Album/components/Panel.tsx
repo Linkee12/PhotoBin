@@ -8,7 +8,7 @@ import {
   SHELF_COLOR,
   TOOLBAR_HEIGHT,
   WAVE_HEIGHT,
-} from "./layout";
+} from "../layout";
 
 export type PanelVariant = 0 | 1 | 2;
 

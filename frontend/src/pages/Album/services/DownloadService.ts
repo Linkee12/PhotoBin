@@ -1,123 +1,91 @@
 import { Zip, ZipPassThrough } from "fflate";
 import { ImageQueryService } from "./ImageQueryService";
-import { AlbumContextType } from "../hooks/useAlbumContext";
-import { editedFileName } from "./RotateService";
+import { AlbumFile, downloadFileName, downloadPart } from "./renditions";
+import { sleep } from "../../../utils/retry";
 
 type DownloadProps = {
+  albumId: string;
+  albumName: string;
+  files: AlbumFile[];
+  key: string | null;
   selectedImages: string[];
-  albumContext: AlbumContextType;
   onProgress?: (percent: number) => void;
 };
 
+/** Pushes to `ZipPassThrough` are cheap copies; yield to the event loop between them so the UI can update. */
+const ZIP_PUSH_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Zips the selected files (each as its download rendition, see `downloadPart`)
+ * into the origin-private file system and hands the result to the browser.
+ */
 export class DownloadService {
   constructor(private _imageQueryService: ImageQueryService) {}
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity
   async download(props: DownloadProps) {
-    try {
-      const root = await navigator.storage.getDirectory();
-      const albumName =
-        props.albumContext.decodedValues.albumName === ""
-          ? "Album.zip"
-          : props.albumContext.decodedValues.albumName + ".zip";
-      const fileHandle = await root.getFileHandle(albumName, { create: true });
-      const writable = await fileHandle.createWritable();
+    const root = await navigator.storage.getDirectory();
+    const zipName = `${props.albumName === "" ? "Album" : props.albumName}.zip`;
+    const fileHandle = await root.getFileHandle(zipName, { create: true });
+    const writable = await fileHandle.createWritable();
 
-      let zipFinished = false;
-      const zip = new Zip(async (err, chunk, final) => {
+    const zipFinished = new Promise<void>((resolve, reject) => {
+      const zip = new Zip((err, chunk, final) => {
         if (err) {
-          console.error("ZIP error:", err);
+          reject(err);
           return;
         }
-
-        if (chunk) {
-          await writable.write(chunk);
-        }
-
-        if (final) {
-          console.log("ZIP successfully completed.");
-          await writable.close();
-          zipFinished = true;
-        }
-      });
-
-      let count = 0;
-      for (const imgID of props.selectedImages) {
-        if (!props.albumContext.metadata?.albumId || !props.albumContext.metadata)
-          continue;
-
-        const file = props.albumContext.metadata.files.find((f) => f.fileId === imgID);
-
-        if (!file) continue;
-        let type: "original" | "edited" | "originalVideo" | "unsupportedFile";
-        // Videos also carry an `original` (their poster frame), so check the video first.
-        if (file.originalVideo) {
-          type = "originalVideo";
-        } else if (file.original) {
-          // A rotated photo downloads as its full-res re-encode; original/ is never touched.
-          type = file.rotation && file.edited ? "edited" : "original";
-        } else {
-          type = "unsupportedFile";
-        }
-
-        const origin = await this._imageQueryService.getImg(
-          props.albumContext.metadata.albumId,
-          file,
-          props.albumContext.key,
-          type,
-        );
-        if (!origin) continue;
-
-        const blob = origin.blob;
-        const buffer = await blob.arrayBuffer();
-        const uint8 = new Uint8Array(buffer);
-
-        const passThrough = new ZipPassThrough(
-          type === "edited" ? editedFileName(origin.fileName) : origin.fileName,
-        );
-
-        zip.add(passThrough);
-
-        // ZipPassThrough only copies, so large pushes are cheap; yield to the
-        // event loop between them so progress/UI can update.
-        const chunkSize = 4 * 1024 * 1024;
-        let offset = 0;
-
-        while (offset < uint8.length) {
-          const end = Math.min(offset + chunkSize, uint8.length);
-          const chunk = uint8.subarray(offset, end);
-          const isLastChunk = end === uint8.length;
-
-          passThrough.push(chunk, isLastChunk);
-          offset = end;
-          if (!isLastChunk) {
-            await new Promise((resolve) => setTimeout(resolve, 0));
+        void (async () => {
+          if (chunk) await writable.write(chunk);
+          if (final) {
+            await writable.close();
+            resolve();
           }
-        }
-        ++count;
-        const percent = Math.floor((count / props.selectedImages.length) * 100);
-        props.onProgress?.(percent);
-      }
-
-      zip.end();
-
-      while (!zipFinished) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-
-      const file = await fileHandle.getFile();
-      const url = URL.createObjectURL(file);
-      const a = document.createElement("a");
-      a.href = url;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      return url;
+        })();
+      });
+      this._addFiles(zip, props).then(() => zip.end(), reject);
+    });
+    try {
+      await zipFinished;
     } catch (e) {
-      console.error("Error creating ZIP:", e);
+      await writable.abort().catch(() => undefined);
       throw e;
+    }
+
+    const file = await fileHandle.getFile();
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  private async _addFiles(zip: Zip, props: DownloadProps) {
+    let count = 0;
+    for (const id of props.selectedImages) {
+      const file = props.files.find((f) => f.fileId === id);
+      if (!file) continue;
+      const type = downloadPart(file);
+      const origin = await this._imageQueryService.getImg(
+        props.albumId,
+        file,
+        props.key,
+        type,
+      );
+      if (!origin) continue;
+
+      const entry = new ZipPassThrough(downloadFileName(type, origin.fileName));
+      zip.add(entry);
+      const bytes = new Uint8Array(await origin.blob.arrayBuffer());
+      for (let offset = 0; offset < bytes.length; offset += ZIP_PUSH_BYTES) {
+        const end = Math.min(offset + ZIP_PUSH_BYTES, bytes.length);
+        const isLast = end === bytes.length;
+        entry.push(bytes.subarray(offset, end), isLast);
+        if (!isLast) await sleep(0);
+      }
+      ++count;
+      props.onProgress?.(Math.floor((count / props.selectedImages.length) * 100));
     }
   }
 }

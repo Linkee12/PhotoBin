@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createGestureProfiler } from "../../../utils/gestureProfiler";
+import { createGestureProfiler } from "../utils/gestureProfiler";
+import { clamp, distance, midpoint, Point } from "../../../utils/geometry";
 
 export const MIN_SCALE = 1;
 export const MAX_SCALE = 5;
@@ -16,8 +17,6 @@ const PINCH_CLOSE_SCALE = 0.8;
 const SWIPE_PX = 60;
 
 export type ZoomTransform = { scale: number; tx: number; ty: number };
-
-type Point = { x: number; y: number };
 
 type UseZoomPanOptions = {
   /** Whenever this value changes the zoom is reset to 1x. */
@@ -37,18 +36,6 @@ type UseZoomPanOptions = {
 };
 
 const IDENTITY: ZoomTransform = { scale: 1, tx: 0, ty: 0 };
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function distance(a: Point, b: Point) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function midpoint(a: Point, b: Point): Point {
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
 
 function toCss({ scale, tx, ty }: ZoomTransform) {
   return `translate(${tx}px, ${ty}px) scale(${scale})`;

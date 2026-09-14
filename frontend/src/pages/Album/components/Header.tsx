@@ -8,7 +8,7 @@ import { toast } from "react-toastify";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useTimeLeft } from "../hooks/useTimeLeft";
 import { pressable, pressableNoScale } from "../../../pressable";
-import { SUN_CENTER_BELOW_HEADER, SUN_X, sunBackground } from "./layout";
+import { SUN_CENTER_BELOW_HEADER, SUN_X, sunBackground } from "../layout";
 
 type HeaderProps = {
   isEmptyAlbum: boolean;
