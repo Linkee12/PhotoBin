@@ -1,4 +1,3 @@
-/* eslint-disable promise/always-return */
 /* eslint-disable react/no-unescaped-entities */
 import { styled } from "../../stitches.config";
 import { pressable, pressableNoScale } from "../../pressable";
@@ -6,7 +5,6 @@ import { ACCENT_COLOR } from "../../theme";
 import Header from "./components/Header";
 import { useNavigate } from "react-router";
 import { useState } from "react";
-import { genKey } from "../../utils/key";
 import { Panel, PanelHeader, PushDown } from "../Album/components/Panel";
 
 export default function Home() {
@@ -14,18 +12,7 @@ export default function Home() {
   const [encrypt, setEncrypt] = useState(true);
 
   function createAlbum() {
-    const albumId = crypto.randomUUID();
-    if (!encrypt) {
-      navigate(`/bin/${albumId}`);
-      return;
-    }
-    genKey()
-      .then((albumKey) => {
-        navigate(`/bin/${albumId}#${albumKey}`);
-      })
-      .catch((e) => {
-        console.error(e);
-      });
+    navigate(encrypt ? "/new" : "/new?plain");
   }
 
   return (
@@ -43,11 +30,11 @@ export default function Home() {
           />
           Encrypt album (recommended)
         </EncryptToggle>
-        <Button type="button" onClick={createAlbum}>
+        <PrimaryButton type="button" onClick={createAlbum}>
           <Text as="span" css={{ "--weight": "bold", margin: "1em 0" }}>
             NEW ALBUM
           </Text>
-        </Button>
+        </PrimaryButton>
       </Start>
       {/* The panel's wave starts 3rem above its body: this leaves the same 3em
           between the button and the wave as between the header and the text. */}
@@ -104,7 +91,8 @@ const Start = styled("div", {
   minHeight: "6em",
 });
 
-const Button = styled("button", {
+/** The landing page's call to action; the not-found page uses the same one. */
+export const PrimaryButton = styled("button", {
   ...pressable,
   width: "min(80vw,25em)",
   fontWeight: "bold",

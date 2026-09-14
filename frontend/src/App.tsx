@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router";
 import { globalCss } from "@stitches/react";
 import Album from "./pages/Album/Album";
 import Home from "./pages/Home/Home";
+import New from "./pages/New/New";
 import { AlbumContextProvider } from "./pages/Album/hooks/useAlbumContext";
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
   return (
     <Routes>
       <Route path={"/"} element={<Home />}></Route>
+      <Route path={"/new"} element={<New />}></Route>
       <Route
         path={"/bin/:albumId"}
         element={
