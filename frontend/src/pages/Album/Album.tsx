@@ -7,9 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { toast } from "react-toastify";
 import { client } from "../../cuple";
+import { pressableNoScale } from "../../pressable";
+import { forgetVisitedAlbum } from "../../services/visitedAlbums";
+import { readItem, writeItem } from "../../utils/storage";
+import { DeleteAlbumDialog } from "./components/DeleteAlbumDialog";
 import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
@@ -31,26 +35,17 @@ const VIEW_STORAGE_KEY = "photobin:albumView";
 const EAGER_THUMBNAILS = 12;
 
 function readStoredView(): AlbumView {
-  try {
-    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
-    return ALBUM_VIEWS.find((view) => view === stored) ?? DEFAULT_ALBUM_VIEW;
-  } catch {
-    return DEFAULT_ALBUM_VIEW;
-  }
-}
-
-function storeView(view: AlbumView) {
-  try {
-    localStorage.setItem(VIEW_STORAGE_KEY, view);
-  } catch {
-    // Persisting the view is a convenience; ignore storage errors.
-  }
+  const stored = readItem(VIEW_STORAGE_KEY);
+  return ALBUM_VIEWS.find((view) => view === stored) ?? DEFAULT_ALBUM_VIEW;
 }
 
 export default function Album() {
   const { metadata, key, refreshMetadata, decodedValues } = useAlbumContext();
   const { albumId } = useParams();
+  const navigate = useNavigate();
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
+  const [isDeleteAlbumOpen, setDeleteAlbumOpen] = useState(false);
+  const [isDeletingAlbum, setDeletingAlbum] = useState(false);
   const [showOrigin, setShowOrigin] = useState(false);
   const [title, setTitle] = useState("");
   const [view, setView] = useState<AlbumView>(readStoredView);
@@ -103,7 +98,7 @@ export default function Album() {
 
   function changeView(next: AlbumView) {
     setView(next);
-    storeView(next);
+    writeItem(VIEW_STORAGE_KEY, next);
   }
 
   async function deleteImages(ids: string[]) {
@@ -125,6 +120,21 @@ export default function Album() {
       console.error(reason);
       toast.error("Failed to delete");
     });
+  }
+
+  /** One delete at a time: a second confirm while the first is in flight is ignored. */
+  async function deleteAlbum() {
+    if (albumId === undefined || isDeletingAlbum) return;
+    setDeletingAlbum(true);
+    try {
+      const response = await client.deleteAlbum.delete({ body: { albumId } });
+      if (response.result !== "success") throw new Error(response.message);
+      forgetVisitedAlbum(albumId);
+      navigate("/");
+      toast.success("Album deleted");
+    } finally {
+      setDeletingAlbum(false);
+    }
   }
 
   async function runDownload(imageIds: string[]) {
@@ -154,11 +164,27 @@ export default function Album() {
     setShowOrigin(true);
   }, []);
 
-  /** Steps the viewer to the next/previous tile, wrapping around; sidecars have no tile. */
+  /** The tiles one step from the viewed one, wrapping around; sidecars have no tile. */
+  const neighbourIds = useMemo((): { prev?: string; next?: string } => {
+    const index = fullscreenImage ? tileIds.indexOf(fullscreenImage.fileId) : -1;
+    if (index === -1 || tileIds.length < 2) return {};
+    const at = (step: number) =>
+      tileIds[(index + step + tileIds.length) % tileIds.length];
+    return { prev: at(-1), next: at(1) };
+  }, [fullscreenImage, tileIds]);
+
+  // The viewer previews the neighbours' grid thumbnails while swiping; the
+  // wrap-around neighbour is rarely on screen, so ask for them ahead.
+  useEffect(() => {
+    for (const id of [neighbourIds.prev, neighbourIds.next]) {
+      if (id !== undefined) thumbnails.loader.request(id, "front");
+    }
+  }, [neighbourIds, thumbnails.loader]);
+
+  /** Steps the viewer to the next/previous tile. */
   function showNeighbour(direction: number) {
-    const currentIdx = tileIds.findIndex((id) => id === fullscreenImage?.fileId);
-    const nextIdx = (currentIdx + direction + tileIds.length) % tileIds.length;
-    setFullscreenImage({ fileId: tileIds[nextIdx] });
+    const id = direction > 0 ? neighbourIds.next : neighbourIds.prev;
+    if (id !== undefined) setFullscreenImage({ fileId: id });
   }
 
   function saveAlbumName() {
@@ -188,6 +214,7 @@ export default function Album() {
             fileId={viewed.id}
             visible={showOrigin}
             thumbnails={thumbnailGroups}
+            neighbourIds={neighbourIds}
             fileName={decodedValues.files[viewed.id]?.name ?? ""}
             onShowChange={setShowOrigin}
             onNext={showNeighbour}
@@ -224,6 +251,7 @@ export default function Album() {
           // "Download all" takes every tile's sidecars along.
           onDownloadAll={() => void runDownload(selection.withSidecars(tileIds))}
           thumbnailGroups={thumbnailGroups}
+          tileIds={tileIds}
           view={view}
           onChangeView={changeView}
           onRenameBatch={renameBatch}
@@ -248,14 +276,45 @@ export default function Album() {
           onUncheckSelected={selection.clear}
           onDownloadSelected={() => void runDownload(selection.selectedImages)}
         />
+        <Footer>
+          {/* An upload finishing after the delete would recreate nothing (the
+              server refuses writes into a missing album), but it would still
+              fail noisily: keep the two apart. */}
+          <FooterLink
+            type="button"
+            disabled={isUploading || isDeletingAlbum}
+            title={isUploading ? "Wait for the upload to finish" : undefined}
+            onClick={() => setDeleteAlbumOpen(true)}
+          >
+            Delete this album
+          </FooterLink>
+        </Footer>
+        <DeleteAlbumDialog
+          open={isDeleteAlbumOpen}
+          title={title}
+          onClose={() => setDeleteAlbumOpen(false)}
+          onConfirm={() => {
+            deleteAlbum().catch((error: unknown) => {
+              console.error(error);
+              toast.error("Failed to delete the album");
+            });
+          }}
+        />
       </Container>
     </ThumbnailVisibilityProvider>
   );
 }
 
+/** The footer's height; the page reserves it as bottom padding so the footer never covers content. */
+const FOOTER_HEIGHT = "4rem";
+
 const Container = styled("div", {
   width: "100%",
   minHeight: "100vh",
+  boxSizing: "border-box",
+  // Room for the footer, which is anchored to this box.
+  position: "relative",
+  paddingBottom: FOOTER_HEIGHT,
   fontFamily: "Open Sans",
   display: "flex",
   flexDirection: "column",
@@ -269,4 +328,30 @@ const Container = styled("div", {
       },
     },
   },
+});
+
+/** Sits at the very bottom of the page, even when the page is shorter than the viewport. */
+const Footer = styled("footer", {
+  position: "absolute",
+  left: 0,
+  right: 0,
+  bottom: 0,
+  height: FOOTER_HEIGHT,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+});
+
+/** A quiet text link; the footer's only content. */
+const FooterLink = styled("button", {
+  ...pressableNoScale,
+  background: "none",
+  border: "none",
+  padding: "0.5rem",
+  fontFamily: "inherit",
+  fontSize: "0.85rem",
+  color: "#8B8B8B",
+  textDecoration: "underline",
+  textUnderlineOffset: "0.2em",
+  "&:hover:not(:disabled)": { color: "#fff" },
 });

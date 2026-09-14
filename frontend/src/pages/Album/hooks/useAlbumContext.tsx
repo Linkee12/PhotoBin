@@ -1,7 +1,11 @@
 /* eslint-disable promise/always-return */
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { client } from "../../../cuple";
+import {
+  forgetVisitedAlbum,
+  rememberVisitedAlbum,
+} from "../../../services/visitedAlbums";
 import { cryptoService } from "../services";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { toast } from "react-toastify";
@@ -96,6 +100,7 @@ async function decodeMetadata(metadata: Metadata, key: string | null) {
 
 export function AlbumContextProvider(props: { children: React.ReactNode }) {
   const { albumId } = useParams();
+  const navigate = useNavigate();
   const key = getKeyFromHash();
   const [metadata, setMetadata] = useState<Metadata>();
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
@@ -113,6 +118,12 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
         id: albumId,
       },
     });
+    if (response.result === "not-found" || response.result === "validation-error") {
+      // Expired, deleted (by anyone with the link) or not an album id at all.
+      forgetVisitedAlbum(albumId);
+      navigate("/not-found", { replace: true });
+      return;
+    }
     if (response.result === "success") {
       if (key === null && hasEncryptedValues(response.metadata)) {
         throw new Error("This album is encrypted, but the link is missing its key");
@@ -122,6 +133,13 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
       setMetadata(response.metadata);
       setExpiresAt(response.expiresAt);
       setDecodedValues(decoded);
+      rememberVisitedAlbum({
+        albumId,
+        url: window.location.href,
+        title: decoded.albumName,
+        expiresAt: response.expiresAt,
+        itemCount: response.metadata.files.length,
+      });
     }
   };
   const refreshMetadata = () => {

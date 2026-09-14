@@ -1,10 +1,4 @@
-import {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
+import { PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef } from "react";
 import {
   clampColumns,
   containRect,
@@ -76,6 +70,8 @@ type Options = {
   /** `scrollTop` keeps the anchored tile where the gesture left it once the grid is relaid. */
   onCommit: (columns: number, scrollTop: number) => void;
   onOpen: (fileId: string) => void;
+  /** A pinch began: the click the lifting fingers produce must not open a tile. */
+  swallowNextClick: () => void;
 };
 
 function documentRect(el: Element): Rect {
@@ -131,8 +127,6 @@ export function useGridPinch(options: Options) {
   optionsRef.current = options;
 
   const pointers = useRef(new Map<number, Point>());
-  /** A pinch just happened: the click the lifting fingers produce must not open a tile. */
-  const swallowClick = useRef(false);
   const gesture = useRef<Gesture | null>(null);
   const frame = useRef<number | null>(null);
   const settle = useRef<number | null>(null);
@@ -284,8 +278,6 @@ export function useGridPinch(options: Options) {
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (!optionsRef.current.enabled || e.pointerType !== "touch") return;
-      // A new touch: the pinch's click, if any, has been and gone.
-      if (pointers.current.size === 0) swallowClick.current = false;
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (
         pointers.current.size === 2 &&
@@ -294,7 +286,7 @@ export function useGridPinch(options: Options) {
       ) {
         const [a, b] = [...pointers.current.values()];
         begin(a, b);
-        swallowClick.current = gesture.current !== null;
+        if (gesture.current !== null) optionsRef.current.swallowNextClick();
       }
     },
     [begin],
@@ -332,13 +324,6 @@ export function useGridPinch(options: Options) {
     [animateTo, clear, finish],
   );
 
-  const onClickCapture = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
-    if (!swallowClick.current) return;
-    swallowClick.current = false;
-    e.stopPropagation();
-    e.preventDefault();
-  }, []);
-
   useEffect(() => clear, [clear]);
 
   return {
@@ -349,7 +334,6 @@ export function useGridPinch(options: Options) {
       onPointerMove,
       onPointerUp,
       onPointerCancel: onPointerUp,
-      onClickCapture,
     },
   };
 }

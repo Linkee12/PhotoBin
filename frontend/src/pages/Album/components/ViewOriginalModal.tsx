@@ -7,7 +7,8 @@ import Prev from "@assets/images/icons/prev.svg?react";
 import Rotate from "@assets/images/icons/rotate.svg?react";
 import Check from "@assets/images/icons/check.svg?react";
 import Circle from "@assets/images/icons/circle.svg?react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Spinner } from "../../../components/Spinner";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { drawnSize, useZoomPan } from "../hooks/useZoomPan";
 import { useViewerMedia } from "../hooks/useViewerMedia";
@@ -15,7 +16,10 @@ import { rotatedFitScale, useOptimisticRotation } from "../hooks/useOptimisticRo
 import { imageQueryService } from "../services";
 import { downloadFileName, downloadPart } from "../services/renditions";
 import { Sidecar, ThumbnailGroup } from "../utils/groupFiles";
+import { PINCH_SETTLE_MS } from "../utils/pinchClose";
 import { extensionLabel, sidecarLabel, sidecarTitle } from "../utils/sidecars";
+import { SWIPE_ANIMATION_MS } from "../utils/swipeStrip";
+import { prefersReducedMotion } from "../../../utils/reducedMotion";
 import { saveBlob } from "../../../utils/saveBlob";
 import { pressable, pressableNoScale } from "../../../pressable";
 
@@ -23,6 +27,11 @@ type Size = { width: number; height: number };
 
 const NOTICE_TIMEOUT_MS = 4000;
 const ROTATE_ANIMATION_MS = 200;
+/**
+ * The bottom band of a video where the browser draws its controls; a drag that
+ * starts there scrubs the timeline and must not swipe to the next photo.
+ */
+const VIDEO_CONTROLS_PX = 72;
 
 /** What the viewer's download button saves: the photo in one of its renditions, its attached files, or both. */
 type DownloadChoice = { photo?: "rotated" | "original"; sidecars?: boolean };
@@ -75,6 +84,8 @@ type ViewOriginalModalProps = {
   visible: boolean;
   fileName: string;
   thumbnails: ThumbnailGroup[];
+  /** The tiles `onNext(-1)` / `onNext(1)` would show; their thumbnails slide in with a swipe. */
+  neighbourIds: { prev?: string; next?: string };
   onNext: (direction: number) => void;
   onDelete: () => void;
   onShowChange: (visible: boolean) => void;
@@ -120,9 +131,42 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   // Until the new photo's own image is in, the turns still belong to the previous one.
   const shownTurns = media.isSwitching ? 0 : rotation.cssTurns;
   const fitScale = rotatedFitScale(media.naturalSize, viewport, shownTurns);
+
+  // The swipe strip and the pinch-to-close fade are written straight to the
+  // DOM, once per pointer event, like the zoom transform itself.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonBarRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  function moveStrip(offset: number, animate: boolean) {
+    const strip = stripRef.current;
+    if (!strip) return;
+    strip.style.transition =
+      animate && !prefersReducedMotion()
+        ? `transform ${SWIPE_ANIMATION_MS}ms ease-out`
+        : "none";
+    strip.style.transform = `translateX(${offset}px)`;
+  }
+  /**
+   * How far the viewer has faded away under a pinch: 0 is fully there, 1 is
+   * gone. `animate` eases there (the fingers lifted and the picture springs back).
+   */
+  function fadeViewer(t: number, animate: boolean) {
+    const container = containerRef.current;
+    const bar = buttonBarRef.current;
+    if (!container || !bar) return;
+    const ease = animate && !prefersReducedMotion();
+    container.style.transition = ease
+      ? `background-color ${PINCH_SETTLE_MS}ms ease-out`
+      : "none";
+    container.style.backgroundColor = `rgba(0, 0, 0, ${1 - t})`;
+    bar.style.transition = ease ? `opacity ${PINCH_SETTLE_MS}ms ease-out` : "none";
+    bar.style.opacity = `${1 - t}`;
+  }
+
   const zoom = useZoomPan({
     resetKey: props.fileId,
     enabled: props.visible,
+    zoomable: isImage,
     pictureSize: (image) => {
       const drawn = drawnSize(image);
       // A quarter turn swaps the drawn edges and applies the fit scale.
@@ -130,10 +174,20 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
         ? drawn
         : { width: drawn.height * fitScale, height: drawn.width * fitScale };
     },
+    canGoPrev: props.neighbourIds.prev !== undefined,
+    canGoNext: props.neighbourIds.next !== undefined,
+    onSwipeOffset: moveStrip,
     onSwipe: (direction) => goTo(direction),
+    onPinchProgress: fadeViewer,
     onPinchClose: () => close(),
   });
   const isZoomed = zoom.isZoomed;
+
+  // The new photo is in place (its thumbnail, where the neighbour was): the
+  // strip goes back to the middle before the frame is painted.
+  useLayoutEffect(() => {
+    moveStrip(0, false);
+  }, [props.fileId, props.visible]);
 
   useEffect(() => {
     if (notice === null) return;
@@ -149,6 +203,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
 
   function close() {
     rotation.flush();
+    fadeViewer(0, false);
     props.onShowChange(false);
   }
 
@@ -231,9 +286,14 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
     transition: rotation.animateTurn ? `transform ${ROTATE_ANIMATION_MS}ms ease` : "none",
   };
 
+  const prevThumbnail =
+    props.neighbourIds.prev && gridThumbnail(props.thumbnails, props.neighbourIds.prev);
+  const nextThumbnail =
+    props.neighbourIds.next && gridThumbnail(props.thumbnails, props.neighbourIds.next);
+
   return (
-    <Container isVisible={props.visible} onClick={close}>
-      <ButtonBar onClick={stop}>
+    <Container ref={containerRef} isVisible={props.visible} onClick={close}>
+      <ButtonBar ref={buttonBarRef} onClick={stop}>
         <ButtonGroup>
           <SelectButton
             type="button"
@@ -313,42 +373,53 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
       >
         <Icons as={Prev} />
       </NextButton>
-      {file?.originalVideo ? (
-        <>
-          <FullScreenImg src={media.shownUrl} />
-          {media.videoUrl && (
-            <FullScreenVideo
-              src={media.videoUrl}
-              autoPlay
-              muted
-              loop
-              controls
-              onClick={stop}
-            />
-          )}
-          {media.isLoadingVideo && (
-            <LoadingOverlay>
-              <Spinner />
-            </LoadingOverlay>
-          )}
-        </>
-      ) : // eslint-disable-next-line sonarjs/no-nested-conditional
-      file?.thumbnail ? (
-        <ZoomWrapper ref={zoom.wrapperRef} isZoomed={isZoomed} {...zoom.handlers}>
-          <ZoomLayer ref={zoom.targetRef}>
-            <ZoomableImg
-              ref={zoom.imageRef}
-              src={media.shownUrl}
-              draggable={false}
-              style={imageTransform}
-            />
-          </ZoomLayer>
-        </ZoomWrapper>
-      ) : (
-        <UnsupportedFile>
-          <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
-        </UnsupportedFile>
-      )}
+      <ZoomWrapper ref={zoom.wrapperRef} isZoomed={isZoomed} {...zoom.handlers}>
+        {/* The shown file in the middle, its neighbours' thumbnails one screen to each side. */}
+        <SwipeStrip ref={stripRef}>
+          <Slot>
+            {prevThumbnail && <NeighbourImg src={prevThumbnail} draggable={false} />}
+          </Slot>
+          <Slot>
+            {file?.thumbnail ? (
+              <ZoomLayer ref={zoom.targetRef}>
+                <ZoomableImg
+                  ref={zoom.imageRef}
+                  src={media.shownUrl}
+                  draggable={false}
+                  style={imageTransform}
+                />
+                {media.videoUrl && (
+                  <FullScreenVideo
+                    src={media.videoUrl}
+                    autoPlay
+                    muted
+                    loop
+                    controls
+                    onClick={stop}
+                    onPointerDown={(e) => {
+                      // Scrubbing the timeline is not a swipe.
+                      const { bottom } = e.currentTarget.getBoundingClientRect();
+                      if (e.clientY > bottom - VIDEO_CONTROLS_PX) e.stopPropagation();
+                    }}
+                  />
+                )}
+                {media.isLoadingVideo && (
+                  <LoadingOverlay>
+                    <Spinner css={{ color: "#fff" }} />
+                  </LoadingOverlay>
+                )}
+              </ZoomLayer>
+            ) : (
+              <UnsupportedFile>
+                <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
+              </UnsupportedFile>
+            )}
+          </Slot>
+          <Slot>
+            {nextThumbnail && <NeighbourImg src={nextThumbnail} draggable={false} />}
+          </Slot>
+        </SwipeStrip>
+      </ZoomWrapper>
       <NextButton
         isZoomed={isZoomed}
         style={{ right: "0px" }}
@@ -516,27 +587,15 @@ const Container = styled("div", {
     },
   },
 });
-const FullScreenImg = styled("img", {
-  display: "block",
-  position: "absolute",
-  top: 0,
-  left: 0,
-  width: "100%",
-  height: "100vh",
-  objectFit: "contain",
-  backgroundColor: "#000",
-});
+// The gesture surface. It has no background of its own: the container's is the
+// backdrop that fades away under a pinch.
 const ZoomWrapper = styled("div", {
   position: "absolute",
   top: 0,
   left: 0,
   width: "100%",
   height: "100vh",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
   overflow: "hidden",
-  backgroundColor: "#000",
   touchAction: "none",
   userSelect: "none",
   variants: {
@@ -545,6 +604,29 @@ const ZoomWrapper = styled("div", {
       false: { cursor: "default" },
     },
   },
+});
+// Three screens side by side — previous, shown, next — moved as one by a swipe
+// (written outside React, like the zoom transform).
+const SwipeStrip = styled("div", {
+  position: "absolute",
+  top: 0,
+  left: "-100%",
+  width: "300%",
+  height: "100vh",
+  display: "flex",
+  willChange: "transform",
+});
+const Slot = styled("div", {
+  position: "relative",
+  width: "calc(100% / 3)",
+  height: "100vh",
+  flexShrink: 0,
+});
+const NeighbourImg = styled("img", {
+  display: "block",
+  width: "100%",
+  height: "100vh",
+  objectFit: "contain",
 });
 // Receives the zoom/pan transform from `useZoomPan` (written outside React).
 const ZoomLayer = styled("div", {
@@ -796,14 +878,6 @@ const NextButton = styled("button", {
   },
 });
 
-const Spinner = styled("div", {
-  width: "3rem",
-  height: "3rem",
-  border: "5px solid rgba(255, 255, 255, 0.3)",
-  borderTop: "5px solid white",
-  borderRadius: "50%",
-  animation: "spin 1s linear infinite",
-});
 const LoadingOverlay = styled("div", {
   position: "absolute",
   top: 0,
