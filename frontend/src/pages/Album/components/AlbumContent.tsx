@@ -2,13 +2,23 @@ import { styled, TOOLBAR_INLINE_QUERY } from "../../../stitches.config";
 import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  MouseEvent,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useGridPinch } from "../hooks/useGridPinch";
+import { useLongPressSelect } from "../hooks/useLongPressSelect";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { Uploaded, useUploadRun } from "../hooks/useUploadRun";
 import { ThumbnailGroup } from "../utils/groupFiles";
+import { readStoredColumns, storeColumns } from "../utils/columnsStore";
+import { clampColumns } from "../utils/pinchGrid";
 import { Panel } from "./Panel";
 import { pressable, pressableNoScale } from "../../../pressable";
 import {
@@ -32,6 +42,8 @@ type AlbumContentProps = {
   isLoadingThumbnails: boolean;
   downloadProgress: number;
   thumbnailGroups: ThumbnailGroup[];
+  /** Every tile in grid order (the long-press range runs along it). */
+  tileIds: readonly string[];
   view: AlbumView;
   onChangeView: (view: AlbumView) => void;
   onRenameBatch: (batchId: string, name: string) => void;
@@ -56,27 +68,66 @@ type AlbumContentProps = {
 export function AlbumContent(props: AlbumContentProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   // Tiles per row, once the user has pinched the grid; `null` is the CSS auto
-  // layout. The scroll position that keeps the pinched tile in place is applied
-  // after the grid has been relaid with the new count.
-  const [columns, setColumns] = useState<number | null>(null);
+  // layout. The count is remembered per orientation, so turning the phone
+  // swaps to the count pinched in that orientation. The scroll position that
+  // keeps the pinched tile in place is applied after the grid has been relaid
+  // with the new count.
+  const orientation = useMediaQuery("(orientation: portrait)") ? "portrait" : "landscape";
+  const [columns, setColumns] = useState<number | null>(() =>
+    readStoredColumns(orientation),
+  );
+  useEffect(() => setColumns(readStoredColumns(orientation)), [orientation]);
   const pendingScrollTop = useRef<number | null>(null);
-  const onPinchCommit = useCallback((next: number, scrollTop: number) => {
-    pendingScrollTop.current = scrollTop;
-    // Called from an animation frame, where React would otherwise render in a
-    // later task and the browser could paint the plain grid in between.
-    flushSync(() => setColumns(next));
-  }, []);
+  const onPinchCommit = useCallback(
+    (next: number, scrollTop: number) => {
+      pendingScrollTop.current = scrollTop;
+      storeColumns(orientation, next);
+      // Called from an animation frame, where React would otherwise render in a
+      // later task and the browser could paint the plain grid in between.
+      flushSync(() => setColumns(next));
+    },
+    [orientation],
+  );
   useLayoutEffect(() => {
     if (pendingScrollTop.current === null) return;
     window.scrollTo({ top: pendingScrollTop.current, behavior: "auto" });
     pendingScrollTop.current = null;
   }, [columns]);
+  const hasGroups = props.thumbnailGroups.length > 0;
   const pinch = useGridPinch({
-    enabled: props.thumbnailGroups.length > 0,
+    enabled: hasGroups,
     columns,
     onCommit: onPinchCommit,
     onOpen: props.onOpen,
   });
+  // A remembered count may not fit this window (pinched on a wider one, or
+  // the desktop window was resized): once a grid is laid out, keep the count
+  // within the ladder the pinch itself uses.
+  useLayoutEffect(() => {
+    if (columns === null) return;
+    const images = pinch.ref.current?.querySelector<HTMLElement>("[data-images]");
+    if (!images) return;
+    const gap = parseFloat(getComputedStyle(images).columnGap) || 0;
+    const fitted = clampColumns(columns, {
+      width: images.getBoundingClientRect().width,
+      gap,
+    });
+    if (fitted !== columns) setColumns(fitted);
+  }, [columns, orientation, hasGroups, pinch.ref]);
+  const longPress = useLongPressSelect({
+    containerRef: pinch.ref,
+    tileIds: props.tileIds,
+    enabled: hasGroups,
+    isSelected: props.isSelected,
+    onSelect: props.onSelect,
+    onDeselect: props.onDeSelect,
+  });
+  // Both gestures swallow the click that follows their release.
+  const { onClickCapture: pinchClickCapture, ...pinchHandlers } = pinch.handlers;
+  const onClickCapture = (e: MouseEvent<HTMLDivElement>) => {
+    longPress.onClickCapture(e);
+    pinchClickCapture(e);
+  };
   // Where the toolbar is the wide shelf, the first group's header shares its
   // row (rendered into this slot); otherwise it heads its own band.
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
@@ -200,7 +251,12 @@ export function AlbumContent(props: AlbumContentProps) {
             onChangeView={props.onChangeView}
           />
         )}
-        <AlbumSections ref={pinch.ref} {...pinch.handlers}>
+        <AlbumSections
+          ref={pinch.ref}
+          {...pinchHandlers}
+          onClickCapture={onClickCapture}
+          onContextMenu={longPress.onContextMenu}
+        >
           <PinchOverlay ref={pinch.overlayRef} aria-hidden="true" />
           {props.thumbnailGroups.map((group, i) => (
             <AlbumSection
@@ -299,7 +355,8 @@ const UploadSection = styled("div", {
 const AlbumSections = styled("div", {
   display: "flex",
   flexDirection: "column",
-  // Two fingers pinch the grid (useGridPinch); one still scrolls the page.
+  // Two fingers pinch the grid (useGridPinch), a long press selects
+  // (useLongPressSelect); one finger still scrolls the page.
   touchAction: "pan-y",
 });
 

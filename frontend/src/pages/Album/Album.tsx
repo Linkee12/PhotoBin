@@ -246,6 +246,7 @@ export default function Album() {
           // "Download all" takes every tile's sidecars along.
           onDownloadAll={() => void runDownload(selection.withSidecars(tileIds))}
           thumbnailGroups={thumbnailGroups}
+          tileIds={tileIds}
           view={view}
           onChangeView={changeView}
           onRenameBatch={renameBatch}
