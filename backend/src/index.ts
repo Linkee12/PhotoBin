@@ -130,9 +130,24 @@ const routes = {
       }),
     )
     .get(async ({ data }) => {
+      if (!(await albumService.exists(data.query.id))) {
+        return apiResponse("not-found", 404, { message: "Album not found" });
+      }
       const metadata = albumService.getMetaData(data.query.id);
       const expiresAt = await albumService.getExpiresAt(data.query.id);
       return success({ metadata, expiresAt });
+    }),
+  createAlbum: builder
+    .bodySchema(z.object({ albumId: uuidSchema }))
+    .post(async ({ data }) => {
+      await albumService.createAlbum(data.body.albumId);
+      return success({});
+    }),
+  deleteAlbum: builder
+    .bodySchema(z.object({ albumId: uuidSchema }))
+    .delete(async ({ data }) => {
+      await albumService.deleteAlbum(data.body.albumId);
+      return success({});
     }),
   getPartOfImage: builder
     .querySchema(
