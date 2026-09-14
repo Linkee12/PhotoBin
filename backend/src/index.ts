@@ -89,7 +89,7 @@ app.put(
       res.status(204).end();
     } catch (err) {
       if (err instanceof AlbumNotFoundError) {
-        res.status(404).json({ message: err.message });
+        res.status(404).json({ message: err.message, code: err.code });
         return;
       }
       next(err);

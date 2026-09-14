@@ -176,16 +176,26 @@ export default function Album() {
     setShowOrigin(true);
   }, []);
 
-  /** The tile `direction` steps away from the viewed one, wrapping around; sidecars have no tile. */
-  function neighbourId(direction: number): string | undefined {
-    if (tileIds.length < 2) return undefined;
-    const currentIdx = tileIds.findIndex((id) => id === fullscreenImage?.fileId);
-    return tileIds[(currentIdx + direction + tileIds.length) % tileIds.length];
-  }
+  /** The tiles one step from the viewed one, wrapping around; sidecars have no tile. */
+  const neighbourIds = useMemo((): { prev?: string; next?: string } => {
+    const index = fullscreenImage ? tileIds.indexOf(fullscreenImage.fileId) : -1;
+    if (index === -1 || tileIds.length < 2) return {};
+    const at = (step: number) =>
+      tileIds[(index + step + tileIds.length) % tileIds.length];
+    return { prev: at(-1), next: at(1) };
+  }, [fullscreenImage, tileIds]);
+
+  // The viewer previews the neighbours' grid thumbnails while swiping; the
+  // wrap-around neighbour is rarely on screen, so ask for them ahead.
+  useEffect(() => {
+    for (const id of [neighbourIds.prev, neighbourIds.next]) {
+      if (id !== undefined) thumbnails.loader.request(id, "front");
+    }
+  }, [neighbourIds, thumbnails.loader]);
 
   /** Steps the viewer to the next/previous tile. */
   function showNeighbour(direction: number) {
-    const id = neighbourId(direction);
+    const id = direction > 0 ? neighbourIds.next : neighbourIds.prev;
     if (id !== undefined) setFullscreenImage({ fileId: id });
   }
 
@@ -216,7 +226,7 @@ export default function Album() {
             fileId={viewed.id}
             visible={showOrigin}
             thumbnails={thumbnailGroups}
-            neighbourIds={{ prev: neighbourId(-1), next: neighbourId(1) }}
+            neighbourIds={neighbourIds}
             fileName={decodedValues.files[viewed.id]?.name ?? ""}
             onShowChange={setShowOrigin}
             onNext={showNeighbour}

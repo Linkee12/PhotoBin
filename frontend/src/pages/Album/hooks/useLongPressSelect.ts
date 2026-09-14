@@ -9,7 +9,7 @@ import { autoScrollSpeed, rangeBetween } from "../utils/rangeSelect";
 import { distance, Point } from "../../../utils/geometry";
 
 /** How long a still finger must rest on a tile before it selects it. */
-export const LONG_PRESS_MS = 450;
+const LONG_PRESS_MS = 450;
 /** A finger drifting further than this before the press fires is a scroll, not a press. */
 const MOVE_TOLERANCE_PX = 8;
 const VIBRATE_MS = 10;
@@ -23,6 +23,8 @@ type Options = {
   isSelected: (id: string) => boolean;
   onSelect: (ids: string[]) => void;
   onDeselect: (ids: string[]) => void;
+  /** The press ended: the click its release produces must not open or toggle the tile. */
+  swallowNextClick: () => void;
 };
 
 type Press = {
@@ -51,15 +53,14 @@ type Press = {
  *
  * Touch pointers only (mouse users have the hover checkbox); a second finger
  * cancels the press so the pinch gesture wins. The click after the release
- * is swallowed by `onClickCapture`, `onContextMenu` keeps the browser's
- * long-press menu away while a press is on. Spread both on the container.
+ * goes to `swallowNextClick` (`useSwallowNextClick`); `onContextMenu` keeps
+ * the browser's long-press menu away while a press is on — put it on the
+ * container.
  */
 export function useLongPressSelect(options: Options) {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   const press = useRef<Press | null>(null);
-  /** The press ended: the click its release produces must not open or toggle the tile. */
-  const suppressClick = useRef(false);
 
   useEffect(() => {
     const container = options.containerRef.current;
@@ -128,8 +129,6 @@ export function useLongPressSelect(options: Options) {
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType !== "touch") return;
-      // A new touch: the click the last press swallowed, if any, has been and gone.
-      if (e.isPrimary) suppressClick.current = false;
       if (press.current) {
         // A second finger: the pinch takes over; what is selected stays.
         cancel();
@@ -163,7 +162,7 @@ export function useLongPressSelect(options: Options) {
     const onPointerEnd = (e: PointerEvent) => {
       const p = press.current;
       if (!p || e.pointerId !== p.pointerId) return;
-      if (p.fired) suppressClick.current = true;
+      if (p.fired) optionsRef.current.swallowNextClick();
       cancel();
     };
 
@@ -190,16 +189,9 @@ export function useLongPressSelect(options: Options) {
     };
   }, [options.enabled, options.containerRef]);
 
-  const onClickCapture = useCallback((e: ReactMouseEvent<HTMLElement>) => {
-    if (!suppressClick.current) return;
-    suppressClick.current = false;
-    e.stopPropagation();
-    e.preventDefault();
-  }, []);
-
   const onContextMenu = useCallback((e: ReactMouseEvent<HTMLElement>) => {
     if (press.current) e.preventDefault();
   }, []);
 
-  return { onClickCapture, onContextMenu };
+  return { onContextMenu };
 }

@@ -2,19 +2,13 @@ import { styled, TOOLBAR_INLINE_QUERY } from "../../../stitches.config";
 import { Cloud, DropHint } from "@assets/images/cloud";
 import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
-import {
-  MouseEvent,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useGridPinch } from "../hooks/useGridPinch";
 import { useLongPressSelect } from "../hooks/useLongPressSelect";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { useSwallowNextClick } from "../hooks/useSwallowNextClick";
 import { Uploaded, useUploadRun } from "../hooks/useUploadRun";
 import { ThumbnailGroup } from "../utils/groupFiles";
 import { readStoredColumns, storeColumns } from "../utils/columnsStore";
@@ -94,11 +88,14 @@ export function AlbumContent(props: AlbumContentProps) {
     pendingScrollTop.current = null;
   }, [columns]);
   const hasGroups = props.thumbnailGroups.length > 0;
+  // Both gestures swallow the click that follows their release.
+  const swallow = useSwallowNextClick();
   const pinch = useGridPinch({
     enabled: hasGroups,
     columns,
     onCommit: onPinchCommit,
     onOpen: props.onOpen,
+    swallowNextClick: swallow.arm,
   });
   // A remembered count may not fit this window (pinched on a wider one, or
   // the desktop window was resized): once a grid is laid out, keep the count
@@ -121,13 +118,8 @@ export function AlbumContent(props: AlbumContentProps) {
     isSelected: props.isSelected,
     onSelect: props.onSelect,
     onDeselect: props.onDeSelect,
+    swallowNextClick: swallow.arm,
   });
-  // Both gestures swallow the click that follows their release.
-  const { onClickCapture: pinchClickCapture, ...pinchHandlers } = pinch.handlers;
-  const onClickCapture = (e: MouseEvent<HTMLDivElement>) => {
-    longPress.onClickCapture(e);
-    pinchClickCapture(e);
-  };
   // Where the toolbar is the wide shelf, the first group's header shares its
   // row (rendered into this slot); otherwise it heads its own band.
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
@@ -253,8 +245,8 @@ export function AlbumContent(props: AlbumContentProps) {
         )}
         <AlbumSections
           ref={pinch.ref}
-          {...pinchHandlers}
-          onClickCapture={onClickCapture}
+          {...pinch.handlers}
+          {...swallow.handlers}
           onContextMenu={longPress.onContextMenu}
         >
           <PinchOverlay ref={pinch.overlayRef} aria-hidden="true" />

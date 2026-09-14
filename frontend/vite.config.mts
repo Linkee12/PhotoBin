@@ -32,7 +32,6 @@ export default defineConfig(() => {
       // (no runtime caching is configured and the navigate fallback skips it).
       VitePWA({
         registerType: "autoUpdate",
-        includeAssets: ["favicon.svg"],
         manifest: {
           name: "PhotoBin",
           short_name: "PhotoBin",
