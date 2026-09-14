@@ -154,11 +154,17 @@ export default function Album() {
     setShowOrigin(true);
   }, []);
 
-  /** Steps the viewer to the next/previous tile, wrapping around; sidecars have no tile. */
-  function showNeighbour(direction: number) {
+  /** The tile `direction` steps away from the viewed one, wrapping around; sidecars have no tile. */
+  function neighbourId(direction: number): string | undefined {
+    if (tileIds.length < 2) return undefined;
     const currentIdx = tileIds.findIndex((id) => id === fullscreenImage?.fileId);
-    const nextIdx = (currentIdx + direction + tileIds.length) % tileIds.length;
-    setFullscreenImage({ fileId: tileIds[nextIdx] });
+    return tileIds[(currentIdx + direction + tileIds.length) % tileIds.length];
+  }
+
+  /** Steps the viewer to the next/previous tile. */
+  function showNeighbour(direction: number) {
+    const id = neighbourId(direction);
+    if (id !== undefined) setFullscreenImage({ fileId: id });
   }
 
   function saveAlbumName() {
@@ -188,6 +194,7 @@ export default function Album() {
             fileId={viewed.id}
             visible={showOrigin}
             thumbnails={thumbnailGroups}
+            neighbourIds={{ prev: neighbourId(-1), next: neighbourId(1) }}
             fileName={decodedValues.files[viewed.id]?.name ?? ""}
             onShowChange={setShowOrigin}
             onNext={showNeighbour}
