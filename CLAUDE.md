@@ -40,7 +40,7 @@ npm run type-check   # frontend only
 npm run build        # tsc + vite build (frontend) / tsc (backend)
 ```
 
-Automated tests are vitest specs, run with `npm test` in either package: backend `backend/src/**/*.test.ts` (services and the zod schemas), frontend `frontend/src/**/*.test.ts` (pure logic only, e.g. `pages/Album/utils/groupFiles.ts`, `services/renditions.ts`, the set helpers of `hooks/useSelection.ts` and `PendingUploadStore` with a stubbed `localStorage`; no component tests).
+Automated tests are vitest specs, run with `npm test` in either package: backend `backend/src/**/*.test.ts` (services and the zod schemas), frontend `frontend/src/**/*.test.ts` (pure logic only, e.g. `pages/Album/utils/groupFiles.ts`, `services/renditions.ts`, the set helpers of `hooks/useSelection.ts`, `services/visitedAlbums.ts` and `PendingUploadStore` with a stubbed `localStorage`; no component tests).
 
 Backend env vars (all optional, read via `dotenv`): `ALBUM_TTL_MS` (album lifetime, 30 days), `CLEANUP_INTERVAL_MS` (1 hour), `ORPHAN_TTL_MS` (unfinalized upload dirs, 24 hours), `EDIT_LOCK_TTL_MS` (stale edit lock, 10 minutes). `backend/src/index.ts` passes them to `new AlbumService(metadataService, albumTtlMs, { editLockTtlMs, orphanTtlMs })`; tests additionally pass `albumsRoot`.
 
@@ -112,8 +112,14 @@ albums/<albumId>/<fileId>/.edit-lock, .edit-<editId>/   ← transient edit lock 
 ```
 Parts written through the binary route are raw bytes named `<part>.bin`. Albums uploaded before that route existed have base64 text files named `<part>` (no suffix); `AlbumService` checks for `<part>.bin` first and falls back to decoding `<part>`, so both layouts stay readable. Do not write both names for the same part.
 
+### Installable app (PWA)
+`vite-plugin-pwa` (`frontend/vite.config.mts`, `registerType: "autoUpdate"`, registered by `registerSW()` in `main.tsx`) emits `manifest.webmanifest` and a Workbox `sw.js` that precaches the built assets only: there is no runtime caching and the navigation fallback denies `/^\/api\//`, so encrypted parts never enter the service worker cache — keep it that way. The manifest declares `handle_links: "preferred"` and `launch_handler: { client_mode: "navigate-existing" }` so an installed app opens `/bin/<id>#<key>` links itself with the hash intact. The PNG icons in `frontend/public/` (`pwa-192`, `pwa-512`, `pwa-maskable-512`) were rendered once from `public/favicon.svg` with `rsvg-convert`; regenerate them if the favicon changes.
+
+### Visited albums
+`services/visitedAlbums.ts` keeps the albums this browser has opened in one localStorage record (`photobin:visited`, keyed by albumId: the full URL including the key hash, the decoded title, `expiresAt`, `itemCount`, `visitedAt`). The helpers take an injected `Storage` and are vitest-covered; `listVisitedAlbums` drops expired entries and sorts newest visit first, malformed or blocked storage counts as empty. `AlbumContextProvider` calls `rememberVisitedAlbum` after every successful metadata load, `main.tsx` calls `requestPersistentStorage()` once. `pages/Home/components/VisitedAlbums.tsx` renders the list ("YOUR ALBUMS", hidden when empty, `repeat(auto-fill, minmax(16em, 1fr))` cards); a card is a full navigation (`window.location.assign`) to the stored URL because a hash-only route change would not re-run the album context, and the URL is never rendered. Its `×` confirms through `components/Dialog.tsx` (a native `<dialog>` shown with `showModal()`, closed by Escape and backdrop click, with `DialogActions`, `SecondaryButton` and `DangerButton`), shared with the delete-album dialog.
+
 ### Frontend page structure
-- `/` → `pages/Home` — landing page, album creation (encrypted by default, with an "unencrypted album" toggle)
+- `/` → `pages/Home` — landing page, album creation (encrypted by default, with an "unencrypted album" toggle), the visited albums list
 - `/bin/:albumId` → `pages/Album` — upload, view, download
   - `AlbumContextProvider` (`hooks/useAlbumContext.tsx`) fetches metadata and decrypts the album name, every file's name/date and every batch name; exposes `{ key, isEncrypted, metadata, expiresAt, decodedValues: { albumName, files, batches }, refreshMetadata }` via context (`key` is `null` for plain albums). Overlapping refreshes are sequenced so a slow older response cannot roll back a newer file list.
   - Service classes (`UploadService`, `ImageQueryService`, `DownloadService`, `RotateService`, `CanvasService`, `CryptoService`) handle all media logic; `services/index.ts` builds the one instance graph the album uses (`UploadService` holds in-session resume state, so everything that uploads must share it). Tests construct their own instances.

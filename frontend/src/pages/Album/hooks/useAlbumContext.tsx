@@ -6,6 +6,7 @@ import { cryptoService } from "../services";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { toast } from "react-toastify";
 import { DecodedBatches, DecodedFiles } from "../utils/groupFiles";
+import { rememberVisitedAlbum } from "../../../services/visitedAlbums";
 
 export type DecodedValues = {
   albumName: string;
@@ -122,6 +123,13 @@ export function AlbumContextProvider(props: { children: React.ReactNode }) {
       setMetadata(response.metadata);
       setExpiresAt(response.expiresAt);
       setDecodedValues(decoded);
+      rememberVisitedAlbum({
+        albumId,
+        url: window.location.href,
+        title: decoded.albumName,
+        expiresAt: response.expiresAt,
+        itemCount: response.metadata.files.length,
+      });
     }
   };
   const refreshMetadata = () => {
