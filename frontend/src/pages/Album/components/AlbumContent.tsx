@@ -24,6 +24,8 @@ import {
   TOOLBAR_HEIGHT,
 } from "../layout";
 import { AlbumToolbar } from "./AlbumToolbar";
+import { GooglePhotosImportDialog } from "./GooglePhotosImportDialog";
+import { isGooglePhotosEnabled } from "../services/googlePhotos/googleAuth";
 import { formatBytesPair } from "../../../utils/formatBytes";
 import { AlbumView } from "../utils/groupFiles";
 
@@ -36,6 +38,8 @@ type AlbumContentProps = {
   isDownloading: boolean;
   isLoadingThumbnails: boolean;
   downloadProgress: number;
+  /** What the download mask says; "Preparing your files" by default. */
+  downloadLabel?: string;
   thumbnailGroups: ThumbnailGroup[];
   /** Every tile in grid order (the long-press range runs along it). */
   tileIds: readonly string[];
@@ -126,6 +130,7 @@ export function AlbumContent(props: AlbumContentProps) {
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const ref = useRef<HTMLInputElement>(null);
+  const [isGoogleImportOpen, setGoogleImportOpen] = useState(false);
   const { metadata, refreshMetadata, key, isEncrypted } = useAlbumContext();
   const run = useUploadRun({
     albumId: metadata?.albumId,
@@ -168,6 +173,11 @@ export function AlbumContent(props: AlbumContentProps) {
   function openFilePicker() {
     ref.current?.click();
   }
+  // Hidden while a run is active: `upload` ignores files picked meanwhile.
+  const openGoogleImport =
+    isGooglePhotosEnabled && !props.isUploading
+      ? () => setGoogleImportOpen(true)
+      : undefined;
   const hasFailedFiles = failedFiles.length > 0;
   let cloudText = "Drop photos here";
   if (props.isUploading) cloudText = "Preparing your photos";
@@ -232,6 +242,16 @@ export function AlbumContent(props: AlbumContentProps) {
                 Retry failed uploads ({failedFiles.length})
               </UploadAction>
             )}
+            {phase === "idle" && !hasFailedFiles && openGoogleImport && (
+              <UploadAction
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openGoogleImport();
+                }}
+              >
+                Import from Google Photos
+              </UploadAction>
+            )}
           </CloudContainer>
         </CloudSlot>
         {props.thumbnailGroups.length > 0 && (
@@ -239,6 +259,7 @@ export function AlbumContent(props: AlbumContentProps) {
             headerSlotRef={setHeaderSlot}
             onDownloadAll={props.onDownloadAll}
             onAddPhoto={openFilePicker}
+            onImportGooglePhotos={openGoogleImport}
             isBusy={props.isUploading || props.isDownloading}
             view={props.view}
             onChangeView={props.onChangeView}
@@ -279,7 +300,7 @@ export function AlbumContent(props: AlbumContentProps) {
         </AlbumSections>
         <UploadMask show={phase === "uploading" || phase === "done"} />
         <DownloadMask show={props.isDownloading}>
-          <DownloadText>Preparing your files</DownloadText>
+          <DownloadText>{props.downloadLabel ?? "Preparing your files"}</DownloadText>
           {props.downloadProgress > 0 && (
             <DownloadPercent>{props.downloadProgress}%</DownloadPercent>
           )}
@@ -300,6 +321,13 @@ export function AlbumContent(props: AlbumContentProps) {
           ></input>
         </UploadSection>
       </DragNdrop>
+      {isGooglePhotosEnabled && (
+        <GooglePhotosImportDialog
+          open={isGoogleImportOpen}
+          onClose={() => setGoogleImportOpen(false)}
+          onFiles={uploadImages}
+        />
+      )}
     </Panel>
   );
 }

@@ -5,6 +5,12 @@ services:
     ports:
       # Plain HTTP. Put your TLS reverse proxy (Caddy, nginx, Traefik) in front of it.
       - "8080:80"
+    # Google Photos import/save (optional): a Web OAuth client id whose
+    # "Authorized JavaScript origins" include this site. Baked in at build
+    # time, so run `make prod-update` after changing it.
+    # build:
+    #   args:
+    #     VITE_GOOGLE_CLIENT_ID: "1234-abc.apps.googleusercontent.com"
 
   backend:
     environment:

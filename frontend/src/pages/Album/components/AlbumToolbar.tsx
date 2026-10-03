@@ -42,6 +42,8 @@ type AlbumToolbarProps = {
   headerSlotRef: Ref<HTMLDivElement>;
   onDownloadAll: () => void;
   onAddPhoto: () => void;
+  /** Absent when Google Photos is not configured or an upload is running. */
+  onImportGooglePhotos?: () => void;
   isBusy: boolean;
   view: AlbumView;
   onChangeView: (view: AlbumView) => void;
@@ -77,11 +79,16 @@ function ViewToggle(props: { view: AlbumView; onChangeView: (view: AlbumView) =>
 
 type ControlsProps = Pick<
   AlbumToolbarProps,
-  "onDownloadAll" | "onAddPhoto" | "isBusy" | "view" | "onChangeView"
+  | "onDownloadAll"
+  | "onAddPhoto"
+  | "onImportGooglePhotos"
+  | "isBusy"
+  | "view"
+  | "onChangeView"
 >;
 
 /**
- * The three controls, in the wide row (`data-toolbar-control`, measured by
+ * The controls (Google Photos only when configured), in the wide row (`data-toolbar-control`, measured by
  * the layout check) or in the bottom sheet, where a button fills the width
  * with its label centred between a spacer and the icon, is only tabbable
  * while the sheet is open, and closes the sheet once used.
@@ -108,6 +115,13 @@ function Controls(
         <span>DOWNLOAD ALL</span>
         <LandscapeDownloadIcon />
       </Button>
+      {props.onImportGooglePhotos && (
+        <Button onClick={act(props.onImportGooglePhotos)} {...control}>
+          {!inRow && <div />}
+          <span>GOOGLE PHOTOS</span>
+          <AddIcon />
+        </Button>
+      )}
       <Button accent onClick={act(props.onAddPhoto)} {...control}>
         {!inRow && <div />}
         <span>ADD PHOTO</span>

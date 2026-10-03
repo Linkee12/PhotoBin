@@ -10,6 +10,10 @@ RUN cd frontend && npm ci
 COPY backend/tsconfig.json backend/
 COPY backend/src backend/src
 COPY frontend frontend
+# Optional: enables the Google Photos import/save (see frontend/.env.sample).
+# A build arg is in the RUN environment only when passed, so an unset one does
+# not shadow a value from frontend/.env.
+ARG VITE_GOOGLE_CLIENT_ID
 RUN cd frontend && npm run build
 
 FROM caddy:2-alpine

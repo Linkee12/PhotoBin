@@ -24,7 +24,16 @@ import { useAlbumContext } from "./hooks/useAlbumContext";
 import { useSelection } from "./hooks/useSelection";
 import { useThumbnails } from "./hooks/useThumbnails";
 import { ThumbnailVisibilityProvider } from "./hooks/useThumbnailVisibility";
-import { downloadService, uploadService } from "./services";
+import { downloadService, imageQueryService, uploadService } from "./services";
+import {
+  APPEND_ONLY_SCOPE,
+  forgetAccessToken,
+  isGooglePhotosEnabled,
+  loadGoogleIdentity,
+  requestAccessToken,
+} from "./services/googlePhotos/googleAuth";
+import { GooglePhotosError } from "./services/googlePhotos/googlePhotosApi";
+import { saveToGooglePhotos } from "./services/googlePhotos/saveToGooglePhotos";
 import {
   ALBUM_VIEWS,
   AlbumView,
@@ -54,6 +63,7 @@ export default function Album() {
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isSavingToGoogle, setIsSavingToGoogle] = useState(false);
   const files = useMemo(() => metadata?.files ?? [], [metadata]);
 
   // Thumbnails are loaded (or announced by an upload) per file; the grouped
@@ -82,6 +92,12 @@ export default function Album() {
   useEffect(() => {
     setTitle(decodedValues.albumName);
   }, [decodedValues.albumName]);
+
+  // Google's sign-in popup must open straight from a click: have its script ready.
+  useEffect(() => {
+    if (!isGooglePhotosEnabled) return;
+    loadGoogleIdentity().catch((e) => console.error(e));
+  }, []);
 
   // The first tiles of a freshly opened album are on screen in any layout; ask
   // for them as soon as the file list is known instead of after the whole
@@ -175,6 +191,50 @@ export default function Album() {
     }
   }
 
+  /**
+   * Decrypts the selection and adds it to a new album in the user's Google
+   * Photos. Called straight from the click: the sign-in popup needs it.
+   */
+  function runSaveToGooglePhotos(imageIds: string[]) {
+    if (metadata === undefined || isDownloading) return;
+    const token = requestAccessToken(APPEND_ONLY_SCOPE);
+    setIsDownloading(true);
+    setIsSavingToGoogle(true);
+    setDownloadProgress(0);
+    token
+      .then((token) =>
+        saveToGooglePhotos(imageQueryService, {
+          token,
+          albumId: metadata.albumId,
+          albumName: decodedValues.albumName,
+          files: metadata.files,
+          key,
+          fileIds: imageIds,
+          onProgress: setDownloadProgress,
+        }),
+      )
+      .then(({ saved, total }) => {
+        if (saved === total) toast.success(`Saved ${saved} to Google Photos`);
+        else toast.warn(`Saved ${saved} of ${total} to Google Photos`);
+      })
+      .catch((e: unknown) => {
+        console.error(e);
+        if (e instanceof GooglePhotosError && e.status === 401) {
+          forgetAccessToken(APPEND_ONLY_SCOPE);
+        }
+        toast.error(
+          e instanceof Error
+            ? `Google Photos: ${e.message}`
+            : "Saving to Google Photos failed",
+        );
+      })
+      .finally(() => {
+        setIsDownloading(false);
+        setIsSavingToGoogle(false);
+        setDownloadProgress(0);
+      });
+  }
+
   const onOpen = useCallback((id: string) => {
     setFullscreenImage({ fileId: id });
     setShowOrigin(true);
@@ -262,6 +322,7 @@ export default function Album() {
           isDownloading={isDownloading}
           isLoadingThumbnails={isLoadingThumbnails}
           downloadProgress={downloadProgress}
+          downloadLabel={isSavingToGoogle ? "Saving to Google Photos" : undefined}
           onUploadStarted={() => setIsUploading(true)}
           onUploadFinished={() => setIsUploading(false)}
           // "Download all" takes every tile's sidecars along.
@@ -291,6 +352,11 @@ export default function Album() {
           onDeleteSelected={() => confirmAndDelete(selection.selectedImages)}
           onUncheckSelected={selection.clear}
           onDownloadSelected={() => void runDownload(selection.selectedImages)}
+          onSaveToGooglePhotos={
+            isGooglePhotosEnabled
+              ? () => runSaveToGooglePhotos(selection.selectedImages)
+              : undefined
+          }
         />
         <Footer>
           {/* An upload finishing after the delete would recreate nothing (the

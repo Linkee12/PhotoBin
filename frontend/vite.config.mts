@@ -64,7 +64,8 @@ export default defineConfig(() => {
     server: {
       host: "0.0.0.0",
       headers: {
-        "Cross-Origin-Opener-Policy": "same-origin",
+        // `allow-popups`: Google sign-in's popup reports the token to its opener.
+        "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
         "Cross-Origin-Embedder-Policy": "require-corp",
       },
       port: 3000,
