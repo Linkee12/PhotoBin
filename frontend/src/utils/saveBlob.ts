@@ -15,3 +15,16 @@ export function saveBlob(blob: Blob, name: string) {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
 }
+
+/**
+ * iOS WebKit (every iOS browser) ignores a download that a recent tap did not
+ * start, and zipping outlasts the tap; elsewhere a late download is fine.
+ */
+export function needsTapToSave(): boolean {
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  if (!isIOS) return false;
+  const activation = (navigator as { userActivation?: UserActivation }).userActivation;
+  return !activation?.isActive;
+}

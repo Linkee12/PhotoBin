@@ -2,6 +2,7 @@ import { Zip, ZipPassThrough } from "fflate";
 import { ImageQueryService } from "./ImageQueryService";
 import { AlbumFile, downloadFileName, downloadPart } from "./renditions";
 import { sleep } from "../../../utils/retry";
+import { openZipSink } from "./zipSink";
 
 type DownloadProps = {
   albumId: string;
@@ -17,48 +18,42 @@ const ZIP_PUSH_BYTES = 4 * 1024 * 1024;
 
 /**
  * Zips the selected files (each as its download rendition, see `downloadPart`)
- * into the origin-private file system and hands the result to the browser.
+ * into the origin-private file system where the browser allows it (`openZipSink`).
  */
 export class DownloadService {
   constructor(private _imageQueryService: ImageQueryService) {}
 
-  async download(props: DownloadProps) {
-    const root = await navigator.storage.getDirectory();
-    const zipName = `${props.albumName === "" ? "Album" : props.albumName}.zip`;
-    const fileHandle = await root.getFileHandle(zipName, { create: true });
-    const writable = await fileHandle.createWritable();
+  /** Returns the zip and its file name; saving it is the caller's (see `utils/saveBlob.ts`). */
+  async download(props: DownloadProps): Promise<{ blob: Blob; name: string }> {
+    const name = `${props.albumName === "" ? "Album" : props.albumName}.zip`;
+    const sink = await openZipSink();
 
-    const zipFinished = new Promise<void>((resolve, reject) => {
+    const zipFinished = new Promise<Blob>((resolve, reject) => {
+      // Sequential, so every sink sees the chunks in order.
+      let writes = Promise.resolve();
+      const enqueue = (chunk: Uint8Array, final: boolean) => {
+        writes = writes
+          .then(async () => {
+            await sink.write(chunk);
+            if (final) resolve(await sink.close());
+          })
+          .catch(reject);
+      };
       const zip = new Zip((err, chunk, final) => {
         if (err) {
           reject(err);
           return;
         }
-        void (async () => {
-          if (chunk) await writable.write(chunk);
-          if (final) {
-            await writable.close();
-            resolve();
-          }
-        })();
+        enqueue(chunk, final);
       });
       this._addFiles(zip, props).then(() => zip.end(), reject);
     });
     try {
-      await zipFinished;
+      return { blob: await zipFinished, name };
     } catch (e) {
-      await writable.abort().catch(() => undefined);
+      await sink.abort();
       throw e;
     }
-
-    const file = await fileHandle.getFile();
-    const url = URL.createObjectURL(file);
-    const a = document.createElement("a");
-    a.href = url;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   }
 
   private async _addFiles(zip: Zip, props: DownloadProps) {

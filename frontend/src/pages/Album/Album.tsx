@@ -13,7 +13,9 @@ import { client } from "../../cuple";
 import { pressableNoScale } from "../../pressable";
 import { forgetVisitedAlbum } from "../../services/visitedAlbums";
 import { readItem, writeItem } from "../../utils/storage";
+import { needsTapToSave, saveBlob } from "../../utils/saveBlob";
 import { DeleteAlbumDialog } from "./components/DeleteAlbumDialog";
+import { SaveDownloadToast } from "./components/SaveDownloadToast";
 import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
@@ -142,7 +144,7 @@ export default function Album() {
     setIsDownloading(true);
     setDownloadProgress(0);
     try {
-      await downloadService.download({
+      const zip = await downloadService.download({
         albumId: metadata.albumId,
         albumName: decodedValues.albumName,
         files: metadata.files,
@@ -150,6 +152,20 @@ export default function Album() {
         selectedImages: imageIds,
         onProgress: setDownloadProgress,
       });
+      if (needsTapToSave()) {
+        const toastId = toast(
+          <SaveDownloadToast
+            name={zip.name}
+            onSave={() => {
+              saveBlob(zip.blob, zip.name);
+              toast.dismiss(toastId);
+            }}
+          />,
+          { autoClose: false, closeOnClick: false },
+        );
+      } else {
+        saveBlob(zip.blob, zip.name);
+      }
     } catch (e) {
       console.error(e);
       toast.error("Download failed");
