@@ -15,6 +15,8 @@ import { forgetVisitedAlbum } from "../../services/visitedAlbums";
 import { readItem, writeItem } from "../../utils/storage";
 import { needsTapToSave, saveBlob } from "../../utils/saveBlob";
 import { DeleteAlbumDialog } from "./components/DeleteAlbumDialog";
+import { SaveToGooglePhotosDialog } from "./components/SaveToGooglePhotosDialog";
+import { guardUnload } from "../../utils/guardUnload";
 import { SaveDownloadToast } from "./components/SaveDownloadToast";
 import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
@@ -64,6 +66,8 @@ export default function Album() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isSavingToGoogle, setIsSavingToGoogle] = useState(false);
+  /** The selection the save dialog asks about; `null` while it is closed. */
+  const [saveToGoogleIds, setSaveToGoogleIds] = useState<string[] | null>(null);
   const files = useMemo(() => metadata?.files ?? [], [metadata]);
 
   // Thumbnails are loaded (or announced by an upload) per file; the grouped
@@ -198,6 +202,8 @@ export default function Album() {
   function runSaveToGooglePhotos(imageIds: string[]) {
     if (metadata === undefined || isDownloading) return;
     const token = requestAccessToken(APPEND_ONLY_SCOPE);
+    // Leaving mid-save would leave a half-filled album in Google Photos.
+    const releaseUnloadGuard = guardUnload();
     setIsDownloading(true);
     setIsSavingToGoogle(true);
     setDownloadProgress(0);
@@ -229,6 +235,7 @@ export default function Album() {
         );
       })
       .finally(() => {
+        releaseUnloadGuard();
         setIsDownloading(false);
         setIsSavingToGoogle(false);
         setDownloadProgress(0);
@@ -354,7 +361,7 @@ export default function Album() {
           onDownloadSelected={() => void runDownload(selection.selectedImages)}
           onSaveToGooglePhotos={
             isGooglePhotosEnabled
-              ? () => runSaveToGooglePhotos(selection.selectedImages)
+              ? () => setSaveToGoogleIds(selection.selectedImages)
               : undefined
           }
         />
@@ -364,13 +371,25 @@ export default function Album() {
               fail noisily: keep the two apart. */}
           <FooterLink
             type="button"
-            disabled={isUploading || isDeletingAlbum}
-            title={isUploading ? "Wait for the upload to finish" : undefined}
+            disabled={isUploading || isDownloading || isDeletingAlbum}
+            title={
+              isUploading || isDownloading
+                ? "Wait for the upload or download to finish"
+                : undefined
+            }
             onClick={() => setDeleteAlbumOpen(true)}
           >
             Delete this album
           </FooterLink>
         </Footer>
+        <SaveToGooglePhotosDialog
+          count={saveToGoogleIds?.length ?? null}
+          onClose={() => setSaveToGoogleIds(null)}
+          onConfirm={() => {
+            if (saveToGoogleIds !== null) runSaveToGooglePhotos(saveToGoogleIds);
+            setSaveToGoogleIds(null);
+          }}
+        />
         <DeleteAlbumDialog
           open={isDeleteAlbumOpen}
           title={title}

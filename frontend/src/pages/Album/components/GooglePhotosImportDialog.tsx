@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { styled } from "../../../stitches.config";
-import { ACCENT_COLOR } from "../../../theme";
-import { Dialog, DialogActions, SecondaryButton } from "../../../components/Dialog";
+import {
+  AccentButton,
+  Dialog,
+  DialogActions,
+  SecondaryButton,
+} from "../../../components/Dialog";
+import { guardUnload } from "../../../utils/guardUnload";
 import { isAbortError } from "../../../utils/retry";
 import {
   forgetAccessToken,
@@ -37,6 +41,11 @@ type Step =
  * the picker (a second popup, so it needs a click of its own). The picked
  * files are downloaded here and handed to `onFiles`, which uploads them like
  * dropped files: they are encrypted before they leave the browser.
+ *
+ * Once Google is involved (signing in, picking, downloading) a stray click
+ * must not throw the work away: Escape and the backdrop do nothing, Cancel
+ * asks first while picking or downloading, a second click on "Choose photos"
+ * only reopens the window, and leaving the page asks while downloading.
  */
 export function GooglePhotosImportDialog(props: {
   open: boolean;
@@ -45,12 +54,20 @@ export function GooglePhotosImportDialog(props: {
 }) {
   const [step, setStep] = useState<Step>({ name: "signin" });
   const [isBusy, setIsBusy] = useState(false);
+  const [isConfirmingStop, setConfirmingStop] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const sessionRef = useRef<{ token: string; id: string } | null>(null);
+  // Set synchronously: two quick clicks must not start two polls (and import twice).
+  const isPollingRef = useRef(false);
+  const releaseUnloadRef = useRef<(() => void) | null>(null);
 
   function reset() {
     abortRef.current?.abort();
     abortRef.current = null;
+    isPollingRef.current = false;
+    releaseUnloadRef.current?.();
+    releaseUnloadRef.current = null;
+    setConfirmingStop(false);
     const session = sessionRef.current;
     sessionRef.current = null;
     if (session) deletePickingSession(session.token, session.id).catch(() => undefined);
@@ -93,13 +110,18 @@ export function GooglePhotosImportDialog(props: {
   }
 
   function openPicker(token: string, session: PickingSession) {
-    window.open(pickerWindowUrl(session.pickerUri), "_blank");
-    if (step.name === "picking") return;
+    const picker = window.open(pickerWindowUrl(session.pickerUri), "_blank");
+    if (picker === null) {
+      toast.error("Allow pop-ups for this site to open Google Photos");
+    }
+    if (isPollingRef.current) return;
+    isPollingRef.current = true;
     setStep({ name: "picking", token, session });
     const signal = abortRef.current?.signal ?? new AbortController().signal;
     (async () => {
       await waitForPickedItems(token, session, signal);
       const items = await listPickedItems(token, session.id, signal);
+      releaseUnloadRef.current = guardUnload();
       setStep({ name: "downloading", done: 0, total: items.length });
       const files: File[] = [];
       for (const item of items) {
@@ -122,8 +144,43 @@ export function GooglePhotosImportDialog(props: {
     })().catch(fail);
   }
 
+  // Signing in, picking and downloading are all work a stray close would lose.
+  const isRunning = isBusy || step.name === "picking" || step.name === "downloading";
+  // Nothing to lose before the picker has been opened: Cancel closes at once.
+  const asksBeforeStop = step.name === "picking" || step.name === "downloading";
+
+  if (isConfirmingStop) {
+    return (
+      <Dialog
+        open={props.open}
+        title="Stop the import?"
+        onClose={props.onClose}
+        dismissible={false}
+      >
+        <p>
+          {step.name === "downloading"
+            ? `${step.done} of ${step.total} files are downloaded. Stopping drops them and nothing is added to the album.`
+            : "Your selection in Google Photos is dropped and nothing is added to the album."}
+        </p>
+        <DialogActions>
+          <SecondaryButton type="button" onClick={props.onClose}>
+            Stop import
+          </SecondaryButton>
+          <AccentButton type="button" autoFocus onClick={() => setConfirmingStop(false)}>
+            Keep going
+          </AccentButton>
+        </DialogActions>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open={props.open} title="Import from Google Photos" onClose={props.onClose}>
+    <Dialog
+      open={props.open}
+      title="Import from Google Photos"
+      onClose={props.onClose}
+      dismissible={!isRunning}
+    >
       {step.name === "signin" && (
         <p>
           Sign in with Google and pick the photos to add. They are downloaded to this
@@ -143,7 +200,10 @@ export function GooglePhotosImportDialog(props: {
         </p>
       )}
       <DialogActions>
-        <SecondaryButton type="button" onClick={props.onClose}>
+        <SecondaryButton
+          type="button"
+          onClick={asksBeforeStop ? () => setConfirmingStop(true) : props.onClose}
+        >
           Cancel
         </SecondaryButton>
         {step.name === "signin" && (
@@ -163,15 +223,3 @@ export function GooglePhotosImportDialog(props: {
     </Dialog>
   );
 }
-
-const AccentButton = styled(SecondaryButton, {
-  background: ACCENT_COLOR,
-  borderColor: ACCENT_COLOR,
-  color: "#181818",
-  "&:hover:not(:disabled)": {
-    color: "#000",
-    borderColor: ACCENT_COLOR,
-    filter: "brightness(1.08)",
-  },
-  "&:disabled": { opacity: 0.6 },
-});

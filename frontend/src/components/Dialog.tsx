@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useRef } from "react";
 import { styled } from "../stitches.config";
 import { pressable } from "../pressable";
+import { ACCENT_COLOR } from "../theme";
 
 type DialogProps = {
   open: boolean;
@@ -8,6 +9,11 @@ type DialogProps = {
   children: ReactNode;
   /** Called on Escape, on a click outside the box and after a `close()`. */
   onClose: () => void;
+  /**
+   * `false` while closing would throw work away: Escape and backdrop clicks
+   * are ignored, only the dialog's own buttons close it. Default `true`.
+   */
+  dismissible?: boolean;
 };
 
 /**
@@ -15,9 +21,13 @@ type DialogProps = {
  * the element is shown with `showModal()` while it is true, and every way
  * the platform closes it (Escape) or the user dismisses it (backdrop click)
  * reports through `onClose`, so the caller only has to flip its state.
+ * A backdrop click counts only when the press also started on the backdrop,
+ * so dragging out of the box (selecting text, a slipped tap) never closes it.
  */
 export function Dialog(props: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const pressedBackdrop = useRef(false);
+  const dismissible = props.dismissible ?? true;
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog || dialog.open === props.open) return;
@@ -28,9 +38,19 @@ export function Dialog(props: DialogProps) {
     <Box
       ref={ref}
       onClose={props.onClose}
+      // Escape: blocked while not dismissible (the browser may still force a
+      // repeated Escape through; `onClose` then reports it as usual).
+      onCancel={(e) => {
+        if (!dismissible) e.preventDefault();
+      }}
       // The box itself is only hit outside its padded body: on the backdrop.
+      onPointerDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget;
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) props.onClose();
+        const isBackdropClick = pressedBackdrop.current && e.target === e.currentTarget;
+        pressedBackdrop.current = false;
+        if (isBackdropClick && dismissible) props.onClose();
       }}
       aria-label={props.title}
     >
@@ -104,4 +124,17 @@ export const DangerButton = styled("button", {
   borderColor: "#b3261e",
   color: "#fff",
   "&:hover:not(:disabled)": { filter: "brightness(1.12)" },
+});
+
+/** The dialog's main, non-destructive action. */
+export const AccentButton = styled(SecondaryButton, {
+  background: ACCENT_COLOR,
+  borderColor: ACCENT_COLOR,
+  color: "#181818",
+  "&:hover:not(:disabled)": {
+    color: "#000",
+    borderColor: ACCENT_COLOR,
+    filter: "brightness(1.08)",
+  },
+  "&:disabled": { opacity: 0.6 },
 });

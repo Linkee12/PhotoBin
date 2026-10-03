@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { isAbortError, sleep } from "../../../utils/retry";
 import { acquireWakeLock } from "../../../utils/wakeLock";
+import { guardUnload } from "../../../utils/guardUnload";
 import { randomBatchName } from "../utils/batchName";
 import { uploadService } from "../services";
 import { PULSE_MS } from "../components/AlbumItem";
@@ -88,16 +89,6 @@ export function shownPercentOf(phase: UploadPhase, bytes: ByteProgress | null): 
   }
 }
 
-function guardUnload(): () => void {
-  const warn = (e: BeforeUnloadEvent) => {
-    e.preventDefault();
-    // Legacy browsers (e.g. Chrome < 119) only show the prompt when returnValue is set.
-    e.returnValue = true;
-  };
-  window.addEventListener("beforeunload", warn);
-  return () => window.removeEventListener("beforeunload", warn);
-}
-
 type Options = {
   /** Undefined until the album metadata has loaded. */
   albumId: string | undefined;
@@ -135,7 +126,13 @@ export function useUploadRun(options: Options) {
       toast.error("Album is still loading, please try again");
       return;
     }
-    if (isUploading || abortRef.current !== null || files.length === 0) return;
+    if (files.length === 0) return;
+    if (isUploading || abortRef.current !== null) {
+      // Callers hide their entry points during a run; anything that still
+      // gets here (an import finishing late) must not vanish silently.
+      toast.info("Another upload is running, please add these files when it is done");
+      return;
+    }
 
     const abort = new AbortController();
     abortRef.current = abort;

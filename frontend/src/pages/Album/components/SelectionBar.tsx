@@ -18,7 +18,10 @@ export function SelectionBar(props: {
 }) {
   return (
     <ToolBar isVisible={props.selectedCount > 0}>
+      {/* Busy: a download or save is reading these files; deleting them
+          now would break it halfway. */}
       <Button
+        disabled={props.isBusy}
         title="Delete selected"
         onClick={() => {
           props.onDeleteSelected();
@@ -26,8 +29,12 @@ export function SelectionBar(props: {
       >
         <ToolbarIcons as={Trash} />
       </Button>
-      <Button disabled={props.isBusy} title="Download selected">
-        <ToolbarIcons as={SimpleCloud} onClick={() => props.onDownloadSelected()} />
+      <Button
+        disabled={props.isBusy}
+        title="Download selected"
+        onClick={() => props.onDownloadSelected()}
+      >
+        <ToolbarIcons as={SimpleCloud} />
       </Button>
       {props.onSaveToGooglePhotos && (
         <Button

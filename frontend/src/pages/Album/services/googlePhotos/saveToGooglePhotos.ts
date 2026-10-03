@@ -5,6 +5,7 @@ import {
   chunk,
   createLibraryAlbum,
   createMediaItems,
+  GooglePhotosError,
   libraryAlbumTitle,
   uploadMediaBytes,
 } from "./googlePhotosApi";
@@ -22,8 +23,9 @@ type SaveProps = {
 /**
  * Decrypts each selected file (its download rendition, like a zip download)
  * and adds it to a new Google Photos album named after this one. Returns how
- * many Google accepted; a file it rejects (e.g. an unsupported format) only
- * lowers that count.
+ * many Google accepted. One file that cannot be fetched, decrypted or
+ * uploaded (or a batch Google rejects) only lowers that count; a rejected
+ * sign-in (401) stops the save, since every later request would fail too.
  */
 export async function saveToGooglePhotos(
   imageQueryService: ImageQueryService,
@@ -39,24 +41,34 @@ export async function saveToGooglePhotos(
 
   const uploads: { uploadToken: string; fileName: string }[] = [];
   for (const [i, file] of selected.entries()) {
-    const type = downloadPart(file);
-    const media = await imageQueryService.getImg(props.albumId, file, props.key, type);
-    if (media) {
-      try {
+    try {
+      const type = downloadPart(file);
+      const media = await imageQueryService.getImg(props.albumId, file, props.key, type);
+      if (media) {
         uploads.push({
           uploadToken: await uploadMediaBytes(props.token, media.blob, undefined),
           fileName: downloadFileName(type, media.fileName),
         });
-      } catch (e) {
-        console.error(`Saving ${media.fileName} to Google Photos failed`, e);
       }
+    } catch (e) {
+      if (isSignInRejected(e)) throw e;
+      console.error(`Saving ${file.fileId} to Google Photos failed`, e);
     }
     props.onProgress?.(Math.floor(((i + 1) / selected.length) * 100));
   }
 
   let saved = 0;
   for (const batch of chunk(uploads, BATCH_CREATE_LIMIT)) {
-    saved += await createMediaItems(props.token, googleAlbumId, batch);
+    try {
+      saved += await createMediaItems(props.token, googleAlbumId, batch);
+    } catch (e) {
+      if (isSignInRejected(e)) throw e;
+      console.error("Adding a batch to Google Photos failed", e);
+    }
   }
   return { saved, total: selected.length };
+}
+
+function isSignInRejected(e: unknown) {
+  return e instanceof GooglePhotosError && e.status === 401;
 }
