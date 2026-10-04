@@ -4,7 +4,8 @@ import { isAbortError, sleep } from "../../../utils/retry";
 import { acquireWakeLock } from "../../../utils/wakeLock";
 import { guardUnload } from "../../../utils/guardUnload";
 import { randomBatchName } from "../utils/batchName";
-import { uploadService } from "../services";
+import { canvasService, uploadService } from "../services";
+import { withJpegCopies } from "../services/heicConversion";
 import { PULSE_MS } from "../components/AlbumItem";
 
 /** How long the bar sits at 100 % before the outro fade starts. */
@@ -105,8 +106,9 @@ type Options = {
 /**
  * One upload run at a time: every picked set of files is its own batch with a
  * fresh fantasy name (a resumed or retried file keeps the batch it was first
- * picked with). Failed files are kept for "retry"; cancelling stops the run
- * and keeps the unsent files.
+ * picked with). A picked HEIC is uploaded together with a JPEG copy (see
+ * `withJpegCopies`). Failed files are kept for "retry"; cancelling stops the
+ * run and keeps the unsent files.
  */
 export function useUploadRun(options: Options) {
   const [phase, setPhase] = useState<UploadPhase>("idle");
@@ -120,13 +122,13 @@ export function useUploadRun(options: Options) {
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const upload = useCallback(async (files: File[]) => {
+  const run = useCallback(async (picked: File[], convertHeic: boolean) => {
     const { albumId, key, isUploading } = optionsRef.current;
     if (albumId === undefined) {
       toast.error("Album is still loading, please try again");
       return;
     }
-    if (files.length === 0) return;
+    if (picked.length === 0) return;
     if (isUploading || abortRef.current !== null) {
       // Callers hide their entry points during a run; anything that still
       // gets here (an import finishing late) must not vanish silently.
@@ -141,10 +143,17 @@ export function useUploadRun(options: Options) {
     optionsRef.current.onUploadStarted();
     setPhase("uploading");
     setFailedFiles([]);
-    setBytes({ uploaded: 0, total: files.reduce((sum, file) => sum + file.size, 0) });
+    const totalOf = (files: File[]) => files.reduce((sum, file) => sum + file.size, 0);
+    setBytes({ uploaded: 0, total: totalOf(picked) });
 
+    let files = picked;
     let outcome: RunOutcome | undefined;
     try {
+      // Retried files were converted when first picked; their copies are among them.
+      if (convertHeic) {
+        files = await withJpegCopies(picked, canvasService);
+        setBytes({ uploaded: 0, total: totalOf(files) });
+      }
       const batch = await uploadService.createBatch(randomBatchName(), key);
       outcome = await uploadInOrder(
         files,
@@ -192,7 +201,8 @@ export function useUploadRun(options: Options) {
   }, []);
 
   const cancel = useCallback(() => abortRef.current?.abort(), []);
-  const retryFailed = useCallback(() => upload(failedFiles), [upload, failedFiles]);
+  const upload = useCallback((files: File[]) => run(files, true), [run]);
+  const retryFailed = useCallback(() => run(failedFiles, false), [run, failedFiles]);
 
   return {
     upload,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AlbumFile, downloadPart, editedFileName, viewerPart } from "./renditions";
+import {
+  AlbumFile,
+  downloadPart,
+  editedFileName,
+  partMimeType,
+  viewerPart,
+} from "./renditions";
 
 const entry = { value: "", iv: "" };
 const part = { iv: "", chunkCount: 1 };
@@ -64,5 +70,22 @@ describe("editedFileName", () => {
     expect(editedFileName("a.gif")).toBe("a.jpg");
     expect(editedFileName("a.b.tiff")).toBe("a.b.jpg");
     expect(editedFileName("noext")).toBe("noext.jpg");
+  });
+});
+
+describe("partMimeType", () => {
+  it("types full files by their name", () => {
+    const video = file({ original: part, originalVideo: part });
+    expect(partMimeType(video, "originalVideo", "clip.MOV")).toBe("video/quicktime");
+    expect(partMimeType(file({}), "unsupportedFile", "IMG.HEIC")).toBe("image/heic");
+    expect(partMimeType(file({ original: part }), "original", "a.png")).toBe("image/png");
+  });
+  it("types a video's poster frame and a re-encoded edit as JPEG", () => {
+    const video = file({ original: part, originalVideo: part });
+    expect(partMimeType(video, "original", "clip.mov")).toBe("image/jpeg");
+    expect(partMimeType(file({ original: part }), "edited", "a.gif")).toBe("image/jpeg");
+  });
+  it("leaves canvas renditions untyped", () => {
+    expect(partMimeType(file({ original: part }), "reduced", "a.png")).toBe("");
   });
 });

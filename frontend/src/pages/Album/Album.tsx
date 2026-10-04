@@ -13,11 +13,10 @@ import { client } from "../../cuple";
 import { pressableNoScale } from "../../pressable";
 import { forgetVisitedAlbum } from "../../services/visitedAlbums";
 import { readItem, writeItem } from "../../utils/storage";
-import { needsTapToSave, saveBlob } from "../../utils/saveBlob";
 import { DeleteAlbumDialog } from "./components/DeleteAlbumDialog";
 import { SaveToGooglePhotosDialog } from "./components/SaveToGooglePhotosDialog";
 import { guardUnload } from "../../utils/guardUnload";
-import { SaveDownloadToast } from "./components/SaveDownloadToast";
+import { offerDownload } from "./components/SaveDownloadToast";
 import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
@@ -172,20 +171,7 @@ export default function Album() {
         selectedImages: imageIds,
         onProgress: setDownloadProgress,
       });
-      if (needsTapToSave()) {
-        const toastId = toast(
-          <SaveDownloadToast
-            name={zip.name}
-            onSave={() => {
-              saveBlob(zip.blob, zip.name);
-              toast.dismiss(toastId);
-            }}
-          />,
-          { autoClose: false, closeOnClick: false },
-        );
-      } else {
-        saveBlob(zip.blob, zip.name);
-      }
+      offerDownload([zip]);
     } catch (e) {
       console.error(e);
       toast.error("Download failed");

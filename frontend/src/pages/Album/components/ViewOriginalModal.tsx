@@ -20,7 +20,8 @@ import { PINCH_SETTLE_MS } from "../utils/pinchClose";
 import { extensionLabel, sidecarLabel, sidecarTitle } from "../utils/sidecars";
 import { SWIPE_ANIMATION_MS } from "../utils/swipeStrip";
 import { prefersReducedMotion } from "../../../utils/reducedMotion";
-import { saveBlob } from "../../../utils/saveBlob";
+import { SavedFile } from "../../../utils/saveBlob";
+import { offerDownload } from "./SaveDownloadToast";
 import { pressable, pressableNoScale } from "../../../pressable";
 
 type Size = { width: number; height: number };
@@ -227,6 +228,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           .filter((f) => f !== undefined)
           .map((f) => ({ file: f, photo: "rotated" as const })),
       ];
+      const ready: SavedFile[] = [];
       for (const target of targets) {
         const type = downloadPart(target.file, target.photo);
         const result = await imageQueryService.getImg(
@@ -235,8 +237,14 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
           key,
           type,
         );
-        if (result) saveBlob(result.blob, downloadFileName(type, result.fileName));
+        if (result)
+          ready.push({
+            blob: result.blob,
+            name: downloadFileName(type, result.fileName),
+          });
       }
+      // Saved together: one share sheet on iOS for the photo and its RAW.
+      offerDownload(ready);
     } catch (e) {
       console.error(e);
       setNotice("Download failed, please try again");
@@ -342,12 +350,10 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
               onRotate={rotation.rotate}
             />
           ) : // eslint-disable-next-line sonarjs/no-nested-conditional
-          media.downloadUrl ? (
+          media.download ? (
             <Button
-              as="a"
               style={{ padding: "0px" }}
-              href={media.downloadUrl}
-              download={media.fileName}
+              onClick={() => media.download && offerDownload([media.download])}
               title={`Download ${media.fileName}`}
             >
               <Icons as={SimpleCloud} />
@@ -395,6 +401,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
                     muted
                     loop
                     controls
+                    // iOS only autoplays inline videos.
+                    playsInline
                     onClick={stop}
                     onPointerDown={(e) => {
                       // Scrubbing the timeline is not a swipe.
@@ -410,9 +418,25 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
                 )}
               </ZoomLayer>
             ) : (
-              <UnsupportedFile>
-                <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
-              </UnsupportedFile>
+              <>
+                <UnsupportedFile>
+                  <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
+                </UnsupportedFile>
+                {media.unsupportedVideoUrl && (
+                  // A video stored without a poster; covers the name if it plays.
+                  <FullScreenVideo
+                    key={media.unsupportedVideoUrl}
+                    src={media.unsupportedVideoUrl}
+                    controls
+                    playsInline
+                    onError={(e) => (e.currentTarget.style.display = "none")}
+                    onPointerDown={(e) => {
+                      const { bottom } = e.currentTarget.getBoundingClientRect();
+                      if (e.clientY > bottom - VIDEO_CONTROLS_PX) e.stopPropagation();
+                    }}
+                  />
+                )}
+              </>
             )}
           </Slot>
           <Slot>

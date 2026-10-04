@@ -58,6 +58,8 @@ export default defineConfig(() => {
         workbox: {
           navigateFallbackDenylist: [/^\/api\//],
           globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+          // The HEIC decoder (~3 MB) is fetched only when someone uploads a HEIC.
+          globIgnores: ["**/heic-to-*.js"],
         },
       }),
     ],

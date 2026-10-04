@@ -9,6 +9,8 @@ export type ResizeOptions = {
 
 type ImageSource = HTMLImageElement | HTMLCanvasElement;
 
+const VIDEO_FRAME_TIMEOUT_MS = 15_000;
+
 export class CanvasService {
   /**
    * Decodes `file` once so several renditions can be drawn from it. A canvas
@@ -39,36 +41,54 @@ export class CanvasService {
     return canvasToBlob(canvas, mimeType, quality);
   }
 
+  /**
+   * A JPEG of the frame at 1 s (or the middle of shorter clips). Rejects when
+   * the browser cannot decode the video (e.g. HEVC outside Safari) or takes
+   * longer than `VIDEO_FRAME_TIMEOUT_MS`, so the caller can fall back.
+   */
   async getImageFromVideo(file: File): Promise<Blob> {
-    const video = await this._loadVideo(file);
-    return new Promise((resolve, reject) => {
-      video.currentTime = 1;
-
-      video.onseeked = async () => {
-        try {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.src = url;
+    // iOS only decodes frames of muted, inline videos without a user gesture.
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await new Promise<Blob>((resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("Video frame timed out")),
+          VIDEO_FRAME_TIMEOUT_MS,
+        );
+        video.onerror = () => reject(new Error("Video loading error"));
+        video.onloadedmetadata = () => {
+          video.currentTime = Number.isFinite(video.duration)
+            ? Math.min(1, video.duration / 2)
+            : 0;
+        };
+        video.onseeked = () => {
+          if (video.videoWidth === 0 || video.videoHeight === 0) {
+            reject(new Error("Video has no decodable frames"));
+            return;
+          }
           const { canvas, ctx } = this._initCanvas({
             width: video.videoWidth,
             height: video.videoHeight,
           });
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) return reject(new Error("Thumbnail blob is null"));
-              resolve(blob);
-            },
-            "image/jpeg",
-            1,
-          );
-        } catch (err) {
-          reject(err);
-        } finally {
-          URL.revokeObjectURL(video.src);
-        }
-      };
-
-      video.onerror = (e) => reject(new Error("Video loading error" + e));
-    });
+          canvasToBlob(canvas, "image/jpeg", 1).then(resolve, reject);
+        };
+        video.load();
+      });
+    } finally {
+      clearTimeout(timeout);
+      video.onerror = video.onloadedmetadata = video.onseeked = null;
+      // Detach the source so the browser drops its decoder right away.
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(url);
+    }
   }
 
   drawToCanvas(imageObj: ImageSource, target: { width: number; height: number }) {
@@ -119,14 +139,6 @@ export class CanvasService {
         URL.revokeObjectURL(imageObj.src);
         reject(new Error("Image decoding failed"));
       };
-    });
-  }
-  private _loadVideo(file: File): Promise<HTMLVideoElement> {
-    const video = document.createElement("video");
-    video.src = URL.createObjectURL(file);
-    video.preload = "metadata";
-    return new Promise((resolve) => {
-      video.onloadedmetadata = () => resolve(video);
     });
   }
 }

@@ -7,6 +7,7 @@ import {
   PartType,
 } from "./PartTransport";
 import { isProfiling } from "../../../utils/profile";
+import { partMimeType } from "./renditions";
 
 export type { PartType };
 
@@ -19,7 +20,8 @@ export class ImageQueryService {
    * Fetches, reassembles and decrypts one rendition of a file into a `Blob`.
    * The caller decides whether it needs an object URL for it (and owns that
    * URL). `withText: false` skips decrypting the file name and date (the
-   * album already has them decoded) — use it for thumbnails.
+   * album already has them decoded) — use it for thumbnails. With the name
+   * the blob is also typed (see `partMimeType`).
    */
   async getImg(
     albumId: string,
@@ -49,10 +51,10 @@ export class ImageQueryService {
     const date = withText
       ? await this._cryptoService.decryptText(file.date.value, key, file.date.iv)
       : "";
-    const blob = new Blob([img]);
     const fileName = withText
       ? await this._cryptoService.decryptText(file.fileName.value, key, file.fileName.iv)
       : "";
+    const blob = new Blob([img], { type: partMimeType(file, type, fileName) });
     return { id: file.fileId, fileName, blob, date };
   }
 

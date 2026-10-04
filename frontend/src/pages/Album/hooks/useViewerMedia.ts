@@ -22,9 +22,9 @@ type Media = { fileId: string } & (
       naturalSize: Size;
       fileName: string;
       /** Only for videos; `url` is then the poster frame. */
-      video?: { status: "loading" } | { status: "ready"; url: string };
+      video?: { status: "loading" } | { status: "ready"; url: string; blob: Blob };
     }
-  | { kind: "unsupported"; downloadUrl: string; fileName: string }
+  | { kind: "unsupported"; downloadUrl: string; blob: Blob; fileName: string }
   | { kind: "missing" }
 );
 
@@ -119,7 +119,13 @@ export function useViewerMedia(options: Options) {
         if (!res) return publish({ kind: "missing", fileId });
         const downloadUrl = URL.createObjectURL(res.blob);
         return publish(
-          { kind: "unsupported", fileId, downloadUrl, fileName: res.fileName },
+          {
+            kind: "unsupported",
+            fileId,
+            downloadUrl,
+            blob: res.blob,
+            fileName: res.fileName,
+          },
           downloadUrl,
         );
       }
@@ -145,7 +151,10 @@ export function useViewerMedia(options: Options) {
       const video = await imageQueryService.getImg(albumId, file, key, "originalVideo");
       if (!video) return publish({ ...image, video: undefined });
       const videoUrl = URL.createObjectURL(video.blob);
-      publish({ ...image, video: { status: "ready", url: videoUrl } }, videoUrl);
+      publish(
+        { ...image, video: { status: "ready", url: videoUrl, blob: video.blob } },
+        videoUrl,
+      );
     };
 
     load().catch((e) => {
@@ -178,17 +187,28 @@ export function useViewerMedia(options: Options) {
   const isSwitching = media?.fileId !== fileId;
   const loaded = isSwitching ? undefined : media;
   const image = loaded?.kind === "image" ? loaded : undefined;
-  const videoUrl = image?.video?.status === "ready" ? image.video.url : undefined;
+  const video = image?.video?.status === "ready" ? image.video : undefined;
+  const unsupported = loaded?.kind === "unsupported" ? loaded : undefined;
+  const fileName = loaded && loaded.kind !== "missing" ? loaded.fileName : "";
+  const downloadBlob = unsupported?.blob ?? video?.blob;
 
   return {
     isSwitching,
     /** `<img src>`: the thumbnail (or placeholder) while switching, then the fetched rendition. */
     shownUrl: isSwitching ? (gridThumbnail ?? PLACEHOLDER_GIF) : (image?.url ?? ""),
     naturalSize: image?.naturalSize ?? { width: 0, height: 0 },
-    fileName: loaded && loaded.kind !== "missing" ? loaded.fileName : "",
+    fileName,
     isLoadingVideo: image?.video?.status === "loading",
-    videoUrl,
-    /** Video or unsupported-file blob; undefined while it is still being prepared. */
-    downloadUrl: loaded?.kind === "unsupported" ? loaded.downloadUrl : videoUrl,
+    videoUrl: video?.url,
+    /**
+     * A file stored without a poster that the browser may still play: videos
+     * uploaded before .mov counted as video, or whose frames the uploading
+     * browser could not decode.
+     */
+    unsupportedVideoUrl: unsupported?.blob.type.startsWith("video/")
+      ? unsupported.downloadUrl
+      : undefined,
+    /** Video or unsupported file to save; undefined while it is still being prepared. */
+    download: downloadBlob && { blob: downloadBlob, name: fileName },
   };
 }
