@@ -1,7 +1,14 @@
+import { coverSize, fitWithin } from "../utils/imageSize";
+
 export type ResizeOptions = {
   quality?: number;
-  /** Exact output size; the image is letterboxed into it. */
+  /** Exact output size; the image is cropped to fill it. */
   targetSize?: { width: number; height: number };
+  /**
+   * The smallest size that covers this box with the whole frame (no crop),
+   * see `coverSize`. Ignored when `targetSize` is set.
+   */
+  cover?: { width: number; height: number };
   /** Cap the longer edge, keeping the aspect ratio. Ignored when `targetSize` is set. */
   maxEdge?: number;
   mimeType?: "image/webp" | "image/jpeg";
@@ -162,7 +169,12 @@ export class LoadedImage {
     return sourceSize(this._source).height;
   }
   resize(options: ResizeOptions = {}): ResizedImage {
-    const target = options.targetSize ?? this._fitWithin(options.maxEdge);
+    const size = { width: this.width, height: this.height };
+    const target =
+      options.targetSize ??
+      (options.cover
+        ? coverSize(size, options.cover, options.maxEdge)
+        : fitWithin(size, options.maxEdge));
     const canvas = this._canvasService.drawToCanvas(this._source, target);
     return new ResizedImage(
       canvas,
@@ -173,13 +185,6 @@ export class LoadedImage {
   /** Frees the object URL behind a decoded blob; a no-op for canvas sources. */
   release() {
     if (this._source instanceof HTMLImageElement) URL.revokeObjectURL(this._source.src);
-  }
-  private _fitWithin(maxEdge: number | undefined) {
-    const { width, height } = this;
-    const longest = Math.max(width, height);
-    if (maxEdge === undefined || longest <= maxEdge) return { width, height };
-    const scale = maxEdge / longest;
-    return { width: Math.round(width * scale), height: Math.round(height * scale) };
   }
 }
 

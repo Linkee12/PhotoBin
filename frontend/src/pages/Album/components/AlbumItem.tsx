@@ -142,7 +142,8 @@ const Image = styled("img", {
       false: {
         borderRadius: "10px",
         width: "100%",
-        height: "auto",
+        // The tile is 3:2; a thumbnail keeps its photo's whole frame and is cropped here.
+        height: "100%",
       },
     },
   },
@@ -218,6 +219,9 @@ const Preview = styled("div", {
   },
   width: "100%",
   aspectRatio: "3/2",
+  // An aspect-ratio box grows to fit its content by default; a thumbnail
+  // keeps its photo's whole frame (a portrait one is taller) and is cropped.
+  minHeight: 0,
   margin: "0.5rem",
   // A long press selects (useLongPressSelect): no callout, no text selection.
   WebkitTouchCallout: "none",

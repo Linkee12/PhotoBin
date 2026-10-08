@@ -5,7 +5,7 @@ import { AlbumPlaceholderProvider } from "../hooks/useAlbumContext";
 import { ThumbnailGroup } from "../utils/groupFiles";
 import { readStoredView } from "../utils/viewStore";
 import { AlbumContent } from "./AlbumContent";
-import { AlbumFrame, Footer, FooterLink } from "./AlbumFrame";
+import { AlbumFooter, AlbumFrame } from "./AlbumFrame";
 import { Header } from "./Header";
 
 /** Tiles shown for an album this browser has not opened before. */
@@ -78,11 +78,12 @@ export function AlbumSkeleton() {
             onUploadFinished={noop}
             onUploaded={noop}
           />
-          <Footer>
-            <FooterLink type="button" disabled>
-              Delete this album
-            </FooterLink>
-          </Footer>
+          <AlbumFooter
+            onRefreshThumbnails={noop}
+            isRefreshingThumbnails={false}
+            onDeleteAlbum={noop}
+            isDeletingAlbum={false}
+          />
         </AlbumFrame>
       </div>
     </AlbumPlaceholderProvider>

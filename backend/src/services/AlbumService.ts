@@ -33,12 +33,20 @@ const OLD_SUFFIX = ".old";
 const EDITABLE_PART_TYPES = ["edited", "reduced", "thumbnail"] as const;
 type EditablePartType = (typeof EDITABLE_PART_TYPES)[number];
 
-export type EditPatch = {
+/** A rotation: every derived part re-rendered at the new absolute rotation. */
+export type RotationPatch = {
   rotation: 0 | 1 | 2 | 3;
   edited?: FilePart | undefined;
   reduced: FilePart;
   thumbnail: FilePart;
 };
+/** A new thumbnail only (e.g. one that keeps the whole frame instead of an old crop). */
+export type ThumbnailPatch = { thumbnail: FilePart };
+export type EditPatch = RotationPatch | ThumbnailPatch;
+
+function isRotationPatch(patch: EditPatch): patch is RotationPatch {
+  return "rotation" in patch;
+}
 
 type EditLock = { editId: string; startedAt: number };
 
@@ -266,8 +274,9 @@ export class AlbumService {
       .get(albumId)
       .files.find((f) => f.fileId === fileId);
     if (!file) throw new Error("File not found");
-    if (!file.original || file.originalVideo)
-      throw new Error("Only images can be edited");
+    // A video's `original` is its poster frame: its thumbnail may be redone,
+    // but it cannot be rotated (see commitEdit).
+    if (!file.original) throw new Error("Only images and videos can be edited");
 
     const lockPath = this._safePath(albumId, fileId, EDIT_LOCK);
     const editId = randomUUID();
@@ -303,10 +312,21 @@ export class AlbumService {
     } catch (err) {
       if (!isEnoent(err)) throw err;
     }
+    const patched = patch as Partial<Record<EditablePartType, FilePart>>;
     for (const type of EDITABLE_PART_TYPES) {
-      if (patch[type] !== undefined && !staged.has(type)) {
+      if (patched[type] !== undefined && !staged.has(type)) {
         throw new Error(`Part "${type}" is in the patch but was not uploaded`);
       }
+      // Swapped in without a metadata entry, it would not match its iv.
+      if (patched[type] === undefined && staged.has(type)) {
+        throw new Error(`Part "${type}" was uploaded but is not in the patch`);
+      }
+    }
+    if (isRotationPatch(patch)) {
+      const file = this._metadataService
+        .get(albumId)
+        .files.find((f) => f.fileId === fileId);
+      if (file?.originalVideo) throw new Error("Videos cannot be rotated");
     }
 
     for (const type of staged) {
@@ -314,13 +334,15 @@ export class AlbumService {
       await this._swapIn(albumId, fileId, editId, type);
     }
 
-    const metadataPatch: Partial<Metadata["files"][0]> = {
-      rotation: patch.rotation,
-      reduced: patch.reduced,
-      thumbnail: patch.thumbnail,
-      edited: patch.rotation === 0 ? undefined : patch.edited,
-    };
-    if (patch.rotation === 0) {
+    const metadataPatch: Partial<Metadata["files"][0]> = isRotationPatch(patch)
+      ? {
+          rotation: patch.rotation,
+          reduced: patch.reduced,
+          thumbnail: patch.thumbnail,
+          edited: patch.rotation === 0 ? undefined : patch.edited,
+        }
+      : { thumbnail: patch.thumbnail };
+    if (isRotationPatch(patch) && patch.rotation === 0) {
       await fs.rm(this._safePath(albumId, fileId, "edited"), {
         recursive: true,
         force: true,

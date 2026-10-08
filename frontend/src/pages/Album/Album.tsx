@@ -37,7 +37,8 @@ import { GooglePhotosError } from "./services/googlePhotos/googlePhotosApi";
 import { saveToGooglePhotos } from "./services/googlePhotos/saveToGooglePhotos";
 import { AlbumView, groupFiles } from "./utils/groupFiles";
 import { readStoredView, storeView } from "./utils/viewStore";
-import { AlbumFrame, Footer, FooterLink } from "./components/AlbumFrame";
+import { AlbumFooter, AlbumFrame } from "./components/AlbumFrame";
+import { useThumbnailRefresh } from "./hooks/useThumbnailRefresh";
 
 /** Tiles requested as soon as the album opens, before the grid is laid out. */
 const EAGER_THUMBNAILS = 12;
@@ -77,6 +78,12 @@ export default function Album() {
     [thumbnailGroups],
   );
   const selection = useSelection(thumbnailGroups);
+  const thumbnailRefresh = useThumbnailRefresh({
+    albumId,
+    key,
+    files,
+    onFinished: refreshMetadata,
+  });
   const isEmptyAlbum = thumbnailGroups.length === 0;
   const isLoadingThumbnails = files.length > 0 && isEmptyAlbum;
   const showUploader = files.length === 0 || isUploading;
@@ -358,23 +365,17 @@ export default function Album() {
               : undefined
           }
         />
-        <Footer>
-          {/* An upload finishing after the delete would recreate nothing (the
-              server refuses writes into a missing album), but it would still
-              fail noisily: keep the two apart. */}
-          <FooterLink
-            type="button"
-            disabled={isUploading || isDownloading || isDeletingAlbum}
-            title={
-              isUploading || isDownloading
-                ? "Wait for the upload or download to finish"
-                : undefined
-            }
-            onClick={() => setDeleteAlbumOpen(true)}
-          >
-            Delete this album
-          </FooterLink>
-        </Footer>
+        <AlbumFooter
+          onRefreshThumbnails={thumbnailRefresh.refresh}
+          isRefreshingThumbnails={thumbnailRefresh.isRefreshing}
+          onDeleteAlbum={() => setDeleteAlbumOpen(true)}
+          isDeletingAlbum={isDeletingAlbum}
+          busy={
+            isUploading || isDownloading
+              ? "Wait for the upload or download to finish"
+              : undefined
+          }
+        />
         <SaveToGooglePhotosDialog
           count={saveToGoogleIds?.length ?? null}
           onClose={() => setSaveToGoogleIds(null)}

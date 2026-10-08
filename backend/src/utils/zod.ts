@@ -86,12 +86,16 @@ export const fileMetadataSchema = z.object({
   batchId: uuidSchema.optional(),
 });
 
-export const editPatchSchema = z.object({
-  rotation: rotationSchema,
-  edited: filePartSchema.optional(),
-  reduced: filePartSchema,
-  thumbnail: filePartSchema,
-});
+/** A rotation re-renders every derived part; a thumbnail patch replaces only the thumbnail. */
+export const editPatchSchema = z.union([
+  z.object({
+    rotation: rotationSchema,
+    edited: filePartSchema.optional(),
+    reduced: filePartSchema,
+    thumbnail: filePartSchema,
+  }),
+  z.strictObject({ thumbnail: filePartSchema }),
+]);
 
 export const metadataSchema = z.object({
   albumId: uuidSchema,

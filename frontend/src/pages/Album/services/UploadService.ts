@@ -35,7 +35,14 @@ import { isProfiling } from "../../../utils/profile";
 import { mimeTypeOf } from "../../../utils/mimeType";
 import { isConvertedCopy } from "./heicConversion";
 
+/**
+ * The grid tile a thumbnail must cover. The thumbnail keeps the whole frame
+ * (the tile crops it with CSS), so the viewer can show it full screen while
+ * the photo loads without the picture changing shape.
+ */
 export const THUMBNAIL_SIZE = { width: 300, height: 200 };
+/** Longer-edge cap of a thumbnail, for very long panoramas. */
+export const THUMBNAIL_MAX_EDGE = 900;
 /** The reduced rendition only feeds the fullscreen viewer, so cap it at screen-ish size. */
 export const REDUCED_MAX_EDGE = 2560;
 export const REDUCED_QUALITY = 0.8;
@@ -261,7 +268,10 @@ export class UploadService {
   private async _renderImage(image: Blob, log: (label: string, start: number) => void) {
     const tResize = performance.now();
     const loaded = await this._canvasService.load(image);
-    const thumbnail = loaded.resize({ targetSize: THUMBNAIL_SIZE });
+    const thumbnail = loaded.resize({
+      cover: THUMBNAIL_SIZE,
+      maxEdge: THUMBNAIL_MAX_EDGE,
+    });
     const needsReduced =
       image.size > SKIP_REDUCED_BELOW_BYTES ||
       Math.max(loaded.width, loaded.height) > REDUCED_MAX_EDGE;
