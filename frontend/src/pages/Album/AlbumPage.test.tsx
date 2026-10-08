@@ -52,6 +52,21 @@ async function settle() {
 
 beforeEach(() => {
   window.location.hash = "";
+  // The skeleton is the page's real layout, which asks media queries.
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
 });
 
 afterEach(() => {

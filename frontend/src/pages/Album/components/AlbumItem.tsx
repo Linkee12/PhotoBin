@@ -1,4 +1,5 @@
 import Check from "@assets/images/icons/check.svg?react";
+import { shimmer } from "../../../components/Skeleton";
 import Circle from "@assets/images/icons/circle.svg?react";
 import Zoom from "@assets/images/icons/zoom.svg?react";
 import Play from "@assets/images/icons/play.svg?react";
@@ -226,6 +227,8 @@ const Preview = styled("div", {
   transformOrigin: "0 0",
   borderRadius: "10px",
   backgroundColor: "#232323",
+  // Its thumbnail has not arrived yet.
+  "&[data-thumb-placeholder]": shimmer("#232323"),
   boxSizing: "border-box",
   display: "flex",
   justifyContent: "center",

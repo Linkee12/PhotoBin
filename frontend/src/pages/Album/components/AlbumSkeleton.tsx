@@ -1,79 +1,115 @@
-import { Skeleton } from "../../../components/Skeleton";
-import { styled } from "../../../stitches.config";
-import { SHELF_COLOR, TOOLBAR_HEIGHT } from "../layout";
+import { useMemo } from "react";
+import { useParams } from "react-router";
+import { listVisitedAlbums } from "../../../services/visitedAlbums";
+import { AlbumPlaceholderProvider } from "../hooks/useAlbumContext";
+import { ThumbnailGroup } from "../utils/groupFiles";
+import { readStoredView } from "../utils/viewStore";
+import { AlbumContent } from "./AlbumContent";
+import { AlbumFrame, Footer, FooterLink } from "./AlbumFrame";
+import { Header } from "./Header";
 
-const TILES = 12;
+/** Tiles shown for an album this browser has not opened before. */
+const UNKNOWN_COUNT = 6;
+/** Enough to fill any screen; the rest of a big album appears below the fold. */
+const MAX_TILES = 30;
+
+const noop = () => undefined;
 
 /**
- * The album page while its metadata loads and decrypts: the header's title
- * and meta line, the toolbar shelf and a grid of 3:2 tiles laid out like the
- * real grid, so the page does not jump when the album appears.
+ * The album page while its metadata loads and decrypts. It is the page's own
+ * components (header, wave, toolbar, group band, tiles) with placeholders in
+ * them, not a look-alike, so nothing moves when the album replaces it. What
+ * this browser remembers from the last visit (title, photo count, expiry)
+ * makes it closer still: an album known to be empty shows the empty layout.
+ * Inert: nothing in it can be clicked.
  */
 export function AlbumSkeleton() {
+  const { albumId = "" } = useParams();
+  const remembered = useMemo(
+    () => listVisitedAlbums().find((album) => album.albumId === albumId),
+    [albumId],
+  );
+  const count = Math.min(remembered?.itemCount ?? UNKNOWN_COUNT, MAX_TILES);
+  const groups = useMemo(() => placeholderGroups(count), [count]);
+  const tileIds = useMemo(
+    () => groups.flatMap((group) => group.thumbnails.map((tile) => tile.id)),
+    [groups],
+  );
+  const isEmptyAlbum = groups.length === 0;
+
   return (
-    <Page role="status" aria-busy="true" aria-label="Loading the album">
-      <Header>
-        <Skeleton css={{ width: "min(14em, 70%)", height: "2.4rem" }} />
-        <Skeleton css={{ width: "9em", height: "1rem", marginTop: "1rem" }} />
-      </Header>
-      <Shelf>
-        <Skeleton css={{ width: "8em", height: "2.25rem", borderRadius: "1.5rem" }} />
-        <Skeleton css={{ width: "8em", height: "2.25rem", borderRadius: "1.5rem" }} />
-      </Shelf>
-      <Grid>
-        {Array.from({ length: TILES }, (_, i) => (
-          <Tile key={i} css={{ animationDelay: `${(i % 4) * 120}ms` }} />
-        ))}
-      </Grid>
-    </Page>
+    <AlbumPlaceholderProvider albumId={albumId} expiresAt={remembered?.expiresAt ?? null}>
+      <div inert role="status" aria-busy="true" aria-label="Loading the album">
+        <AlbumFrame isEmptyAlbum={isEmptyAlbum}>
+          <Header
+            isLoading
+            isEmptyAlbum={isEmptyAlbum}
+            title={remembered?.title ?? ""}
+            onChangeTitle={noop}
+            onSaveName={noop}
+            onSelectAll={noop}
+            onUnselectAll={noop}
+            selectedAll={false}
+            selectedSome={false}
+            sidecarCount={0}
+            selectedSidecarCount={0}
+            onToggleAllSidecars={noop}
+          />
+          <AlbumContent
+            showUploader={isEmptyAlbum}
+            isUploading={false}
+            isDownloading={false}
+            isLoadingThumbnails={false}
+            downloadProgress={0}
+            thumbnailGroups={groups}
+            tileIds={tileIds}
+            view={readStoredView()}
+            onChangeView={noop}
+            onRenameBatch={noop}
+            selectedImages={NO_SELECTION}
+            isSelected={never}
+            areSidecarsSelected={never}
+            onToggleSidecars={noop}
+            onSelect={noop}
+            onDeSelect={noop}
+            onOpen={noop}
+            onDownloadAll={noop}
+            onUploadStarted={noop}
+            onUploadFinished={noop}
+            onUploaded={noop}
+          />
+          <Footer>
+            <FooterLink type="button" disabled>
+              Delete this album
+            </FooterLink>
+          </Footer>
+        </AlbumFrame>
+      </div>
+    </AlbumPlaceholderProvider>
   );
 }
 
-const Page = styled("div", {
-  minHeight: "100dvh",
-  background: "#181818",
-  fontFamily: "Open Sans",
-  overflow: "hidden",
-});
+const NO_SELECTION: string[] = [];
+const never = () => false;
 
-const Header = styled("div", {
-  padding: "2rem 2rem 2.5rem",
-  minHeight: "9rem",
-  boxSizing: "border-box",
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-});
-
-const Shelf = styled("div", {
-  background: SHELF_COLOR,
-  minHeight: TOOLBAR_HEIGHT,
-  boxSizing: "border-box",
-  padding: "0 2rem",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-end",
-  gap: "0.75rem",
-  "@narrow": { minHeight: "3rem", justifyContent: "center" },
-});
-
-const Grid = styled("div", {
-  "@narrow": {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    margin: "1rem 1.28rem",
-  },
-  "@wide": {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-    gap: "20px",
-    margin: "2rem",
-  },
-});
-
-const Tile = styled(Skeleton, {
-  width: "100%",
-  aspectRatio: "3 / 2",
-  borderRadius: "0.75rem",
-});
+/** One group of `count` loading tiles; the text is only there to size the placeholder bars. */
+function placeholderGroups(count: number): ThumbnailGroup[] {
+  if (count === 0) return [];
+  return [
+    {
+      key: "placeholder",
+      title: "Uploads",
+      meta: `00/00 00:00 · ${count} photos`,
+      batchId: undefined,
+      isPlaceholder: true,
+      thumbnails: Array.from({ length: count }, (_, i) => ({
+        id: `placeholder-${i}`,
+        thumbnail: undefined,
+        isLoading: true,
+        name: "",
+        isVideo: false,
+        sidecars: [],
+      })),
+    },
+  ];
+}

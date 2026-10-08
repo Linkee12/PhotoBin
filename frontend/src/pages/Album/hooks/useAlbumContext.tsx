@@ -185,6 +185,35 @@ export function AlbumContextProvider(props: { albumId: string; children: ReactNo
   return <AlbumContext.Provider value={value}>{props.children}</AlbumContext.Provider>;
 }
 
+/**
+ * An album with nothing known yet but what this browser remembers, for the
+ * loading skeleton: it renders the page's real components, which read this.
+ */
+export function AlbumPlaceholderProvider(props: {
+  albumId: string;
+  expiresAt: number | null;
+  children: ReactNode;
+}) {
+  const [key] = useState(getKeyFromHash);
+  const value = useMemo(
+    (): AlbumContextType => ({
+      albumId: props.albumId,
+      key,
+      isEncrypted: key !== null,
+      metadata: {
+        albumId: props.albumId,
+        albumName: { value: "", iv: "" },
+        files: [],
+      },
+      expiresAt: props.expiresAt,
+      decodedValues: { albumName: "", files: {}, batches: {} },
+      refreshMetadata: () => undefined,
+    }),
+    [key, props.albumId, props.expiresAt],
+  );
+  return <AlbumContext.Provider value={value}>{props.children}</AlbumContext.Provider>;
+}
+
 /** The album is gone (expired, deleted, or never existed): forget it and say so. */
 function AlbumGone(props: { albumId: string }) {
   useEffect(() => forgetVisitedAlbum(props.albumId), [props.albumId]);

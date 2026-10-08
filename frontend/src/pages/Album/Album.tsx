@@ -1,4 +1,3 @@
-import { styled } from "../../stitches.config";
 import {
   useCallback,
   useEffect,
@@ -12,9 +11,7 @@ import { useAction } from "@cuple/react";
 import { useNavigate } from "react-router";
 import { toast } from "react-toastify";
 import { client } from "../../cuple";
-import { pressableNoScale } from "../../pressable";
 import { forgetVisitedAlbum } from "../../services/visitedAlbums";
-import { readItem, writeItem } from "../../utils/storage";
 import { DeleteAlbumDialog } from "./components/DeleteAlbumDialog";
 import { SaveToGooglePhotosDialog } from "./components/SaveToGooglePhotosDialog";
 import { guardUnload } from "../../utils/guardUnload";
@@ -38,21 +35,12 @@ import {
 } from "./services/googlePhotos/googleAuth";
 import { GooglePhotosError } from "./services/googlePhotos/googlePhotosApi";
 import { saveToGooglePhotos } from "./services/googlePhotos/saveToGooglePhotos";
-import {
-  ALBUM_VIEWS,
-  AlbumView,
-  DEFAULT_ALBUM_VIEW,
-  groupFiles,
-} from "./utils/groupFiles";
+import { AlbumView, groupFiles } from "./utils/groupFiles";
+import { readStoredView, storeView } from "./utils/viewStore";
+import { AlbumFrame, Footer, FooterLink } from "./components/AlbumFrame";
 
-const VIEW_STORAGE_KEY = "photobin:albumView";
 /** Tiles requested as soon as the album opens, before the grid is laid out. */
 const EAGER_THUMBNAILS = 12;
-
-function readStoredView(): AlbumView {
-  const stored = readItem(VIEW_STORAGE_KEY);
-  return ALBUM_VIEWS.find((view) => view === stored) ?? DEFAULT_ALBUM_VIEW;
-}
 
 export default function Album() {
   const { albumId, metadata, key, refreshMetadata, decodedValues } = useAlbumContext();
@@ -120,7 +108,7 @@ export default function Album() {
 
   function changeView(next: AlbumView) {
     setView(next);
-    writeItem(VIEW_STORAGE_KEY, next);
+    storeView(next);
   }
 
   // A failed write is a toast; the album stays on screen.
@@ -296,7 +284,7 @@ export default function Album() {
         onChanged={refreshMetadata}
         onDeleted={onAlbumDeleted}
       />
-      <Container isEmptyAlbum={isEmptyAlbum}>
+      <AlbumFrame isEmptyAlbum={isEmptyAlbum}>
         {viewed && (
           <ViewOriginalModal
             fileId={viewed.id}
@@ -401,7 +389,7 @@ export default function Album() {
           onClose={() => setDeleteAlbumOpen(false)}
           onConfirm={() => void deleteAlbum()}
         />
-      </Container>
+      </AlbumFrame>
     </ThumbnailVisibilityProvider>
   );
 }
@@ -415,54 +403,3 @@ function notifyAs(what: string) {
     },
   };
 }
-
-/** The footer's height; the page reserves it as bottom padding so the footer never covers content. */
-const FOOTER_HEIGHT = "4rem";
-
-const Container = styled("div", {
-  width: "100%",
-  minHeight: "100vh",
-  boxSizing: "border-box",
-  // Room for the footer, which is anchored to this box.
-  position: "relative",
-  paddingBottom: FOOTER_HEIGHT,
-  fontFamily: "Open Sans",
-  display: "flex",
-  flexDirection: "column",
-  variants: {
-    isEmptyAlbum: {
-      true: {
-        backgroundColor: "rgba(51, 51, 51)",
-      },
-      false: {
-        backgroundColor: "#181818",
-      },
-    },
-  },
-});
-
-/** Sits at the very bottom of the page, even when the page is shorter than the viewport. */
-const Footer = styled("footer", {
-  position: "absolute",
-  left: 0,
-  right: 0,
-  bottom: 0,
-  height: FOOTER_HEIGHT,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-});
-
-/** A quiet text link; the footer's only content. */
-const FooterLink = styled("button", {
-  ...pressableNoScale,
-  background: "none",
-  border: "none",
-  padding: "0.5rem",
-  fontFamily: "inherit",
-  fontSize: "0.85rem",
-  color: "#8B8B8B",
-  textDecoration: "underline",
-  textUnderlineOffset: "0.2em",
-  "&:hover:not(:disabled)": { color: "#fff" },
-});
