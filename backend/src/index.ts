@@ -1,6 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
-import { createBuilder, success, initRpc, apiResponse } from "@cuple/server";
+import { conflict, createBuilder, initRpc, notFound, success } from "@cuple/server";
 import { z } from "zod";
 import {
   AlbumNotFoundError,
@@ -22,6 +22,7 @@ import {
   uuidSchema,
 } from "./utils/zod";
 import { MetadataService } from "./services/MetadataService";
+import { AlbumEvents } from "./services/AlbumEvents";
 import fs from "fs";
 dotenv.config();
 
@@ -37,9 +38,11 @@ app.use(express.json({ limit: "2mb" }));
 
 const builder = createBuilder(app);
 const metadataService = new MetadataService(fs);
+const albumEvents = new AlbumEvents();
 const albumService = new AlbumService(metadataService, albumTtlMs, {
   editLockTtlMs,
   orphanTtlMs,
+  events: albumEvents,
 });
 
 // Binary part transport: chunks travel as application/octet-stream instead of
@@ -96,9 +99,9 @@ app.put(
     }
   },
 );
-/** The cuple-shaped 404 for writes into an album that does not exist. */
-function albumNotFound(err: AlbumNotFoundError) {
-  return apiResponse("not-found", 404, { message: err.message, code: err.code });
+/** The cuple-shaped 404 for an album that does not exist (never created, expired or deleted). */
+function albumNotFound(err: AlbumNotFoundError = new AlbumNotFoundError()) {
+  return notFound({ result: "album-not-found", message: err.message, code: err.code });
 }
 app.get(PART_ROUTE, async (req, res, next) => {
   try {
@@ -139,12 +142,24 @@ const routes = {
       }),
     )
     .get(async ({ data }) => {
-      if (!(await albumService.exists(data.query.id))) {
-        return apiResponse("not-found", 404, { message: "Album not found" });
-      }
+      if (!(await albumService.exists(data.query.id))) return albumNotFound();
       const metadata = albumService.getMetaData(data.query.id);
       const expiresAt = await albumService.getExpiresAt(data.query.id);
       return success({ metadata, expiresAt });
+    }),
+  /**
+   * Live updates: `connected`, then `changed` / `deleted` as anyone with the
+   * link changes the album, and a `ping` every heartbeat. Carries no album
+   * data; clients re-fetch the metadata.
+   */
+  albumEvents: builder
+    .querySchema(z.object({ albumId: uuidSchema }))
+    .middleware(async ({ data }) => {
+      if (await albumService.exists(data.query.albumId)) return { next: true as const };
+      return { next: false as const, ...albumNotFound() };
+    })
+    .getSSE(async function* ({ data, disconnectSignal }) {
+      yield* albumEvents.subscribe(data.query.albumId, disconnectSignal);
     }),
   createAlbum: builder
     .bodySchema(z.object({ albumId: uuidSchema }))
@@ -268,7 +283,8 @@ const routes = {
         return success({ editId });
       } catch (err) {
         if (err instanceof EditInProgressError) {
-          return apiResponse("edit-in-progress", 409, {
+          return conflict({
+            result: "edit-in-progress",
             message: err.message,
             code: err.code,
           });

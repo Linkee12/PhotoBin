@@ -5,6 +5,7 @@ import { styled } from "../../stitches.config";
 import { Spinner } from "../../components/Spinner";
 import { pressableNoScale } from "../../pressable";
 import { ACCENT_COLOR } from "../../theme";
+import { fetchCuple } from "@cuple/client";
 import { client } from "../../cuple";
 import { genKey } from "../../utils/key";
 
@@ -53,8 +54,7 @@ export default function New() {
 async function createAlbum(plain: boolean) {
   const albumId = crypto.randomUUID();
   const key = plain ? null : await genKey();
-  const response = await client.createAlbum.post({ body: { albumId } });
-  if (response.result !== "success") throw new Error(response.message);
+  await fetchCuple(client.createAlbum.post, { body: { albumId } }).thenKeepSuccess();
   return key === null ? `/bin/${albumId}` : `/bin/${albumId}#${key}`;
 }
 

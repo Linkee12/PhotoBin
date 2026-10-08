@@ -1,3 +1,4 @@
+import { fetchCuple } from "@cuple/client";
 import { client } from "../../../cuple";
 import { uint8ArrayToBase64 } from "../../../utils/base64";
 import { CanvasService } from "./CanvasService";
@@ -64,9 +65,10 @@ export class RotateService {
     const renditions = await this._render(original.blob, rotation);
     const sealed = await Promise.all(renditions.map((r) => this._seal(r, key)));
 
-    const begin = await client.beginEdit.post({ body: { albumId, fileId } });
+    const begin = await fetchCuple(client.beginEdit.post, {
+      body: { albumId, fileId },
+    }).thenKeep(["success", "edit-in-progress"]);
     if (begin.result === "edit-in-progress") return { result: "edit-in-progress" };
-    if (begin.result !== "success") throw new Error("Could not start editing");
     const { editId } = begin;
 
     try {
@@ -78,14 +80,13 @@ export class RotateService {
           chunkCount: await this._upload(albumId, fileId, editId, part),
         };
       }
-      const commit = await client.commitEdit.post({
+      await fetchCuple(client.commitEdit.post, {
         body: { albumId, fileId, editId, patch: { rotation, ...parts } },
-      });
-      if (commit.result !== "success") throw new Error("Could not commit the edit");
+      }).thenKeepSuccess();
       return { result: "success", rotation };
     } catch (err) {
-      await client.abortEdit
-        .post({ body: { albumId, fileId, editId } })
+      await fetchCuple(client.abortEdit.post, { body: { albumId, fileId, editId } })
+        .thenKeepSuccess()
         .catch((abortErr: unknown) => console.error("abortEdit failed", abortErr));
       throw err;
     }

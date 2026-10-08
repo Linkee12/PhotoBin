@@ -1,3 +1,4 @@
+import { fetchCuple } from "@cuple/client";
 import { client } from "../../../cuple";
 import {
   arrayBufferToBase64,
@@ -167,16 +168,16 @@ export class UploadService {
 
   async renameBatch(albumId: string, batchId: string, name: string, key: string | null) {
     const encrypted = await this._encryptText(name, key);
-    const res = await client.renameBatch.post({
+    await fetchCuple(client.renameBatch.post, {
       body: { albumId, batchId, name: encrypted },
-    });
-    if (res.result !== "success") throw new Error(`Rename failed (${res.statusCode})`);
+    }).thenKeepSuccess();
   }
 
   async saveName(albumId: string, name: string, key: string | null) {
     const albumName = await this._encryptText(name, key);
-    const res = await client.editAlbumName.post({ body: { albumId, albumName } });
-    if (res.result !== "success") throw new Error(`Rename failed (${res.statusCode})`);
+    await fetchCuple(client.editAlbumName.post, {
+      body: { albumId, albumName },
+    }).thenKeepSuccess();
   }
 
   private async _prepare(
@@ -288,8 +289,9 @@ export class UploadService {
     const uploaded = await withRetry(
       () =>
         this._rpc(() =>
-          client.getUploadedParts.get({
+          fetchCuple(client.getUploadedParts.get, {
             query: { albumId, fileId: prepared.fileId },
+            options: { signal },
           }),
         ),
       { signal },
@@ -318,12 +320,13 @@ export class UploadService {
       const finalized = await withRetry(
         () =>
           this._rpc(() =>
-            client.finalizeFile.post({
+            fetchCuple(client.finalizeFile.post, {
               body: {
                 albumId,
                 fileMetadata: this._toMetadata(prepared),
                 batch: prepared.batch,
               },
+              options: { signal },
             }),
           ),
         { signal },
@@ -410,6 +413,8 @@ export class UploadService {
     try {
       res = await call();
     } catch (e) {
+      // fetchCuple rejects only without an answer: a cancel, or the network.
+      if (isAbortError(e)) throw e;
       throw new RetryableError("Network error", { cause: e });
     }
     if (res.result === "success") return res as Extract<T, { result: "success" }>;

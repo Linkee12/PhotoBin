@@ -9,6 +9,7 @@ import {
   MetadataService,
 } from "./MetadataService";
 import { PartType, partTypeSchema } from "../utils/zod";
+import { AlbumEvent, AlbumEvents } from "./AlbumEvents";
 
 const DEFAULT_ALBUMS_ROOT = path.resolve("./albums");
 /** Album lifetime (`ALBUM_TTL_MS`). */
@@ -69,14 +70,22 @@ export class AlbumService {
   private _albumsRoot: string;
   private _editLockTtlMs: number;
   private _orphanTtlMs: number;
+  private _events: AlbumEvents | undefined;
   constructor(
     private _metadataService: MetadataService,
     private _ttlMs: number = DEFAULT_ALBUM_TTL_MS,
-    options: { albumsRoot?: string; editLockTtlMs?: number; orphanTtlMs?: number } = {},
+    options: {
+      albumsRoot?: string;
+      editLockTtlMs?: number;
+      orphanTtlMs?: number;
+      /** Told about every change a client can see (metadata writes, deletion). */
+      events?: AlbumEvents;
+    } = {},
   ) {
     this._albumsRoot = options.albumsRoot ?? DEFAULT_ALBUMS_ROOT;
     this._editLockTtlMs = options.editLockTtlMs ?? DEFAULT_EDIT_LOCK_TTL_MS;
     this._orphanTtlMs = options.orphanTtlMs ?? DEFAULT_ORPHAN_TTL_MS;
+    this._events = options.events;
   }
   getMetaData(albumId: string) {
     return this._metadataService.get(albumId);
@@ -91,8 +100,9 @@ export class AlbumService {
     return this._checkDirectoryExists(this._safePath(albumId));
   }
   /** Removes the whole album directory; resolves even when it is already gone. */
-  deleteAlbum(albumId: string) {
-    return this._deleteDir(albumId);
+  async deleteAlbum(albumId: string) {
+    await this._deleteDir(albumId);
+    this._publish(albumId, { type: "deleted" });
   }
   async getExpiresAt(albumId: string): Promise<number | null> {
     try {
@@ -106,6 +116,7 @@ export class AlbumService {
   async rename(albumId: string, newTitle: { value: string; iv: string }) {
     await this.createAlbum(albumId);
     this._metadataService.renameAlbum(albumId, newTitle);
+    this._publish(albumId, { type: "changed" });
   }
   /** Rejects with AlbumNotFoundError so a finalize cannot resurrect a deleted album. */
   async finalizeFile(
@@ -115,9 +126,11 @@ export class AlbumService {
   ) {
     await this._assertAlbumExists(albumId);
     this._metadataService.addFile(albumId, fileMetadata, batch);
+    this._publish(albumId, { type: "changed" });
   }
   renameBatch(albumId: string, batchId: string, name: EncryptedEntry) {
     this._metadataService.renameBatch(albumId, batchId, name);
+    this._publish(albumId, { type: "changed" });
   }
   /**
    * Legacy JSON transport: the part arrives base64-encoded and is stored as
@@ -204,6 +217,7 @@ export class AlbumService {
     for (const imageId of imageIds) {
       await this._deleteImage(albumId, imageId);
     }
+    this._publish(albumId, { type: "changed" });
   }
   /**
    * Deletes expired albums and, inside live albums, file directories that were
@@ -228,6 +242,7 @@ export class AlbumService {
         const s = await fs.stat(albumPath);
         if (now - s.birthtimeMs > ttlMs) {
           await this._deleteDir(dir);
+          this._publish(dir, { type: "deleted" });
         } else if (s.isDirectory()) {
           await this._cleanOrphans(dir, now, orphanTtlMs);
         }
@@ -315,6 +330,7 @@ export class AlbumService {
 
     await this._removeStaging(albumId, fileId, editId);
     await fs.rm(this._safePath(albumId, fileId, EDIT_LOCK), { force: true });
+    this._publish(albumId, { type: "changed" });
   }
 
   /** Drops the staging dir and, when it belongs to `editId`, the lock. Idempotent. */
@@ -566,6 +582,9 @@ export class AlbumService {
     }
   }
 
+  private _publish(albumId: string, event: AlbumEvent) {
+    this._events?.publish(albumId, event);
+  }
   private async _deleteImage(albumId: string, imageId: string) {
     await fs.rm(this._safePath(albumId, imageId), {
       recursive: true,

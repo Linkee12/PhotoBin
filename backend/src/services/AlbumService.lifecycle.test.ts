@@ -6,6 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { AlbumNotFoundError, AlbumService } from "./AlbumService";
 import { MetadataService } from "./MetadataService";
+import { AlbumEvents } from "./AlbumEvents";
 
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -120,5 +121,62 @@ describe("writes into a deleted album", () => {
     await albumService.rename(albumId, { value: "back", iv: "" });
     expect(await albumService.exists(albumId)).toBe(true);
     expect(metadataService.get(albumId).albumName.value).toBe("back");
+  });
+});
+
+describe("album events", () => {
+  const fileId = randomUUID();
+  const file = {
+    fileId,
+    fileName: { value: "", iv: "" },
+    date: { value: "", iv: "" },
+    original: { iv: "aXY=", chunkCount: 1 },
+  };
+  let published: { albumId: string; type: string }[];
+
+  beforeEach(async () => {
+    const events = new AlbumEvents();
+    published = [];
+    events.publish = (id, event) => published.push({ albumId: id, type: event.type });
+    albumService = new AlbumService(metadataService, ONE_MONTH_MS, {
+      albumsRoot: root,
+      events,
+    });
+    await albumService.createAlbum(albumId);
+  });
+
+  it("publishes changed after every metadata write", async () => {
+    await albumService.rename(albumId, { value: "x", iv: "" });
+    const batchId = randomUUID();
+    const batch = { batchId, name: { value: "a", iv: "" }, createdAt: 1 };
+    await albumService.finalizeFile(albumId, file, batch);
+    await albumService.renameBatch(albumId, batchId, { value: "b", iv: "" });
+    await albumService.deleteImages(albumId, [fileId]);
+    expect(published).toEqual([
+      { albumId, type: "changed" },
+      { albumId, type: "changed" },
+      { albumId, type: "changed" },
+      { albumId, type: "changed" },
+    ]);
+  });
+
+  it("publishes nothing for a write that failed", async () => {
+    await albumService.deleteAlbum(albumId);
+    published = [];
+    await expect(albumService.finalizeFile(albumId, file)).rejects.toBeInstanceOf(
+      AlbumNotFoundError,
+    );
+    expect(published).toEqual([]);
+  });
+
+  it("publishes deleted when the album is deleted or expires", async () => {
+    await albumService.deleteAlbum(albumId);
+    const expired = randomUUID();
+    await albumService.createAlbum(expired);
+    await albumService.cleanStorage(-1);
+    expect(published).toEqual([
+      { albumId, type: "deleted" },
+      { albumId: expired, type: "deleted" },
+    ]);
   });
 });

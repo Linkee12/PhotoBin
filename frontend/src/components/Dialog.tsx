@@ -14,6 +14,8 @@ type DialogProps = {
    * are ignored, only the dialog's own buttons close it. Default `true`.
    */
   dismissible?: boolean;
+  /** On a phone held upright (`@narrow`), fill the screen instead of floating as a box. */
+  screen?: boolean;
 };
 
 /**
@@ -37,6 +39,7 @@ export function Dialog(props: DialogProps) {
   return (
     <Box
       ref={ref}
+      screen={props.screen ?? false}
       onClose={props.onClose}
       // Escape: blocked while not dismissible (the browser may still force a
       // repeated Escape through; `onClose` then reports it as usual).
@@ -74,6 +77,24 @@ const Box = styled("dialog", {
   boxSizing: "border-box",
   boxShadow: "0 1rem 3rem rgba(0, 0, 0, 0.6)",
   "&::backdrop": { background: "rgba(0, 0, 0, 0.6)" },
+  variants: {
+    screen: {
+      true: {
+        "@narrow": {
+          width: "100vw",
+          maxWidth: "100vw",
+          height: "100dvh",
+          maxHeight: "100dvh",
+          margin: 0,
+          border: "none",
+          borderRadius: 0,
+          // The body fills the screen, so its content can push the actions down.
+          "& > div": { minHeight: "100%", boxSizing: "border-box" },
+        },
+      },
+      false: {},
+    },
+  },
 });
 
 const Body = styled("div", {

@@ -7,7 +7,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useParams } from "react-router";
+import { fetchCuple } from "@cuple/client";
+import { useAction } from "@cuple/react";
+import { useNavigate } from "react-router";
 import { toast } from "react-toastify";
 import { client } from "../../cuple";
 import { pressableNoScale } from "../../pressable";
@@ -21,7 +23,8 @@ import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { AlbumContent } from "./components/AlbumContent";
-import { useAlbumContext } from "./hooks/useAlbumContext";
+import { AlbumLiveUpdates } from "./components/AlbumLiveUpdates";
+import { ALBUM_REFRESH, useAlbumContext } from "./hooks/useAlbumContext";
 import { useSelection } from "./hooks/useSelection";
 import { useThumbnails } from "./hooks/useThumbnails";
 import { ThumbnailVisibilityProvider } from "./hooks/useThumbnailVisibility";
@@ -52,12 +55,10 @@ function readStoredView(): AlbumView {
 }
 
 export default function Album() {
-  const { metadata, key, refreshMetadata, decodedValues } = useAlbumContext();
-  const { albumId } = useParams();
+  const { albumId, metadata, key, refreshMetadata, decodedValues } = useAlbumContext();
   const navigate = useNavigate();
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
   const [isDeleteAlbumOpen, setDeleteAlbumOpen] = useState(false);
-  const [isDeletingAlbum, setDeletingAlbum] = useState(false);
   const [showOrigin, setShowOrigin] = useState(false);
   const [title, setTitle] = useState("");
   const [view, setView] = useState<AlbumView>(readStoredView);
@@ -67,7 +68,7 @@ export default function Album() {
   const [isSavingToGoogle, setIsSavingToGoogle] = useState(false);
   /** The selection the save dialog asks about; `null` while it is closed. */
   const [saveToGoogleIds, setSaveToGoogleIds] = useState<string[] | null>(null);
-  const files = useMemo(() => metadata?.files ?? [], [metadata]);
+  const files = metadata.files;
 
   // Thumbnails are loaded (or announced by an upload) per file; the grouped
   // view is derived from metadata + that map, so switching views is free.
@@ -90,7 +91,7 @@ export default function Album() {
   const selection = useSelection(thumbnailGroups);
   const isEmptyAlbum = thumbnailGroups.length === 0;
   const isLoadingThumbnails = files.length > 0 && isEmptyAlbum;
-  const showUploader = (metadata !== undefined && files.length === 0) || isUploading;
+  const showUploader = files.length === 0 || isUploading;
 
   useEffect(() => {
     setTitle(decodedValues.albumName);
@@ -122,44 +123,57 @@ export default function Album() {
     writeItem(VIEW_STORAGE_KEY, next);
   }
 
+  // A failed write is a toast; the album stays on screen.
+  const deleteImagesAction = useAction(
+    (ids: string[]) =>
+      fetchCuple(client.deleteImages.delete, {
+        body: { albumId, ids },
+      }).thenKeepSuccess(),
+    { refresh: ALBUM_REFRESH, config: notifyAs("Couldn't delete") },
+  );
   async function deleteImages(ids: string[]) {
-    if (albumId === undefined) return;
-    const response = await client.deleteImages.delete({ body: { albumId, ids } });
-    if (response.result !== "success") {
-      toast.error("Failed to delete");
-      return;
-    }
+    const state = await deleteImagesAction.run(ids);
+    if (state.status !== "done") return;
     thumbnails.dropThumbnails(ids);
     selection.deselect(ids);
-    refreshMetadata();
   }
 
   /** Confirms, then deletes `ids` exactly as given. */
   function confirmAndDelete(ids: string[]) {
     if (!window.confirm(selection.deleteQuestion(ids))) return;
-    deleteImages(ids).catch((reason) => {
-      console.error(reason);
-      toast.error("Failed to delete");
-    });
+    deleteImages(ids);
   }
 
+  // Set before the request: our own delete must not read as someone else's.
+  const deletingAlbumRef = useRef(false);
+  const deleteAlbumAction = useAction(
+    () => fetchCuple(client.deleteAlbum.delete, { body: { albumId } }).thenKeepSuccess(),
+    { config: notifyAs("Couldn't delete the album") },
+  );
+  const isDeletingAlbum = deleteAlbumAction.isPending;
   /** One delete at a time: a second confirm while the first is in flight is ignored. */
   async function deleteAlbum() {
-    if (albumId === undefined || isDeletingAlbum) return;
-    setDeletingAlbum(true);
-    try {
-      const response = await client.deleteAlbum.delete({ body: { albumId } });
-      if (response.result !== "success") throw new Error(response.message);
-      forgetVisitedAlbum(albumId);
-      navigate("/");
-      toast.success("Album deleted");
-    } finally {
-      setDeletingAlbum(false);
+    if (isDeletingAlbum) return;
+    deletingAlbumRef.current = true;
+    const state = await deleteAlbumAction.run();
+    if (state.status !== "done") {
+      deletingAlbumRef.current = false;
+      return;
     }
+    forgetVisitedAlbum(albumId);
+    navigate("/");
+    toast.success("Album deleted");
+  }
+
+  /** Someone else deleted the album while it was open. */
+  function onAlbumDeleted() {
+    if (deletingAlbumRef.current) return;
+    forgetVisitedAlbum(albumId);
+    navigate("/not-found", { replace: true });
+    toast.info("This album was just deleted");
   }
 
   async function runDownload(imageIds: string[]) {
-    if (metadata === undefined) return;
     setIsDownloading(true);
     setDownloadProgress(0);
     try {
@@ -186,7 +200,7 @@ export default function Album() {
    * Photos. Called straight from the click: the sign-in popup needs it.
    */
   function runSaveToGooglePhotos(imageIds: string[]) {
-    if (metadata === undefined || isDownloading) return;
+    if (isDownloading) return;
     const token = requestAccessToken(APPEND_ONLY_SCOPE);
     // Leaving mid-save would leave a half-filled album in Google Photos.
     const releaseUnloadGuard = guardUnload();
@@ -256,27 +270,32 @@ export default function Album() {
     if (id !== undefined) setFullscreenImage({ fileId: id });
   }
 
+  const saveAlbumNameAction = useAction(
+    (name: string) => uploadService.saveName(albumId, name, key),
+    { refresh: ALBUM_REFRESH, config: notifyAs("Couldn't rename the album") },
+  );
   function saveAlbumName() {
-    if (metadata === undefined) return;
-    uploadService.saveName(metadata.albumId, title, key).catch((e) => {
-      console.error(e);
-      toast.error("Failed to rename the album");
-    });
+    if (title === decodedValues.albumName) return;
+    saveAlbumNameAction.run(title);
   }
-  async function renameBatch(batchId: string, name: string) {
-    if (metadata === undefined) return;
-    try {
-      await uploadService.renameBatch(metadata.albumId, batchId, name, key);
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to rename");
-    }
-    refreshMetadata();
+  // Refreshed whatever happened: a failed rename puts the old name back.
+  const renameBatchAction = useAction(
+    (batchId: string, name: string) =>
+      uploadService.renameBatch(albumId, batchId, name, key),
+    { refresh: ALBUM_REFRESH, config: notifyAs("Couldn't rename") },
+  );
+  function renameBatch(batchId: string, name: string) {
+    renameBatchAction.run(batchId, name);
   }
 
   const viewed = fullscreenImage && selection.index.tiles.get(fullscreenImage.fileId);
   return (
     <ThumbnailVisibilityProvider value={thumbnails.visibility}>
+      <AlbumLiveUpdates
+        albumId={albumId}
+        onChanged={refreshMetadata}
+        onDeleted={onAlbumDeleted}
+      />
       <Container isEmptyAlbum={isEmptyAlbum}>
         {viewed && (
           <ViewOriginalModal
@@ -380,16 +399,21 @@ export default function Album() {
           open={isDeleteAlbumOpen}
           title={title}
           onClose={() => setDeleteAlbumOpen(false)}
-          onConfirm={() => {
-            deleteAlbum().catch((error: unknown) => {
-              console.error(error);
-              toast.error("Failed to delete the album");
-            });
-          }}
+          onConfirm={() => void deleteAlbum()}
         />
       </Container>
     </ThumbnailVisibilityProvider>
   );
+}
+
+/** Action config: an error nobody handled is a toast saying what failed, and the page stays. */
+function notifyAs(what: string) {
+  return {
+    errors: {
+      onError: "notify" as const,
+      notify: (error: { message: string }) => toast.error(`${what}: ${error.message}`),
+    },
+  };
 }
 
 /** The footer's height; the page reserves it as bottom padding so the footer never covers content. */

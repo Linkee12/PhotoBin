@@ -102,11 +102,11 @@ type ViewOriginalModalProps = {
 };
 
 export function ViewOriginalModal(props: ViewOriginalModalProps) {
-  const { metadata, key, refreshMetadata } = useAlbumContext();
+  const { albumId, metadata, key, refreshMetadata } = useAlbumContext();
   const [isPreparingDownload, setIsPreparingDownload] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [viewport, setViewport] = useState<Size>(viewportSize);
-  const file = metadata?.files.find((file) => file.fileId === props.fileId);
+  const file = metadata.files.find((file) => file.fileId === props.fileId);
   const isImage = file?.original !== undefined && file.originalVideo === undefined;
   const isRotated = isImage && (file.rotation ?? 0) !== 0 && file.edited !== undefined;
 
@@ -115,7 +115,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const rotation = useOptimisticRotation({
     fileId: props.fileId,
     file,
-    albumId: metadata?.albumId,
+    albumId,
     key,
     onSaved: refreshMetadata,
     onNotice: setNotice,
@@ -124,7 +124,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
   const media = useViewerMedia({
     fileId: props.fileId,
     file,
-    albumId: metadata?.albumId,
+    albumId,
     key,
     gridThumbnail: gridThumbnail(props.thumbnails, props.fileId),
     onImageSwapped: rotation.onImageSwapped,

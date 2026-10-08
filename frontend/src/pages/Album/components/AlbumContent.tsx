@@ -24,6 +24,7 @@ import {
   TOOLBAR_HEIGHT,
 } from "../layout";
 import { AlbumToolbar } from "./AlbumToolbar";
+import { AddPhotosDialog } from "./AddPhotosDialog";
 import { GooglePhotosImportDialog } from "./GooglePhotosImportDialog";
 import { isGooglePhotosEnabled } from "../services/googlePhotos/googleAuth";
 import { formatBytesPair } from "../../../utils/formatBytes";
@@ -130,10 +131,11 @@ export function AlbumContent(props: AlbumContentProps) {
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const ref = useRef<HTMLInputElement>(null);
+  const [isAddPhotosOpen, setAddPhotosOpen] = useState(false);
   const [isGoogleImportOpen, setGoogleImportOpen] = useState(false);
-  const { metadata, refreshMetadata, key, isEncrypted } = useAlbumContext();
+  const { albumId, refreshMetadata, key, isEncrypted } = useAlbumContext();
   const run = useUploadRun({
-    albumId: metadata?.albumId,
+    albumId,
     key,
     isUploading: props.isUploading,
     onUploadStarted: props.onUploadStarted,
@@ -173,11 +175,10 @@ export function AlbumContent(props: AlbumContentProps) {
   function openFilePicker() {
     ref.current?.click();
   }
-  // Hidden while a run is active: `upload` ignores files picked meanwhile.
-  const openGoogleImport =
-    isGooglePhotosEnabled && !props.isUploading
-      ? () => setGoogleImportOpen(true)
-      : undefined;
+  // Greyed out while a run is active: `upload` ignores files picked meanwhile.
+  let googlePhotosUnavailable: string | null = null;
+  if (!isGooglePhotosEnabled) googlePhotosUnavailable = "Not set up on this server";
+  else if (props.isUploading) googlePhotosUnavailable = "Wait for this upload to finish";
   const hasFailedFiles = failedFiles.length > 0;
   let cloudText = "Drop photos here";
   if (props.isUploading) cloudText = "Preparing your photos";
@@ -202,7 +203,9 @@ export function AlbumContent(props: AlbumContentProps) {
             placement={props.showUploader ? "floating" : "inline"}
             isVisible={props.showUploader || hasFailedFiles}
             isFadingOut={phase === "outro"}
-            onClick={openFilePicker}
+            onClick={() =>
+              props.isUploading ? openFilePicker() : setAddPhotosOpen(true)
+            }
           >
             <StyledUpload
               progress={run.shownPercent}
@@ -218,7 +221,7 @@ export function AlbumContent(props: AlbumContentProps) {
               <Text>
                 {cloudText}
                 {!props.isUploading && !hasFailedFiles && (
-                  <TextHint>or click to browse</TextHint>
+                  <TextHint>or click to add</TextHint>
                 )}
               </Text>
             )}
@@ -242,24 +245,13 @@ export function AlbumContent(props: AlbumContentProps) {
                 Retry failed uploads ({failedFiles.length})
               </UploadAction>
             )}
-            {phase === "idle" && !hasFailedFiles && openGoogleImport && (
-              <UploadAction
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openGoogleImport();
-                }}
-              >
-                Import from Google Photos
-              </UploadAction>
-            )}
           </CloudContainer>
         </CloudSlot>
         {props.thumbnailGroups.length > 0 && (
           <AlbumToolbar
             headerSlotRef={setHeaderSlot}
             onDownloadAll={props.onDownloadAll}
-            onAddPhoto={openFilePicker}
-            onImportGooglePhotos={openGoogleImport}
+            onAddPhoto={() => setAddPhotosOpen(true)}
             isBusy={props.isUploading || props.isDownloading}
             view={props.view}
             onChangeView={props.onChangeView}
@@ -321,6 +313,13 @@ export function AlbumContent(props: AlbumContentProps) {
           ></input>
         </UploadSection>
       </DragNdrop>
+      <AddPhotosDialog
+        open={isAddPhotosOpen}
+        onClose={() => setAddPhotosOpen(false)}
+        onPickFiles={openFilePicker}
+        onImportGooglePhotos={() => setGoogleImportOpen(true)}
+        googlePhotosUnavailable={googlePhotosUnavailable}
+      />
       {isGooglePhotosEnabled && (
         <GooglePhotosImportDialog
           open={isGoogleImportOpen}
