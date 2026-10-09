@@ -321,8 +321,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
 
   return (
     <Container ref={containerRef} isVisible={props.visible} onClick={close}>
-      <ButtonBar ref={buttonBarRef} onClick={stop}>
-        <ButtonGroup>
+      {/* Selection on the left; the file's actions, one pill, and close on the right. */}
+      <ButtonBar ref={buttonBarRef}>
+        <ButtonGroup onClick={stop}>
           <SelectButton
             type="button"
             isSelected={props.isSelected}
@@ -348,47 +349,63 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
               <SidecarLabel>{sidecarLabel(props.sidecars)}</SidecarLabel>
             </SelectButton>
           )}
-          <Button
-            onClick={() => {
-              if (!window.confirm("Delete this photo? This cannot be undone.")) {
-                return;
-              }
-              props.onShowChange(!props.visible);
-              props.onDelete();
-            }}
-          >
-            <Icons as={Trash} />
-          </Button>
-          {isImage ? (
-            <ImageActions
-              fileName={media.fileName}
-              sidecars={props.sidecars}
-              isRotated={isRotated}
-              isRotating={rotation.isSaving}
-              isPreparingDownload={isPreparingDownload}
-              onDownload={downloadImage}
-              onRotate={rotation.rotate}
-            />
-          ) : // eslint-disable-next-line sonarjs/no-nested-conditional
-          media.download ? (
-            <Button
-              style={{ padding: "0px" }}
-              onClick={() => media.download && offerDownload([media.download])}
-              title={`Download ${media.fileName}`}
-            >
-              <Icons as={SimpleCloud} />
-            </Button>
-          ) : (
-            <Button as="button" disabled title="Preparing download...">
-              <Icons as={SimpleCloud} style={{ opacity: 0.4 }} />
-            </Button>
-          )}
         </ButtonGroup>
-        {notice && <Notice role="status">{notice}</Notice>}
-        <Button onClick={close}>
-          <Icons as={Exit} />
-        </Button>
+        <ButtonGroup onClick={stop}>
+          <ActionPill role="toolbar" aria-label="Photo actions">
+            <PillButton
+              type="button"
+              title="Delete"
+              aria-label="Delete"
+              onClick={() => {
+                if (!window.confirm("Delete this photo? This cannot be undone.")) {
+                  return;
+                }
+                props.onShowChange(!props.visible);
+                props.onDelete();
+              }}
+            >
+              <PillIcon as={Trash} aria-hidden="true" />
+            </PillButton>
+            {isImage ? (
+              <ImageActions
+                fileName={media.fileName}
+                sidecars={props.sidecars}
+                isRotated={isRotated}
+                isPreparingDownload={isPreparingDownload}
+                onDownload={downloadImage}
+                onRotate={rotation.rotate}
+              />
+            ) : (
+              <PillButton
+                type="button"
+                disabled={!media.download}
+                onClick={() => media.download && offerDownload([media.download])}
+                title={
+                  media.download ? `Download ${media.fileName}` : "Preparing download..."
+                }
+                aria-label="Download"
+              >
+                <PillIcon as={SimpleCloud} aria-hidden="true" />
+              </PillButton>
+            )}
+          </ActionPill>
+          <CloseButton type="button" title="Close" aria-label="Close" onClick={close}>
+            <PillIcon as={Exit} aria-hidden="true" />
+          </CloseButton>
+        </ButtonGroup>
       </ButtonBar>
+      <StatusArea>
+        {notice && <Notice role="status">{notice}</Notice>}
+        {rotation.isSaving && (
+          <SavingStatus role="status">
+            <SyncIcon viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 12a8 8 0 0 1-13.7 5.6M4 12a8 8 0 0 1 13.7-5.6" />
+              <path d="M17.7 2.4v4h-4M6.3 21.6v-4h4" />
+            </SyncIcon>
+            Saving…
+          </SavingStatus>
+        )}
+      </StatusArea>
       <NextButton
         isZoomed={isZoomed}
         style={{ left: "0px" }}
@@ -438,7 +455,8 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
                 )}
               </ZoomLayer>
             ) : (
-              <>
+              // A layer of its own too, so a pinch can shrink it away like a photo.
+              <ZoomLayer ref={zoom.targetRef}>
                 <UnsupportedFile>
                   <UnsupportedFileName>{props.fileName}</UnsupportedFileName>
                 </UnsupportedFile>
@@ -447,6 +465,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
                   <FullScreenVideo
                     key={media.unsupportedVideoUrl}
                     src={media.unsupportedVideoUrl}
+                    opaque
                     controls
                     playsInline
                     onError={(e) => (e.currentTarget.style.display = "none")}
@@ -456,7 +475,7 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
                     }}
                   />
                 )}
-              </>
+              </ZoomLayer>
             )}
           </Slot>
           <Slot>
@@ -482,49 +501,43 @@ function ImageActions(props: {
   fileName: string;
   sidecars: Sidecar[];
   isRotated: boolean;
-  isRotating: boolean;
   isPreparingDownload: boolean;
   onDownload: (what: DownloadChoice) => void;
   onRotate: () => void;
 }) {
-  const iconStyle = { opacity: props.isPreparingDownload ? 0.4 : 1 };
   const items = downloadMenuItems(props.fileName, props.isRotated, props.sidecars);
   return (
     <>
+      <PillButton
+        type="button"
+        onClick={() => props.onRotate()}
+        title="Rotate 90° clockwise"
+        aria-label="Rotate 90° clockwise"
+      >
+        <PillIcon as={Rotate} aria-hidden="true" />
+      </PillButton>
       {items.length > 1 ? (
         <DownloadMenu
-          fileName={props.fileName}
           items={items}
           disabled={props.isPreparingDownload}
           onDownload={props.onDownload}
         />
       ) : (
-        <Button
+        <PillButton
+          type="button"
           disabled={props.isPreparingDownload}
           onClick={() => props.onDownload(items[0].choice)}
           title={`Download ${props.fileName}`}
+          aria-label="Download"
         >
-          <Icons as={SimpleCloud} style={iconStyle} />
-        </Button>
-      )}
-      <Button onClick={() => props.onRotate()} title="Rotate 90° clockwise">
-        <Icons as={Rotate} />
-      </Button>
-      {props.isRotating && (
-        <SavingStatus role="status">
-          <SyncIcon viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M20 12a8 8 0 0 1-13.7 5.6M4 12a8 8 0 0 1 13.7-5.6" />
-            <path d="M17.7 2.4v4h-4M6.3 21.6v-4h4" />
-          </SyncIcon>
-          Saving…
-        </SavingStatus>
+          <PillIcon as={SimpleCloud} aria-hidden="true" />
+        </PillButton>
       )}
     </>
   );
 }
 
 function DownloadMenu(props: {
-  fileName: string;
   items: DownloadMenuItem[];
   disabled: boolean;
   onDownload: (what: DownloadChoice) => void;
@@ -572,14 +585,17 @@ function DownloadMenu(props: {
 
   return (
     <MenuWrap ref={wrapRef}>
-      <Button
+      <PillButton
+        type="button"
         disabled={props.disabled}
         onClick={() => props.onDownload(props.items[0].choice)}
         title={props.items[0].label}
+        aria-label={props.items[0].label}
       >
-        <Icons as={SimpleCloud} style={{ opacity: props.disabled ? 0.4 : 1 }} />
-      </Button>
+        <PillIcon as={SimpleCloud} aria-hidden="true" />
+      </PillButton>
       <ChevronButton
+        type="button"
         disabled={props.disabled}
         aria-haspopup="menu"
         aria-expanded={isOpen}
@@ -701,75 +717,58 @@ const FullScreenVideo = styled("video", {
   height: "100vh",
   objectFit: "contain",
   zIndex: 2,
-  backgroundColor: "#000",
-});
-const Button = styled("button", {
-  ...pressable,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  width: "3rem",
-  borderRadius: "1rem",
-  height: "2rem",
-  size: "2rem",
-  color: "#9A9A9A",
-  // The bar is black already: a lighter pill shows the hover.
-  "&:hover:not(:disabled)": {
-    backgroundColor: "rgba(255, 255, 255, 0.14)",
+  // Its letterbox shows the backdrop, which a pinch fades away like a photo's;
+  // the poster under it is the same frame in the same place.
+  variants: {
+    // Without a poster it has to hide the file name behind it.
+    opaque: { true: { backgroundColor: "#000" } },
   },
-  "&:active:not(:disabled)": {
-    backgroundColor: "rgba(255, 255, 255, 0.24)",
-    transform: "scale(0.94)",
-  },
-  padding: "5px",
-  fontSize: "2rem",
-  background: "none",
-  border: "none",
-  margin: "10px",
 });
 const Icons = styled("svg", {
   height: "1.5rem",
   width: "2rem",
   color: "#fff",
 });
-// Pill at the left of the top bar (see artwork/design.svg, viewer page):
-// ring + "Select" while unselected, check + "Selected" once selected.
-const SelectButton = styled("button", {
+const PILL_HEIGHT = "2.5rem";
+const HOVER = "@media (hover: hover)";
+// Every control of the bar is a dark pill floating over the picture (see
+// artwork/design.svg, viewer page), so it reads on a bright photo as well.
+const pillSurface = {
   ...pressable,
-  display: "flex",
-  alignItems: "center",
-  gap: "0.5rem",
-  height: "2rem",
-  margin: "10px",
-  padding: "0 0.9rem 0 0.5rem",
-  borderRadius: "1rem",
+  height: PILL_HEIGHT,
+  borderRadius: PILL_HEIGHT,
   border: "none",
   background: "rgba(26, 26, 26, 0.8)",
   color: "#fff",
+  userSelect: "none",
+  // Over the picture: the pill stays dark and lightens a step on hover (not
+  // after a tap, where the hover would stick).
+  [HOVER]: { "&:hover:not(:disabled)": { background: "rgba(70, 70, 70, 0.9)" } },
+  "&:active:not(:disabled)": { background: "rgba(95, 95, 95, 0.95)" },
+} as const;
+// Ring + "Select" while unselected, check + "Selected" once selected.
+const SelectButton = styled("button", {
+  ...pillSurface,
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  padding: "0 0.9rem 0 0.6rem",
   fontFamily: "Open Sans",
   fontSize: "0.9rem",
   whiteSpace: "nowrap",
-  userSelect: "none",
-  // Over the picture: the pill stays dark and lightens a step on hover.
-  "&:hover": {
-    background: "rgba(70, 70, 70, 0.9)",
-  },
-  "&:active": {
-    background: "rgba(95, 95, 95, 0.95)",
-  },
   variants: {
     isSelected: {
       true: {
         background: "rgba(26, 26, 26, 0.95)",
         fontWeight: 600,
-        "&:hover": { background: "rgba(70, 70, 70, 0.95)" },
+        [HOVER]: { "&:hover:not(:disabled)": { background: "rgba(70, 70, 70, 0.95)" } },
       },
       false: {},
     },
   },
   "@narrow": {
-    // Icon only, so the trash / download / rotate buttons keep their room.
-    padding: "0 0.5rem",
+    // Icon only (the RAW pill keeps its extension), so the bar fits a phone.
+    padding: "0 0.55rem",
   },
 });
 const SelectIcon = styled("svg", {
@@ -785,25 +784,89 @@ const SidecarLabel = styled("span", {
   fontSize: "0.75rem",
   letterSpacing: "0.05em",
 });
+// The file's actions share one pill; each is a round hover target inside it.
+const ActionPill = styled("div", {
+  display: "flex",
+  alignItems: "center",
+  height: PILL_HEIGHT,
+  padding: "0 0.25rem",
+  borderRadius: PILL_HEIGHT,
+  background: "rgba(26, 26, 26, 0.8)",
+});
+const PillButton = styled("button", {
+  ...pressable,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+  width: "2.25rem",
+  height: "2.25rem",
+  padding: 0,
+  borderRadius: "50%",
+  border: "none",
+  background: "none",
+  color: "#fff",
+  [HOVER]: { "&:hover:not(:disabled)": { backgroundColor: "rgba(255, 255, 255, 0.14)" } },
+  "&:active:not(:disabled)": { backgroundColor: "rgba(255, 255, 255, 0.24)" },
+});
+const PillIcon = styled("svg", {
+  width: "1.3rem",
+  height: "1.3rem",
+  color: "#fff",
+});
+// Close stands apart from the actions: a round pill of its own at the corner.
+const CloseButton = styled("button", {
+  ...pillSurface,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+  width: PILL_HEIGHT,
+  padding: 0,
+});
 const ButtonBar = styled("div", {
+  boxSizing: "border-box",
   width: "100%",
   display: "flex",
   justifyContent: "space-between",
-  flex: 1,
+  alignItems: "flex-start",
+  gap: "0.5rem",
   position: "absolute",
-  top: "0px",
+  top: 0,
+  padding: "calc(10px + env(safe-area-inset-top)) 10px 0",
+  // The gap between the groups belongs to the picture (swipe, close on click).
+  pointerEvents: "none",
+  "& > *": { pointerEvents: "auto" },
   // Above the (invisible) prev/next buttons so the download menu stays clickable.
   zIndex: "4",
 });
 const ButtonGroup = styled("div", {
   display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  minWidth: 0,
+});
+// Notices and the rotation's "Saving…", centred under the bar.
+const StatusArea = styled("div", {
+  position: "absolute",
+  top: `calc(10px + env(safe-area-inset-top) + ${PILL_HEIGHT} + 0.75rem)`,
+  left: "50%",
+  transform: "translateX(-50%)",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: "0.5rem",
+  pointerEvents: "none",
+  zIndex: 3,
 });
 const SavingStatus = styled("div", {
   display: "flex",
   alignItems: "center",
   gap: "0.4rem",
-  alignSelf: "center",
-  marginLeft: "0.25rem",
+  height: "2rem",
+  padding: "0 0.9rem",
+  borderRadius: "1rem",
+  background: "rgba(26, 26, 26, 0.8)",
   color: "rgba(255, 255, 255, 0.75)",
   fontFamily: "Open Sans",
   fontSize: "0.85rem",
@@ -824,11 +887,13 @@ const SyncIcon = styled("svg", {
 const MenuWrap = styled("div", {
   position: "relative",
   display: "flex",
+  alignItems: "center",
 });
 // Split button: the cloud saves the first (default) entry, the chevron opens the rest.
-const ChevronButton = styled(Button, {
-  width: "1.2rem",
-  marginLeft: "-0.4rem",
+const ChevronButton = styled(PillButton, {
+  width: "1.25rem",
+  marginLeft: "-0.25rem",
+  borderRadius: "0.625rem",
 });
 const Chevron = styled("svg", {
   width: "0.6rem",
@@ -846,13 +911,14 @@ const Chevron = styled("svg", {
     },
   },
 });
+// Opens under the pill, aligned to its right so it stays on a phone's screen.
 const Menu = styled("div", {
   position: "absolute",
-  top: "calc(100% - 4px)",
-  left: "10px",
+  top: "calc(100% + 0.5rem)",
+  right: "-0.25rem",
   minWidth: "11rem",
   padding: "0.25rem",
-  borderRadius: "0.5rem",
+  borderRadius: "0.75rem",
   backgroundColor: "rgba(26, 26, 26, 0.95)",
   border: "1px solid rgba(255, 255, 255, 0.1)",
   boxShadow: "0 8px 24px rgba(0, 0, 0, 0.6)",
@@ -863,8 +929,8 @@ const Menu = styled("div", {
 const MenuItem = styled("button", {
   ...pressableNoScale,
   textAlign: "left",
-  padding: "0.5rem 0.75rem",
-  borderRadius: "0.35rem",
+  padding: "0.6rem 0.75rem",
+  borderRadius: "0.5rem",
   background: "none",
   border: "none",
   color: "#fff",
@@ -880,12 +946,7 @@ const MenuItem = styled("button", {
 // A notice like every other, under the viewer's button bar.
 const Notice = styled("div", {
   ...noticeCard,
-  position: "absolute",
-  top: "3.5rem",
-  left: "50%",
-  transform: "translateX(-50%)",
   paddingRight: "1rem",
-  zIndex: 3,
 });
 const NextButton = styled("button", {
   display: "flex",

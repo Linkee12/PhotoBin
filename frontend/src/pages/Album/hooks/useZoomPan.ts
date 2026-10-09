@@ -24,8 +24,9 @@ type UseZoomPanOptions = {
   enabled: boolean;
   /**
    * Whether wheel, pinch and double tap change the scale (default true). When
-   * false a pinch is swallowed — the wrapper's `touch-action: none` keeps the
-   * page from zooming — and the only gesture left is the drag that swipes.
+   * false nothing zooms in — the wrapper's `touch-action: none` keeps the page
+   * from zooming either — but a pinch may still shrink the picture to close
+   * the viewer, and a drag still swipes.
    */
   zoomable?: boolean;
   /**
@@ -176,10 +177,12 @@ export function useZoomPan({
 
   /** Only a pinch that began at 1x may shrink the picture below 1x (to close). */
   const minScale = () => (pinch.current?.atRest ? PINCH_OUT_MIN_SCALE : MIN_SCALE);
+  /** Something that cannot zoom never grows past 1x; it may only be pinched away. */
+  const maxScale = () => (options.current.zoomable ? MAX_SCALE : MIN_SCALE);
 
   const clampTransform = useCallback(
     (next: ZoomTransform): ZoomTransform => {
-      const scale = clamp(next.scale, minScale(), MAX_SCALE);
+      const scale = clamp(next.scale, minScale(), maxScale());
       const wrapper = wrapperRef.current;
       const image = imageRef.current;
       if (!wrapper || !image) return { scale, tx: 0, ty: 0 };
@@ -200,7 +203,7 @@ export function useZoomPan({
     (point: Point, nextScale: number, base: ZoomTransform = transformRef.current) => {
       const wrapper = wrapperRef.current;
       if (!wrapper) return;
-      const scale = clamp(nextScale, minScale(), MAX_SCALE);
+      const scale = clamp(nextScale, minScale(), maxScale());
       const ratio = scale / base.scale;
       const dx = point.x - wrapper.clientWidth / 2;
       const dy = point.y - wrapper.clientHeight / 2;
@@ -362,11 +365,7 @@ export function useZoomPan({
 
       const current = transformRef.current;
       if (pointers.current.size >= 2 && pinch.current) {
-        // A pinch on something that cannot zoom is swallowed (the page never zooms).
-        if (!options.current.zoomable) {
-          done();
-          return;
-        }
+        // On something that cannot zoom only the shrink below 1x (to close) takes effect.
         const [a, b] = [...pointers.current.values()];
         const next = { ...pinch.current, distance: distance(a, b), mid: midpoint(a, b) };
         const scale = current.scale * (next.distance / pinch.current.distance);
