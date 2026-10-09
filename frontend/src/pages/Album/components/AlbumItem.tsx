@@ -128,21 +128,30 @@ export const AlbumItem = memo(function AlbumItem(props: AlbumItemProps) {
   );
 });
 
+// Out of the tile's flow, so the tile's 3:2 box never depends on the picture:
+// a thumbnail keeps its photo's whole frame (a portrait one is taller) and is
+// cropped here, and the pinch gesture can animate the grid's height without
+// the tiles giving way.
 const Image = styled("img", {
   display: "block",
-  transition: "width 0.2s, height 0.2s, padding 0.2s, border-radius 0.2s, filter 0.15s",
+  position: "absolute",
+  transition:
+    "top 0.2s, left 0.2s, width 0.2s, height 0.2s, border-radius 0.2s, filter 0.15s",
   objectFit: "cover",
   variants: {
     isSelected: {
       true: {
         borderRadius: "4px",
+        top: "10px",
+        left: "10px",
         width: "calc(100% - 20px)",
         height: "calc(100% - 20px)",
       },
       false: {
         borderRadius: "10px",
+        top: 0,
+        left: 0,
         width: "100%",
-        // The tile is 3:2; a thumbnail keeps its photo's whole frame and is cropped here.
         height: "100%",
       },
     },
@@ -187,6 +196,10 @@ const highlightPulse = keyframes({
 const Preview = styled("div", {
   ...pressableNoScale,
   ...pressDim,
+  // The pinch gesture writes the tile's transform every frame and clears it
+  // at the commit: a transform transition would trail the fingers, then slide
+  // every tile from the preview into the new grid.
+  transition: "opacity 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease",
   // The picture brightens under the pointer; the tile itself keeps its
   // transform for the pinch gesture, so no scale here.
   "&:hover [data-picture]": { filter: "brightness(1.08)" },
@@ -219,9 +232,6 @@ const Preview = styled("div", {
   },
   width: "100%",
   aspectRatio: "3/2",
-  // An aspect-ratio box grows to fit its content by default; a thumbnail
-  // keeps its photo's whole frame (a portrait one is taller) and is cropped.
-  minHeight: 0,
   margin: "0.5rem",
   // A long press selects (useLongPressSelect): no callout, no text selection.
   WebkitTouchCallout: "none",

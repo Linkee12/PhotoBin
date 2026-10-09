@@ -17,7 +17,11 @@ export function SelectionBar(props: {
   onSaveToGooglePhotos?: () => void;
 }) {
   return (
-    <ToolBar isVisible={props.selectedCount > 0}>
+    <ToolBar
+      isVisible={props.selectedCount > 0}
+      // The notifications stack above it while it is shown.
+      data-selection-bar={props.selectedCount > 0 ? "" : undefined}
+    >
       {/* Busy: a download or save is reading these files; deleting them
           now would break it halfway. */}
       <Button

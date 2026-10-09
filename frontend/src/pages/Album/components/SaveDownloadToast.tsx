@@ -1,13 +1,12 @@
 import { toast } from "react-toastify";
 import { styled } from "../../../stitches.config";
-import { SecondaryButton } from "../../../components/Dialog";
+import { NoticeAction } from "../../../components/notifications";
 import { needsTapToSave, SavedFile, saveFiles } from "../../../utils/saveBlob";
 
 const Row = styled("div", {
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
-  gap: "0.75em",
+  gap: "0.75rem",
 });
 
 /** Offers finished files on a fresh tap, which iOS requires to save them (`needsTapToSave`). */
@@ -15,9 +14,9 @@ function SaveDownloadToast({ name, onSave }: { name: string; onSave: () => void 
   return (
     <Row>
       <span>{name} is ready</span>
-      <SecondaryButton type="button" onClick={onSave}>
+      <NoticeAction type="button" onClick={onSave}>
         Save
-      </SecondaryButton>
+      </NoticeAction>
     </Row>
   );
 }

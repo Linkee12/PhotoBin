@@ -7,8 +7,10 @@ const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 /**
  * Feedback every clickable element shares: a pointer cursor, smooth colour
  * changes, a press-down while active, a visible keyboard focus ring and a
- * muted disabled state. Elements whose `transform` is driven elsewhere (grid
- * tiles under a pinch) use `pressableNoScale` instead.
+ * muted disabled state. `pressableNoScale` has no press-down scale, for
+ * elements that must not shrink; it still transitions `transform`, so an
+ * element whose transform is written every frame (a grid tile under a pinch)
+ * must override `transition` as well.
  */
 export const pressableNoScale: CSS = {
   cursor: "pointer",

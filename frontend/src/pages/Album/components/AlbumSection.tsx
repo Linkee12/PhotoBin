@@ -326,7 +326,8 @@ const Images = styled("div", {
         justifyItems: "stretch",
         // The tile is exactly its cell: the auto layouts' tile margin would
         // push every tile right by it and the last column into the gutter.
-        "& > [data-tile]": { width: "100%", maxWidth: "none", margin: 0 },
+        // No size caps either: the pinch allows cells down to 120px.
+        "& > [data-tile]": { width: "100%", minWidth: 0, maxWidth: "none", margin: 0 },
         "@narrow": {
           display: "grid",
           gap: "10px",

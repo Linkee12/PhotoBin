@@ -16,7 +16,9 @@ import { rotatedFitScale, useOptimisticRotation } from "../hooks/useOptimisticRo
 import { imageQueryService } from "../services";
 import { downloadFileName, downloadPart } from "../services/renditions";
 import { Sidecar, ThumbnailGroup } from "../utils/groupFiles";
+import { flyToTile, shownPicture } from "../utils/flyToTile";
 import { PINCH_SETTLE_MS } from "../utils/pinchClose";
+import { noticeCard } from "../../../components/notifications";
 import { extensionLabel, sidecarLabel, sidecarTitle } from "../utils/sidecars";
 import { SWIPE_ANIMATION_MS } from "../utils/swipeStrip";
 import { prefersReducedMotion } from "../../../utils/reducedMotion";
@@ -151,7 +153,9 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
    * How far the viewer has faded away under a pinch: 0 is fully there, 1 is
    * gone. `animate` eases there (the fingers lifted and the picture springs back).
    */
+  const fadedRef = useRef(0);
   function fadeViewer(t: number, animate: boolean) {
+    fadedRef.current = t;
     const container = containerRef.current;
     const bar = buttonBarRef.current;
     if (!container || !bar) return;
@@ -204,6 +208,22 @@ export function ViewOriginalModal(props: ViewOriginalModalProps) {
 
   function close() {
     rotation.flush();
+    // The photo flies back into its tile from wherever it is drawn now
+    // (zoomed, turned or half pinched away); a placeholder has nothing to fly.
+    const picture = zoom.imageRef.current;
+    if (picture && picture.naturalWidth > 1) {
+      flyToTile({
+        fileId: props.fileId,
+        src: picture.currentSrc || picture.src,
+        from: shownPicture(
+          picture.getBoundingClientRect(),
+          { width: picture.naturalWidth, height: picture.naturalHeight },
+          shownTurns,
+        ),
+        quarterTurns: shownTurns,
+        backdropOpacity: 1 - fadedRef.current,
+      });
+    }
     fadeViewer(0, false);
     props.onShowChange(false);
   }
@@ -857,18 +877,15 @@ const MenuItem = styled("button", {
   },
   "&:active": { backgroundColor: "rgba(255, 255, 255, 0.2)" },
 });
+// A notice like every other, under the viewer's button bar.
 const Notice = styled("div", {
+  ...noticeCard,
   position: "absolute",
   top: "3.5rem",
   left: "50%",
   transform: "translateX(-50%)",
-  padding: "0.5rem 1rem",
-  borderRadius: "0.5rem",
-  backgroundColor: "rgba(26, 26, 26, 0.95)",
-  color: "#fff",
-  fontFamily: "Open Sans",
-  fontSize: "0.9rem",
-  whiteSpace: "nowrap",
+  paddingRight: "1rem",
+  zIndex: 3,
 });
 const NextButton = styled("button", {
   display: "flex",

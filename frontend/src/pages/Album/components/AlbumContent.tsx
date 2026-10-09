@@ -25,6 +25,7 @@ import {
 } from "../layout";
 import { AlbumToolbar } from "./AlbumToolbar";
 import { AddPhotosDialog } from "./AddPhotosDialog";
+import { RetryBar } from "./RetryBar";
 import { GooglePhotosImportDialog } from "./GooglePhotosImportDialog";
 import { isGooglePhotosEnabled } from "../services/googlePhotos/googleAuth";
 import { formatBytesPair } from "../../../utils/formatBytes";
@@ -63,6 +64,10 @@ type AlbumContentProps = {
   onUploadFinished: () => void;
   /** A file finished uploading; its thumbnail is known before metadata lists it. */
   onUploaded: (uploaded: Uploaded) => void;
+  /** A pinch is animating the grid (true) or is over (false). */
+  onPinchActive?: (active: boolean) => void;
+  /** Tiles a pinch is about to bring on screen. */
+  onPrefetchThumbnails?: (fileIds: string[]) => void;
 };
 
 export function AlbumContent(props: AlbumContentProps) {
@@ -102,6 +107,8 @@ export function AlbumContent(props: AlbumContentProps) {
     onCommit: onPinchCommit,
     onOpen: props.onOpen,
     swallowNextClick: swallow.arm,
+    onGestureChange: props.onPinchActive,
+    onPrefetch: props.onPrefetchThumbnails,
   });
   // A remembered count may not fit this window (pinched on a wider one, or
   // the desktop window was resized): once a grid is laid out, keep the count
@@ -179,11 +186,7 @@ export function AlbumContent(props: AlbumContentProps) {
   let googlePhotosUnavailable: string | null = null;
   if (!isGooglePhotosEnabled) googlePhotosUnavailable = "Not set up on this server";
   else if (props.isUploading) googlePhotosUnavailable = "Wait for this upload to finish";
-  const hasFailedFiles = failedFiles.length > 0;
-  let cloudText = "Drop photos here";
-  if (props.isUploading) cloudText = "Preparing your photos";
-  else if (hasFailedFiles)
-    cloudText = `${failedFiles.length} of your files didn't upload`;
+  const cloudText = props.isUploading ? "Preparing your photos" : "Drop photos here";
   return (
     <Panel variant={0} zIndex={1}>
       {props.thumbnailGroups.length > 0 && (
@@ -196,12 +199,12 @@ export function AlbumContent(props: AlbumContentProps) {
           if (files != null) uploadImages(Array.from(files));
         }}
       >
-        {/* Drop hero / upload indicator / retry notice, before the toolbar so the
-            first group's band still overlaps the toolbar shelf, not this. */}
+        {/* Drop hero of an empty album / upload indicator over the dimmed
+            album. Failures in a filled album are offered by the toolbar, so
+            nothing comes between the header and its wave. */}
         <CloudSlot>
           <CloudContainer
-            placement={props.showUploader ? "floating" : "inline"}
-            isVisible={props.showUploader || hasFailedFiles}
+            isVisible={props.showUploader}
             isFadingOut={phase === "outro"}
             onClick={() =>
               props.isUploading ? openFilePicker() : setAddPhotosOpen(true)
@@ -220,9 +223,7 @@ export function AlbumContent(props: AlbumContentProps) {
             ) : (
               <Text>
                 {cloudText}
-                {!props.isUploading && !hasFailedFiles && (
-                  <TextHint>or click to add</TextHint>
-                )}
+                {!props.isUploading && <TextHint>or click to add</TextHint>}
               </Text>
             )}
             {phase === "uploading" && (
@@ -233,16 +234,6 @@ export function AlbumContent(props: AlbumContentProps) {
                 }}
               >
                 Cancel upload
-              </UploadAction>
-            )}
-            {phase === "idle" && hasFailedFiles && (
-              <UploadAction
-                onClick={(e) => {
-                  e.stopPropagation();
-                  run.retryFailed().catch((e) => console.error(e));
-                }}
-              >
-                Retry failed uploads ({failedFiles.length})
               </UploadAction>
             )}
           </CloudContainer>
@@ -291,6 +282,13 @@ export function AlbumContent(props: AlbumContentProps) {
           )}
         </AlbumSections>
         <UploadMask show={phase === "uploading" || phase === "done"} />
+        {phase === "idle" && failedFiles.length > 0 && (
+          <RetryBar
+            count={failedFiles.length}
+            onRetry={() => run.retryFailed().catch((e) => console.error(e))}
+            onDismiss={run.dismissFailed}
+          />
+        )}
         <DownloadMask show={props.isDownloading}>
           <DownloadText>{props.downloadLabel ?? "Preparing your files"}</DownloadText>
           {props.downloadProgress > 0 && (
@@ -463,22 +461,12 @@ const CloudContainer = styled("div", {
   "@media (prefers-reduced-motion: reduce)": {
     transition: "none",
   },
+  // Hero of an empty album, and the progress indicator over the dimmed album.
+  position: "absolute",
+  top: "18rem",
+  // Above the upload mask, which comes later in the DOM.
+  zIndex: 2,
   variants: {
-    placement: {
-      // Hero of an empty album, and the progress indicator over the dimmed album.
-      floating: {
-        position: "absolute",
-        top: "18rem",
-        // Above the upload mask, which comes later in the DOM.
-        zIndex: 2,
-      },
-      // After failures in a filled album: in flow above the toolbar, about
-      // where the floating indicator was.
-      inline: {
-        position: "static",
-        padding: "3rem 1rem 1.5rem",
-      },
-    },
     isVisible: {
       true: {
         display: "flex",

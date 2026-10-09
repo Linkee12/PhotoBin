@@ -203,11 +203,14 @@ export function useUploadRun(options: Options) {
   const cancel = useCallback(() => abortRef.current?.abort(), []);
   const upload = useCallback((files: File[]) => run(files, true), [run]);
   const retryFailed = useCallback(() => run(failedFiles, false), [run, failedFiles]);
+  /** Forgets the failures (their resume records stay: picking them again resumes). */
+  const dismissFailed = useCallback(() => setFailedFiles([]), []);
 
   return {
     upload,
     cancel,
     retryFailed,
+    dismissFailed,
     phase,
     shownPercent: shownPercentOf(phase, bytes),
     bytes,

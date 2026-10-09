@@ -259,6 +259,13 @@ export default function Album() {
     }
   }, [neighbourIds, thumbnails.loader]);
 
+  const prefetchThumbnails = useCallback(
+    (ids: string[]) => {
+      for (const id of ids) thumbnails.loader.request(id, "front");
+    },
+    [thumbnails.loader],
+  );
+
   /** Steps the viewer to the next/previous tile. */
   function showNeighbour(direction: number) {
     const id = direction > 0 ? neighbourIds.next : neighbourIds.prev;
@@ -339,6 +346,8 @@ export default function Album() {
           view={view}
           onChangeView={changeView}
           onRenameBatch={renameBatch}
+          onPinchActive={thumbnails.holdCommits}
+          onPrefetchThumbnails={prefetchThumbnails}
           onUploaded={(uploaded) =>
             thumbnails.setLoadedThumbnail(uploaded.fileId, {
               url: uploaded.thumbnail,
