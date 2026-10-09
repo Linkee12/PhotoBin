@@ -1,4 +1,5 @@
 import { AlbumItem } from "./AlbumItem";
+import { TextSkeleton } from "../../../components/Skeleton";
 import { selectionIcon } from "./selectionIcon";
 import { styled } from "../../../stitches.config";
 import { pressable, pressableNoScale } from "../../../pressable";
@@ -83,8 +84,23 @@ export function AlbumSection(props: AlbumSectionProps) {
           >
             <CheckIcon as={selectIcon} />
           </SelectAll>
-          <GroupName name={props.group.title} onRename={props.onRename} />
-          {props.group.meta && <Meta data-group-meta>{props.group.meta}</Meta>}
+          {props.group.isPlaceholder ? (
+            // `editable`: the same box (and dashed underline) as a batch name.
+            <Name editable>
+              <TextSkeleton>{props.group.title}</TextSkeleton>
+            </Name>
+          ) : (
+            <GroupName name={props.group.title} onRename={props.onRename} />
+          )}
+          {props.group.meta && (
+            <Meta data-group-meta>
+              {props.group.isPlaceholder ? (
+                <TextSkeleton>{props.group.meta}</TextSkeleton>
+              ) : (
+                props.group.meta
+              )}
+            </Meta>
+          )}
         </Header>
       }
     >
@@ -310,7 +326,8 @@ const Images = styled("div", {
         justifyItems: "stretch",
         // The tile is exactly its cell: the auto layouts' tile margin would
         // push every tile right by it and the last column into the gutter.
-        "& > [data-tile]": { width: "100%", maxWidth: "none", margin: 0 },
+        // No size caps either: the pinch allows cells down to 120px.
+        "& > [data-tile]": { width: "100%", minWidth: 0, maxWidth: "none", margin: 0 },
         "@narrow": {
           display: "grid",
           gap: "10px",

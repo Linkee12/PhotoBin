@@ -4,11 +4,16 @@ import { DragNdrop } from "./DragNdrop";
 import { AlbumSection } from "./AlbumSection";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { Spinner } from "../../../components/Spinner";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useGridPinch } from "../hooks/useGridPinch";
+import { useLongPressSelect } from "../hooks/useLongPressSelect";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { useSwallowNextClick } from "../hooks/useSwallowNextClick";
 import { Uploaded, useUploadRun } from "../hooks/useUploadRun";
 import { ThumbnailGroup } from "../utils/groupFiles";
+import { readStoredColumns, storeColumns } from "../utils/columnsStore";
+import { clampColumns } from "../utils/pinchGrid";
 import { Panel } from "./Panel";
 import { pressable, pressableNoScale } from "../../../pressable";
 import {
@@ -19,6 +24,10 @@ import {
   TOOLBAR_HEIGHT,
 } from "../layout";
 import { AlbumToolbar } from "./AlbumToolbar";
+import { AddPhotosDialog } from "./AddPhotosDialog";
+import { RetryBar } from "./RetryBar";
+import { GooglePhotosImportDialog } from "./GooglePhotosImportDialog";
+import { isGooglePhotosEnabled } from "../services/googlePhotos/googleAuth";
 import { formatBytesPair } from "../../../utils/formatBytes";
 import { AlbumView } from "../utils/groupFiles";
 
@@ -31,7 +40,11 @@ type AlbumContentProps = {
   isDownloading: boolean;
   isLoadingThumbnails: boolean;
   downloadProgress: number;
+  /** What the download mask says; "Preparing your files" by default. */
+  downloadLabel?: string;
   thumbnailGroups: ThumbnailGroup[];
+  /** Every tile in grid order (the long-press range runs along it). */
+  tileIds: readonly string[];
   view: AlbumView;
   onChangeView: (view: AlbumView) => void;
   onRenameBatch: (batchId: string, name: string) => void;
@@ -51,40 +64,85 @@ type AlbumContentProps = {
   onUploadFinished: () => void;
   /** A file finished uploading; its thumbnail is known before metadata lists it. */
   onUploaded: (uploaded: Uploaded) => void;
+  /** A pinch is animating the grid (true) or is over (false). */
+  onPinchActive?: (active: boolean) => void;
+  /** Tiles a pinch is about to bring on screen. */
+  onPrefetchThumbnails?: (fileIds: string[]) => void;
 };
 
 export function AlbumContent(props: AlbumContentProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   // Tiles per row, once the user has pinched the grid; `null` is the CSS auto
-  // layout. The scroll position that keeps the pinched tile in place is applied
-  // after the grid has been relaid with the new count.
-  const [columns, setColumns] = useState<number | null>(null);
+  // layout. The count is remembered per orientation, so turning the phone
+  // swaps to the count pinched in that orientation. The scroll position that
+  // keeps the pinched tile in place is applied after the grid has been relaid
+  // with the new count.
+  const orientation = useMediaQuery("(orientation: portrait)") ? "portrait" : "landscape";
+  const [columns, setColumns] = useState<number | null>(() =>
+    readStoredColumns(orientation),
+  );
+  useEffect(() => setColumns(readStoredColumns(orientation)), [orientation]);
   const pendingScrollTop = useRef<number | null>(null);
-  const onPinchCommit = useCallback((next: number, scrollTop: number) => {
-    pendingScrollTop.current = scrollTop;
-    // Called from an animation frame, where React would otherwise render in a
-    // later task and the browser could paint the plain grid in between.
-    flushSync(() => setColumns(next));
-  }, []);
+  const onPinchCommit = useCallback(
+    (next: number, scrollTop: number) => {
+      pendingScrollTop.current = scrollTop;
+      storeColumns(orientation, next);
+      // Called from an animation frame, where React would otherwise render in a
+      // later task and the browser could paint the plain grid in between.
+      flushSync(() => setColumns(next));
+    },
+    [orientation],
+  );
   useLayoutEffect(() => {
     if (pendingScrollTop.current === null) return;
     window.scrollTo({ top: pendingScrollTop.current, behavior: "auto" });
     pendingScrollTop.current = null;
   }, [columns]);
+  const hasGroups = props.thumbnailGroups.length > 0;
+  // Both gestures swallow the click that follows their release.
+  const swallow = useSwallowNextClick();
   const pinch = useGridPinch({
-    enabled: props.thumbnailGroups.length > 0,
+    enabled: hasGroups,
     columns,
     onCommit: onPinchCommit,
     onOpen: props.onOpen,
+    swallowNextClick: swallow.arm,
+    onGestureChange: props.onPinchActive,
+    onPrefetch: props.onPrefetchThumbnails,
+  });
+  // A remembered count may not fit this window (pinched on a wider one, or
+  // the desktop window was resized): once a grid is laid out, keep the count
+  // within the ladder the pinch itself uses.
+  useLayoutEffect(() => {
+    if (columns === null) return;
+    const images = pinch.ref.current?.querySelector<HTMLElement>("[data-images]");
+    if (!images) return;
+    const gap = parseFloat(getComputedStyle(images).columnGap) || 0;
+    const fitted = clampColumns(columns, {
+      width: images.getBoundingClientRect().width,
+      gap,
+    });
+    if (fitted !== columns) setColumns(fitted);
+  }, [columns, orientation, hasGroups, pinch.ref]);
+  const longPress = useLongPressSelect({
+    containerRef: pinch.ref,
+    tileIds: props.tileIds,
+    enabled: hasGroups,
+    isSelected: props.isSelected,
+    onSelect: props.onSelect,
+    onDeselect: props.onDeSelect,
+    swallowNextClick: swallow.arm,
   });
   // Where the toolbar is the wide shelf, the first group's header shares its
   // row (rendered into this slot); otherwise it heads its own band.
   const toolbarInline = useMediaQuery(TOOLBAR_INLINE_QUERY);
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const ref = useRef<HTMLInputElement>(null);
-  const { metadata, refreshMetadata, key, isEncrypted } = useAlbumContext();
+  const [isAddPhotosOpen, setAddPhotosOpen] = useState(false);
+  const [isGoogleImportOpen, setGoogleImportOpen] = useState(false);
+  const { albumId, refreshMetadata, key, isEncrypted } = useAlbumContext();
   const run = useUploadRun({
-    albumId: metadata?.albumId,
+    albumId,
     key,
     isUploading: props.isUploading,
     onUploadStarted: props.onUploadStarted,
@@ -124,11 +182,11 @@ export function AlbumContent(props: AlbumContentProps) {
   function openFilePicker() {
     ref.current?.click();
   }
-  const hasFailedFiles = failedFiles.length > 0;
-  let cloudText = "Drop photos here";
-  if (props.isUploading) cloudText = "Preparing your photos";
-  else if (hasFailedFiles)
-    cloudText = `${failedFiles.length} of your files didn't upload`;
+  // Greyed out while a run is active: `upload` ignores files picked meanwhile.
+  let googlePhotosUnavailable: string | null = null;
+  if (!isGooglePhotosEnabled) googlePhotosUnavailable = "Not set up on this server";
+  else if (props.isUploading) googlePhotosUnavailable = "Wait for this upload to finish";
+  const cloudText = props.isUploading ? "Preparing your photos" : "Drop photos here";
   return (
     <Panel variant={0} zIndex={1}>
       {props.thumbnailGroups.length > 0 && (
@@ -141,14 +199,16 @@ export function AlbumContent(props: AlbumContentProps) {
           if (files != null) uploadImages(Array.from(files));
         }}
       >
-        {/* Drop hero / upload indicator / retry notice, before the toolbar so the
-            first group's band still overlaps the toolbar shelf, not this. */}
+        {/* Drop hero of an empty album / upload indicator over the dimmed
+            album. Failures in a filled album are offered by the toolbar, so
+            nothing comes between the header and its wave. */}
         <CloudSlot>
           <CloudContainer
-            placement={props.showUploader ? "floating" : "inline"}
-            isVisible={props.showUploader || hasFailedFiles}
+            isVisible={props.showUploader}
             isFadingOut={phase === "outro"}
-            onClick={openFilePicker}
+            onClick={() =>
+              props.isUploading ? openFilePicker() : setAddPhotosOpen(true)
+            }
           >
             <StyledUpload
               progress={run.shownPercent}
@@ -163,9 +223,7 @@ export function AlbumContent(props: AlbumContentProps) {
             ) : (
               <Text>
                 {cloudText}
-                {!props.isUploading && !hasFailedFiles && (
-                  <TextHint>or click to browse</TextHint>
-                )}
+                {!props.isUploading && <TextHint>or click to add</TextHint>}
               </Text>
             )}
             {phase === "uploading" && (
@@ -178,29 +236,24 @@ export function AlbumContent(props: AlbumContentProps) {
                 Cancel upload
               </UploadAction>
             )}
-            {phase === "idle" && hasFailedFiles && (
-              <UploadAction
-                onClick={(e) => {
-                  e.stopPropagation();
-                  run.retryFailed().catch((e) => console.error(e));
-                }}
-              >
-                Retry failed uploads ({failedFiles.length})
-              </UploadAction>
-            )}
           </CloudContainer>
         </CloudSlot>
         {props.thumbnailGroups.length > 0 && (
           <AlbumToolbar
             headerSlotRef={setHeaderSlot}
             onDownloadAll={props.onDownloadAll}
-            onAddPhoto={openFilePicker}
+            onAddPhoto={() => setAddPhotosOpen(true)}
             isBusy={props.isUploading || props.isDownloading}
             view={props.view}
             onChangeView={props.onChangeView}
           />
         )}
-        <AlbumSections ref={pinch.ref} {...pinch.handlers}>
+        <AlbumSections
+          ref={pinch.ref}
+          {...pinch.handlers}
+          {...swallow.handlers}
+          onContextMenu={longPress.onContextMenu}
+        >
           <PinchOverlay ref={pinch.overlayRef} aria-hidden="true" />
           {props.thumbnailGroups.map((group, i) => (
             <AlbumSection
@@ -229,8 +282,15 @@ export function AlbumContent(props: AlbumContentProps) {
           )}
         </AlbumSections>
         <UploadMask show={phase === "uploading" || phase === "done"} />
+        {phase === "idle" && failedFiles.length > 0 && (
+          <RetryBar
+            count={failedFiles.length}
+            onRetry={() => run.retryFailed().catch((e) => console.error(e))}
+            onDismiss={run.dismissFailed}
+          />
+        )}
         <DownloadMask show={props.isDownloading}>
-          <DownloadText>Preparing your files</DownloadText>
+          <DownloadText>{props.downloadLabel ?? "Preparing your files"}</DownloadText>
           {props.downloadProgress > 0 && (
             <DownloadPercent>{props.downloadProgress}%</DownloadPercent>
           )}
@@ -251,6 +311,20 @@ export function AlbumContent(props: AlbumContentProps) {
           ></input>
         </UploadSection>
       </DragNdrop>
+      <AddPhotosDialog
+        open={isAddPhotosOpen}
+        onClose={() => setAddPhotosOpen(false)}
+        onPickFiles={openFilePicker}
+        onImportGooglePhotos={() => setGoogleImportOpen(true)}
+        googlePhotosUnavailable={googlePhotosUnavailable}
+      />
+      {isGooglePhotosEnabled && (
+        <GooglePhotosImportDialog
+          open={isGoogleImportOpen}
+          onClose={() => setGoogleImportOpen(false)}
+          onFiles={uploadImages}
+        />
+      )}
     </Panel>
   );
 }
@@ -299,7 +373,8 @@ const UploadSection = styled("div", {
 const AlbumSections = styled("div", {
   display: "flex",
   flexDirection: "column",
-  // Two fingers pinch the grid (useGridPinch); one still scrolls the page.
+  // Two fingers pinch the grid (useGridPinch), a long press selects
+  // (useLongPressSelect); one finger still scrolls the page.
   touchAction: "pan-y",
 });
 
@@ -318,15 +393,6 @@ const LoadingThumbnails = styled("div", {
   justifyContent: "center",
   alignItems: "center",
   padding: "4rem",
-});
-
-const Spinner = styled("div", {
-  width: "3rem",
-  height: "3rem",
-  border: "5px solid rgba(255, 255, 255, 0.2)",
-  borderTop: "5px solid #DBDCD9",
-  borderRadius: "50%",
-  animation: "spin 1s linear infinite",
 });
 
 /** Centres the cloud block; the floating variant takes its horizontal position from here. */
@@ -395,22 +461,12 @@ const CloudContainer = styled("div", {
   "@media (prefers-reduced-motion: reduce)": {
     transition: "none",
   },
+  // Hero of an empty album, and the progress indicator over the dimmed album.
+  position: "absolute",
+  top: "18rem",
+  // Above the upload mask, which comes later in the DOM.
+  zIndex: 2,
   variants: {
-    placement: {
-      // Hero of an empty album, and the progress indicator over the dimmed album.
-      floating: {
-        position: "absolute",
-        top: "18rem",
-        // Above the upload mask, which comes later in the DOM.
-        zIndex: 2,
-      },
-      // After failures in a filled album: in flow above the toolbar, about
-      // where the floating indicator was.
-      inline: {
-        position: "static",
-        padding: "3rem 1rem 1.5rem",
-      },
-    },
     isVisible: {
       true: {
         display: "flex",

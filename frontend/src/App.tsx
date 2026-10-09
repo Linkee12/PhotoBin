@@ -1,9 +1,10 @@
 /* eslint-disable sonarjs/no-duplicate-string */
 import { Route, Routes } from "react-router";
 import { globalCss } from "@stitches/react";
-import Album from "./pages/Album/Album";
+import AlbumPage from "./pages/Album/AlbumPage";
 import Home from "./pages/Home/Home";
-import { AlbumContextProvider } from "./pages/Album/hooks/useAlbumContext";
+import New from "./pages/New/New";
+import NotFound from "./pages/NotFound/NotFound";
 
 function App() {
   globalStyles();
@@ -11,14 +12,10 @@ function App() {
   return (
     <Routes>
       <Route path={"/"} element={<Home />}></Route>
-      <Route
-        path={"/bin/:albumId"}
-        element={
-          <AlbumContextProvider>
-            <Album />
-          </AlbumContextProvider>
-        }
-      ></Route>
+      <Route path={"/new"} element={<New />}></Route>
+      <Route path={"/bin/:albumId"} element={<AlbumPage />}></Route>
+      <Route path={"/not-found"} element={<NotFound />}></Route>
+      <Route path={"*"} element={<NotFound />}></Route>
     </Routes>
   );
 }

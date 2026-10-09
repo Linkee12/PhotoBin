@@ -36,6 +36,9 @@ export function useThumbnails(options: {
   // burst of arrivals costs one render instead of one per thumbnail.
   const pendingRef = useRef(new Map<string, LoadedThumbnail>());
   const flushRef = useRef<number | null>(null);
+  // While a gesture animates the grid, a render would cost it frames: arrivals
+  // wait and land in one render once it is over (see `holdCommits`).
+  const heldRef = useRef(false);
 
   const setLoadedThumbnail = useCallback((fileId: string, next: LoadedThumbnail) => {
     setThumbnails((prev) => {
@@ -66,6 +69,15 @@ export function useThumbnails(options: {
         revokeIfBlob(superseded.url);
       }
       pendingRef.current.set(fileId, thumb);
+      if (!heldRef.current) flushRef.current ??= requestAnimationFrame(flushThumbnails);
+    },
+    [flushThumbnails],
+  );
+  /** Holds back thumbnail renders (not downloads) while `held`; releasing commits what arrived. */
+  const holdCommits = useCallback(
+    (held: boolean) => {
+      heldRef.current = held;
+      if (held || pendingRef.current.size === 0) return;
       flushRef.current ??= requestAnimationFrame(flushThumbnails);
     },
     [flushThumbnails],
@@ -132,5 +144,12 @@ export function useThumbnails(options: {
     [thumbnails],
   );
 
-  return { thumbnailUrls, loader, visibility, setLoadedThumbnail, dropThumbnails };
+  return {
+    thumbnailUrls,
+    loader,
+    visibility,
+    setLoadedThumbnail,
+    dropThumbnails,
+    holdCommits,
+  };
 }

@@ -1,3 +1,4 @@
+import { fetchCuple } from "@cuple/client";
 import { client } from "../../../cuple";
 import {
   arrayBufferToBase64,
@@ -31,14 +32,29 @@ import {
   UPLOAD_CONCURRENCY,
 } from "./PartTransport";
 import { isProfiling } from "../../../utils/profile";
+import { mimeTypeOf } from "../../../utils/mimeType";
+import { isConvertedCopy } from "./heicConversion";
 
+/**
+ * The grid tile a thumbnail must cover. The thumbnail keeps the whole frame
+ * (the tile crops it with CSS), so the viewer can show it full screen while
+ * the photo loads without the picture changing shape.
+ */
 export const THUMBNAIL_SIZE = { width: 300, height: 200 };
+/** Longer-edge cap of a thumbnail, for very long panoramas. */
+export const THUMBNAIL_MAX_EDGE = 900;
 /** The reduced rendition only feeds the fullscreen viewer, so cap it at screen-ish size. */
 export const REDUCED_MAX_EDGE = 2560;
 export const REDUCED_QUALITY = 0.8;
 /** Originals at most this big (bytes) and within `REDUCED_MAX_EDGE` are shown as-is. */
 const SKIP_REDUCED_BELOW_BYTES = 2 * 1024 * 1024;
-const VIDEOTYPES = ["video/mp4", "video/webm", "video/ogg"];
+const VIDEOTYPES = [
+  "video/mp4",
+  "video/webm",
+  "video/ogg",
+  "video/quicktime",
+  "video/x-m4v",
+];
 const IMAGETYPES = [
   "image/jpeg",
   "image/png",
@@ -117,18 +133,21 @@ export class UploadService {
   ): AsyncGenerator<UploadYield> {
     const store = new PendingUploadStore(props.albumId);
     const fingerprint = fileFingerprint(file);
+    // Re-encrypting a re-converted copy with a stored IV would mix chunks of
+    // different bytes, so a converted copy always starts from scratch.
+    const resumable = !isConvertedCopy(file);
 
     let prepared = this._failed.get(fingerprint);
     if (prepared === undefined) {
       prepared = await this._prepare(
         file,
         props.key,
-        store.find(fingerprint),
+        resumable ? store.find(fingerprint) : undefined,
         props.batch,
       );
       this._failed.set(fingerprint, prepared);
     }
-    store.save(this._toRecord(prepared));
+    if (resumable) store.save(this._toRecord(prepared));
 
     const alreadyFinalized = yield* this._send(prepared, props.albumId, props.signal);
 
@@ -156,16 +175,16 @@ export class UploadService {
 
   async renameBatch(albumId: string, batchId: string, name: string, key: string | null) {
     const encrypted = await this._encryptText(name, key);
-    const res = await client.renameBatch.post({
+    await fetchCuple(client.renameBatch.post, {
       body: { albumId, batchId, name: encrypted },
-    });
-    if (res.result !== "success") throw new Error(`Rename failed (${res.statusCode})`);
+    }).thenKeepSuccess();
   }
 
   async saveName(albumId: string, name: string, key: string | null) {
     const albumName = await this._encryptText(name, key);
-    const res = await client.editAlbumName.post({ body: { albumId, albumName } });
-    if (res.result !== "success") throw new Error(`Rename failed (${res.statusCode})`);
+    await fetchCuple(client.editAlbumName.post, {
+      body: { albumId, albumName },
+    }).thenKeepSuccess();
   }
 
   private async _prepare(
@@ -181,8 +200,20 @@ export class UploadService {
           `[upload] ${file.name} ${label}: ${Math.round(performance.now() - start)}ms`,
         );
     };
-    const isImage = IMAGETYPES.includes(file.type);
-    const isVideo = VIDEOTYPES.includes(file.type);
+    // Some pickers leave `type` empty (e.g. .mov on Windows); go by the name then.
+    const type = file.type || mimeTypeOf(file.name);
+    const isImage = IMAGETYPES.includes(type);
+    // A video the browser cannot decode (HEVC outside Safari) has no poster
+    // frame and is stored as a plain file instead.
+    let poster: Blob | undefined;
+    if (VIDEOTYPES.includes(type)) {
+      try {
+        poster = await this._canvasService.getImageFromVideo(file);
+      } catch (e) {
+        console.warn(`[upload] no frame from ${file.name}, storing it as a file`, e);
+      }
+    }
+    const isVideo = poster !== undefined;
     let resumableType: ResumablePartType = "unsupportedFile";
     if (isImage) resumableType = "original";
     else if (isVideo) resumableType = "originalVideo";
@@ -204,8 +235,8 @@ export class UploadService {
     const parts: PreparedUpload["parts"] = { [resumableType]: filePart };
     let thumbnailUrl: string | undefined;
 
-    if (isImage || isVideo) {
-      const image = isImage ? file : await this._canvasService.getImageFromVideo(file);
+    const image = isImage ? file : poster;
+    if (image !== undefined) {
       const renditions = await this._renderImage(image, log);
       thumbnailUrl = renditions.thumbnailUrl;
       // Canvas output is not byte-stable across sessions: always fresh IVs.
@@ -213,7 +244,7 @@ export class UploadService {
       if (renditions.reduced !== undefined) {
         parts.reduced = await this._encryptPart(renditions.reduced, key);
       }
-      if (isVideo) parts.original = await this._encryptPart(image, key);
+      if (poster !== undefined) parts.original = await this._encryptPart(poster, key);
     }
     log("encrypt", tEncrypt);
 
@@ -237,7 +268,10 @@ export class UploadService {
   private async _renderImage(image: Blob, log: (label: string, start: number) => void) {
     const tResize = performance.now();
     const loaded = await this._canvasService.load(image);
-    const thumbnail = loaded.resize({ targetSize: THUMBNAIL_SIZE });
+    const thumbnail = loaded.resize({
+      cover: THUMBNAIL_SIZE,
+      maxEdge: THUMBNAIL_MAX_EDGE,
+    });
     const needsReduced =
       image.size > SKIP_REDUCED_BELOW_BYTES ||
       Math.max(loaded.width, loaded.height) > REDUCED_MAX_EDGE;
@@ -265,8 +299,9 @@ export class UploadService {
     const uploaded = await withRetry(
       () =>
         this._rpc(() =>
-          client.getUploadedParts.get({
+          fetchCuple(client.getUploadedParts.get, {
             query: { albumId, fileId: prepared.fileId },
+            options: { signal },
           }),
         ),
       { signal },
@@ -295,12 +330,13 @@ export class UploadService {
       const finalized = await withRetry(
         () =>
           this._rpc(() =>
-            client.finalizeFile.post({
+            fetchCuple(client.finalizeFile.post, {
               body: {
                 albumId,
                 fileMetadata: this._toMetadata(prepared),
                 batch: prepared.batch,
               },
+              options: { signal },
             }),
           ),
         { signal },
@@ -387,6 +423,8 @@ export class UploadService {
     try {
       res = await call();
     } catch (e) {
+      // fetchCuple rejects only without an answer: a cancel, or the network.
+      if (isAbortError(e)) throw e;
       throw new RetryableError("Network error", { cause: e });
     }
     if (res.result === "success") return res as Extract<T, { result: "success" }>;

@@ -1,4 +1,3 @@
-import { styled } from "../../stitches.config";
 import {
   useCallback,
   useEffect,
@@ -7,57 +6,58 @@ import {
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router";
+import { fetchCuple } from "@cuple/client";
+import { useAction } from "@cuple/react";
+import { useNavigate } from "react-router";
 import { toast } from "react-toastify";
 import { client } from "../../cuple";
+import { forgetVisitedAlbum } from "../../services/visitedAlbums";
+import { DeleteAlbumDialog } from "./components/DeleteAlbumDialog";
+import { SaveToGooglePhotosDialog } from "./components/SaveToGooglePhotosDialog";
+import { guardUnload } from "../../utils/guardUnload";
+import { offerDownload } from "./components/SaveDownloadToast";
 import { SelectionBar } from "./components/SelectionBar";
 import { Header } from "./components/Header";
 import { ViewOriginalModal } from "./components/ViewOriginalModal";
 import { AlbumContent } from "./components/AlbumContent";
-import { useAlbumContext } from "./hooks/useAlbumContext";
+import { AlbumLiveUpdates } from "./components/AlbumLiveUpdates";
+import { ALBUM_REFRESH, useAlbumContext } from "./hooks/useAlbumContext";
 import { useSelection } from "./hooks/useSelection";
 import { useThumbnails } from "./hooks/useThumbnails";
 import { ThumbnailVisibilityProvider } from "./hooks/useThumbnailVisibility";
-import { downloadService, uploadService } from "./services";
+import { downloadService, imageQueryService, uploadService } from "./services";
 import {
-  ALBUM_VIEWS,
-  AlbumView,
-  DEFAULT_ALBUM_VIEW,
-  groupFiles,
-} from "./utils/groupFiles";
+  APPEND_ONLY_SCOPE,
+  forgetAccessToken,
+  isGooglePhotosEnabled,
+  loadGoogleIdentity,
+  requestAccessToken,
+} from "./services/googlePhotos/googleAuth";
+import { GooglePhotosError } from "./services/googlePhotos/googlePhotosApi";
+import { saveToGooglePhotos } from "./services/googlePhotos/saveToGooglePhotos";
+import { AlbumView, groupFiles } from "./utils/groupFiles";
+import { readStoredView, storeView } from "./utils/viewStore";
+import { AlbumFooter, AlbumFrame } from "./components/AlbumFrame";
+import { useThumbnailRefresh } from "./hooks/useThumbnailRefresh";
 
-const VIEW_STORAGE_KEY = "photobin:albumView";
 /** Tiles requested as soon as the album opens, before the grid is laid out. */
 const EAGER_THUMBNAILS = 12;
 
-function readStoredView(): AlbumView {
-  try {
-    const stored = localStorage.getItem(VIEW_STORAGE_KEY);
-    return ALBUM_VIEWS.find((view) => view === stored) ?? DEFAULT_ALBUM_VIEW;
-  } catch {
-    return DEFAULT_ALBUM_VIEW;
-  }
-}
-
-function storeView(view: AlbumView) {
-  try {
-    localStorage.setItem(VIEW_STORAGE_KEY, view);
-  } catch {
-    // Persisting the view is a convenience; ignore storage errors.
-  }
-}
-
 export default function Album() {
-  const { metadata, key, refreshMetadata, decodedValues } = useAlbumContext();
-  const { albumId } = useParams();
+  const { albumId, metadata, key, refreshMetadata, decodedValues } = useAlbumContext();
+  const navigate = useNavigate();
   const [fullscreenImage, setFullscreenImage] = useState<{ fileId: string } | null>(null);
+  const [isDeleteAlbumOpen, setDeleteAlbumOpen] = useState(false);
   const [showOrigin, setShowOrigin] = useState(false);
   const [title, setTitle] = useState("");
   const [view, setView] = useState<AlbumView>(readStoredView);
   const [isUploading, setIsUploading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
-  const files = useMemo(() => metadata?.files ?? [], [metadata]);
+  const [isSavingToGoogle, setIsSavingToGoogle] = useState(false);
+  /** The selection the save dialog asks about; `null` while it is closed. */
+  const [saveToGoogleIds, setSaveToGoogleIds] = useState<string[] | null>(null);
+  const files = metadata.files;
 
   // Thumbnails are loaded (or announced by an upload) per file; the grouped
   // view is derived from metadata + that map, so switching views is free.
@@ -78,13 +78,25 @@ export default function Album() {
     [thumbnailGroups],
   );
   const selection = useSelection(thumbnailGroups);
+  const thumbnailRefresh = useThumbnailRefresh({
+    albumId,
+    key,
+    files,
+    onFinished: refreshMetadata,
+  });
   const isEmptyAlbum = thumbnailGroups.length === 0;
   const isLoadingThumbnails = files.length > 0 && isEmptyAlbum;
-  const showUploader = (metadata !== undefined && files.length === 0) || isUploading;
+  const showUploader = files.length === 0 || isUploading;
 
   useEffect(() => {
     setTitle(decodedValues.albumName);
   }, [decodedValues.albumName]);
+
+  // Google's sign-in popup must open straight from a click: have its script ready.
+  useEffect(() => {
+    if (!isGooglePhotosEnabled) return;
+    loadGoogleIdentity().catch((e) => console.error(e));
+  }, []);
 
   // The first tiles of a freshly opened album are on screen in any layout; ask
   // for them as soon as the file list is known instead of after the whole
@@ -106,33 +118,61 @@ export default function Album() {
     storeView(next);
   }
 
+  // A failed write is a toast; the album stays on screen.
+  const deleteImagesAction = useAction(
+    (ids: string[]) =>
+      fetchCuple(client.deleteImages.delete, {
+        body: { albumId, ids },
+      }).thenKeepSuccess(),
+    { refresh: ALBUM_REFRESH, config: notifyAs("Couldn't delete") },
+  );
   async function deleteImages(ids: string[]) {
-    if (albumId === undefined) return;
-    const response = await client.deleteImages.delete({ body: { albumId, ids } });
-    if (response.result !== "success") {
-      toast.error("Failed to delete");
-      return;
-    }
+    const state = await deleteImagesAction.run(ids);
+    if (state.status !== "done") return;
     thumbnails.dropThumbnails(ids);
     selection.deselect(ids);
-    refreshMetadata();
   }
 
   /** Confirms, then deletes `ids` exactly as given. */
   function confirmAndDelete(ids: string[]) {
     if (!window.confirm(selection.deleteQuestion(ids))) return;
-    deleteImages(ids).catch((reason) => {
-      console.error(reason);
-      toast.error("Failed to delete");
-    });
+    deleteImages(ids);
+  }
+
+  // Set before the request: our own delete must not read as someone else's.
+  const deletingAlbumRef = useRef(false);
+  const deleteAlbumAction = useAction(
+    () => fetchCuple(client.deleteAlbum.delete, { body: { albumId } }).thenKeepSuccess(),
+    { config: notifyAs("Couldn't delete the album") },
+  );
+  const isDeletingAlbum = deleteAlbumAction.isPending;
+  /** One delete at a time: a second confirm while the first is in flight is ignored. */
+  async function deleteAlbum() {
+    if (isDeletingAlbum) return;
+    deletingAlbumRef.current = true;
+    const state = await deleteAlbumAction.run();
+    if (state.status !== "done") {
+      deletingAlbumRef.current = false;
+      return;
+    }
+    forgetVisitedAlbum(albumId);
+    navigate("/");
+    toast.success("Album deleted");
+  }
+
+  /** Someone else deleted the album while it was open. */
+  function onAlbumDeleted() {
+    if (deletingAlbumRef.current) return;
+    forgetVisitedAlbum(albumId);
+    navigate("/not-found", { replace: true });
+    toast.info("This album was just deleted");
   }
 
   async function runDownload(imageIds: string[]) {
-    if (metadata === undefined) return;
     setIsDownloading(true);
     setDownloadProgress(0);
     try {
-      await downloadService.download({
+      const zip = await downloadService.download({
         albumId: metadata.albumId,
         albumName: decodedValues.albumName,
         files: metadata.files,
@@ -140,6 +180,7 @@ export default function Album() {
         selectedImages: imageIds,
         onProgress: setDownloadProgress,
       });
+      offerDownload([zip]);
     } catch (e) {
       console.error(e);
       toast.error("Download failed");
@@ -149,45 +190,121 @@ export default function Album() {
     }
   }
 
+  /**
+   * Decrypts the selection and adds it to a new album in the user's Google
+   * Photos. Called straight from the click: the sign-in popup needs it.
+   */
+  function runSaveToGooglePhotos(imageIds: string[]) {
+    if (isDownloading) return;
+    const token = requestAccessToken(APPEND_ONLY_SCOPE);
+    // Leaving mid-save would leave a half-filled album in Google Photos.
+    const releaseUnloadGuard = guardUnload();
+    setIsDownloading(true);
+    setIsSavingToGoogle(true);
+    setDownloadProgress(0);
+    token
+      .then((token) =>
+        saveToGooglePhotos(imageQueryService, {
+          token,
+          albumId: metadata.albumId,
+          albumName: decodedValues.albumName,
+          files: metadata.files,
+          key,
+          fileIds: imageIds,
+          onProgress: setDownloadProgress,
+        }),
+      )
+      .then(({ saved, total }) => {
+        if (saved === total) toast.success(`Saved ${saved} to Google Photos`);
+        else toast.warn(`Saved ${saved} of ${total} to Google Photos`);
+      })
+      .catch((e: unknown) => {
+        console.error(e);
+        if (e instanceof GooglePhotosError && e.status === 401) {
+          forgetAccessToken(APPEND_ONLY_SCOPE);
+        }
+        toast.error(
+          e instanceof Error
+            ? `Google Photos: ${e.message}`
+            : "Saving to Google Photos failed",
+        );
+      })
+      .finally(() => {
+        releaseUnloadGuard();
+        setIsDownloading(false);
+        setIsSavingToGoogle(false);
+        setDownloadProgress(0);
+      });
+  }
+
   const onOpen = useCallback((id: string) => {
     setFullscreenImage({ fileId: id });
     setShowOrigin(true);
   }, []);
 
-  /** Steps the viewer to the next/previous tile, wrapping around; sidecars have no tile. */
+  /** The tiles one step from the viewed one, wrapping around; sidecars have no tile. */
+  const neighbourIds = useMemo((): { prev?: string; next?: string } => {
+    const index = fullscreenImage ? tileIds.indexOf(fullscreenImage.fileId) : -1;
+    if (index === -1 || tileIds.length < 2) return {};
+    const at = (step: number) =>
+      tileIds[(index + step + tileIds.length) % tileIds.length];
+    return { prev: at(-1), next: at(1) };
+  }, [fullscreenImage, tileIds]);
+
+  // The viewer previews the neighbours' grid thumbnails while swiping; the
+  // wrap-around neighbour is rarely on screen, so ask for them ahead.
+  useEffect(() => {
+    for (const id of [neighbourIds.prev, neighbourIds.next]) {
+      if (id !== undefined) thumbnails.loader.request(id, "front");
+    }
+  }, [neighbourIds, thumbnails.loader]);
+
+  const prefetchThumbnails = useCallback(
+    (ids: string[]) => {
+      for (const id of ids) thumbnails.loader.request(id, "front");
+    },
+    [thumbnails.loader],
+  );
+
+  /** Steps the viewer to the next/previous tile. */
   function showNeighbour(direction: number) {
-    const currentIdx = tileIds.findIndex((id) => id === fullscreenImage?.fileId);
-    const nextIdx = (currentIdx + direction + tileIds.length) % tileIds.length;
-    setFullscreenImage({ fileId: tileIds[nextIdx] });
+    const id = direction > 0 ? neighbourIds.next : neighbourIds.prev;
+    if (id !== undefined) setFullscreenImage({ fileId: id });
   }
 
+  const saveAlbumNameAction = useAction(
+    (name: string) => uploadService.saveName(albumId, name, key),
+    { refresh: ALBUM_REFRESH, config: notifyAs("Couldn't rename the album") },
+  );
   function saveAlbumName() {
-    if (metadata === undefined) return;
-    uploadService.saveName(metadata.albumId, title, key).catch((e) => {
-      console.error(e);
-      toast.error("Failed to rename the album");
-    });
+    if (title === decodedValues.albumName) return;
+    saveAlbumNameAction.run(title);
   }
-  async function renameBatch(batchId: string, name: string) {
-    if (metadata === undefined) return;
-    try {
-      await uploadService.renameBatch(metadata.albumId, batchId, name, key);
-    } catch (e) {
-      console.error(e);
-      toast.error("Failed to rename");
-    }
-    refreshMetadata();
+  // Refreshed whatever happened: a failed rename puts the old name back.
+  const renameBatchAction = useAction(
+    (batchId: string, name: string) =>
+      uploadService.renameBatch(albumId, batchId, name, key),
+    { refresh: ALBUM_REFRESH, config: notifyAs("Couldn't rename") },
+  );
+  function renameBatch(batchId: string, name: string) {
+    renameBatchAction.run(batchId, name);
   }
 
   const viewed = fullscreenImage && selection.index.tiles.get(fullscreenImage.fileId);
   return (
     <ThumbnailVisibilityProvider value={thumbnails.visibility}>
-      <Container isEmptyAlbum={isEmptyAlbum}>
+      <AlbumLiveUpdates
+        albumId={albumId}
+        onChanged={refreshMetadata}
+        onDeleted={onAlbumDeleted}
+      />
+      <AlbumFrame isEmptyAlbum={isEmptyAlbum}>
         {viewed && (
           <ViewOriginalModal
             fileId={viewed.id}
             visible={showOrigin}
             thumbnails={thumbnailGroups}
+            neighbourIds={neighbourIds}
             fileName={decodedValues.files[viewed.id]?.name ?? ""}
             onShowChange={setShowOrigin}
             onNext={showNeighbour}
@@ -219,14 +336,18 @@ export default function Album() {
           isDownloading={isDownloading}
           isLoadingThumbnails={isLoadingThumbnails}
           downloadProgress={downloadProgress}
+          downloadLabel={isSavingToGoogle ? "Saving to Google Photos" : undefined}
           onUploadStarted={() => setIsUploading(true)}
           onUploadFinished={() => setIsUploading(false)}
           // "Download all" takes every tile's sidecars along.
           onDownloadAll={() => void runDownload(selection.withSidecars(tileIds))}
           thumbnailGroups={thumbnailGroups}
+          tileIds={tileIds}
           view={view}
           onChangeView={changeView}
           onRenameBatch={renameBatch}
+          onPinchActive={thumbnails.holdCommits}
+          onPrefetchThumbnails={prefetchThumbnails}
           onUploaded={(uploaded) =>
             thumbnails.setLoadedThumbnail(uploaded.fileId, {
               url: uploaded.thumbnail,
@@ -247,26 +368,48 @@ export default function Album() {
           onDeleteSelected={() => confirmAndDelete(selection.selectedImages)}
           onUncheckSelected={selection.clear}
           onDownloadSelected={() => void runDownload(selection.selectedImages)}
+          onSaveToGooglePhotos={
+            isGooglePhotosEnabled
+              ? () => setSaveToGoogleIds(selection.selectedImages)
+              : undefined
+          }
         />
-      </Container>
+        <AlbumFooter
+          onRefreshThumbnails={thumbnailRefresh.refresh}
+          isRefreshingThumbnails={thumbnailRefresh.isRefreshing}
+          onDeleteAlbum={() => setDeleteAlbumOpen(true)}
+          isDeletingAlbum={isDeletingAlbum}
+          busy={
+            isUploading || isDownloading
+              ? "Wait for the upload or download to finish"
+              : undefined
+          }
+        />
+        <SaveToGooglePhotosDialog
+          count={saveToGoogleIds?.length ?? null}
+          onClose={() => setSaveToGoogleIds(null)}
+          onConfirm={() => {
+            if (saveToGoogleIds !== null) runSaveToGooglePhotos(saveToGoogleIds);
+            setSaveToGoogleIds(null);
+          }}
+        />
+        <DeleteAlbumDialog
+          open={isDeleteAlbumOpen}
+          title={title}
+          onClose={() => setDeleteAlbumOpen(false)}
+          onConfirm={() => void deleteAlbum()}
+        />
+      </AlbumFrame>
     </ThumbnailVisibilityProvider>
   );
 }
 
-const Container = styled("div", {
-  width: "100%",
-  minHeight: "100vh",
-  fontFamily: "Open Sans",
-  display: "flex",
-  flexDirection: "column",
-  variants: {
-    isEmptyAlbum: {
-      true: {
-        backgroundColor: "rgba(51, 51, 51)",
-      },
-      false: {
-        backgroundColor: "#181818",
-      },
+/** Action config: an error nobody handled is a toast saying what failed, and the page stays. */
+function notifyAs(what: string) {
+  return {
+    errors: {
+      onError: "notify" as const,
+      notify: (error: { message: string }) => toast.error(`${what}: ${error.message}`),
     },
-  },
-});
+  };
+}

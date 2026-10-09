@@ -1,0 +1,161 @@
+import { ReactNode, useEffect, useRef } from "react";
+import { styled } from "../stitches.config";
+import { pressable } from "../pressable";
+import { ACCENT_COLOR } from "../theme";
+
+type DialogProps = {
+  open: boolean;
+  title: string;
+  children: ReactNode;
+  /** Called on Escape, on a click outside the box and after a `close()`. */
+  onClose: () => void;
+  /**
+   * `false` while closing would throw work away: Escape and backdrop clicks
+   * are ignored, only the dialog's own buttons close it. Default `true`.
+   */
+  dismissible?: boolean;
+  /** On a phone held upright (`@narrow`), fill the screen instead of floating as a box. */
+  screen?: boolean;
+};
+
+/**
+ * A modal box on the native `<dialog>` top layer. The caller owns `open`:
+ * the element is shown with `showModal()` while it is true, and every way
+ * the platform closes it (Escape) or the user dismisses it (backdrop click)
+ * reports through `onClose`, so the caller only has to flip its state.
+ * A backdrop click counts only when the press also started on the backdrop,
+ * so dragging out of the box (selecting text, a slipped tap) never closes it.
+ */
+export function Dialog(props: DialogProps) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const pressedBackdrop = useRef(false);
+  const dismissible = props.dismissible ?? true;
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog || dialog.open === props.open) return;
+    if (props.open) dialog.showModal();
+    else dialog.close();
+  }, [props.open]);
+  return (
+    <Box
+      ref={ref}
+      screen={props.screen ?? false}
+      onClose={props.onClose}
+      // Escape: blocked while not dismissible (the browser may still force a
+      // repeated Escape through; `onClose` then reports it as usual).
+      onCancel={(e) => {
+        if (!dismissible) e.preventDefault();
+      }}
+      // The box itself is only hit outside its padded body: on the backdrop.
+      onPointerDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        const isBackdropClick = pressedBackdrop.current && e.target === e.currentTarget;
+        pressedBackdrop.current = false;
+        if (isBackdropClick && dismissible) props.onClose();
+      }}
+      aria-label={props.title}
+    >
+      <Body>
+        <Title>{props.title}</Title>
+        {props.children}
+      </Body>
+    </Box>
+  );
+}
+
+const Box = styled("dialog", {
+  padding: 0,
+  border: "solid 2px #333333",
+  borderRadius: "1.5rem",
+  background: "#181818",
+  color: "#fff",
+  fontFamily: "Open Sans",
+  fontSize: "clamp(14px, 1.5vw, 18px)",
+  width: "min(calc(100vw - 2rem), 26em)",
+  boxSizing: "border-box",
+  boxShadow: "0 1rem 3rem rgba(0, 0, 0, 0.6)",
+  "&::backdrop": { background: "rgba(0, 0, 0, 0.6)" },
+  variants: {
+    screen: {
+      true: {
+        "@narrow": {
+          width: "100vw",
+          maxWidth: "100vw",
+          height: "100dvh",
+          maxHeight: "100dvh",
+          margin: 0,
+          border: "none",
+          borderRadius: 0,
+          // The body fills the screen, so its content can push the actions down.
+          "& > div": { minHeight: "100%", boxSizing: "border-box" },
+        },
+      },
+      false: {},
+    },
+  },
+});
+
+const Body = styled("div", {
+  padding: "1.5em 1.75em",
+  display: "flex",
+  flexDirection: "column",
+  gap: "1em",
+  "& p": { margin: 0, color: "#c0c0c0", lineHeight: 1.5 },
+});
+
+const Title = styled("h2", {
+  margin: 0,
+  fontSize: "1rem",
+  fontWeight: 700,
+});
+
+/** The row of buttons at the bottom of a dialog, right-aligned. */
+export const DialogActions = styled("div", {
+  display: "flex",
+  justifyContent: "flex-end",
+  flexWrap: "wrap",
+  gap: "0.5em",
+  marginTop: "0.5em",
+});
+
+const button = {
+  ...pressable,
+  boxSizing: "border-box",
+  height: "2.25rem",
+  padding: "0 1.1rem",
+  borderRadius: "1.5rem",
+  border: "solid 2px #333333",
+  fontFamily: "inherit",
+  fontSize: "0.8rem",
+  fontWeight: "bold",
+} as const;
+
+export const SecondaryButton = styled("button", {
+  ...button,
+  background: "#181818",
+  color: "#A8A8A8",
+  "&:hover:not(:disabled)": { color: "#fff", borderColor: "#4a4a4a" },
+});
+
+export const DangerButton = styled("button", {
+  ...button,
+  background: "#b3261e",
+  borderColor: "#b3261e",
+  color: "#fff",
+  "&:hover:not(:disabled)": { filter: "brightness(1.12)" },
+});
+
+/** The dialog's main, non-destructive action. */
+export const AccentButton = styled(SecondaryButton, {
+  background: ACCENT_COLOR,
+  borderColor: ACCENT_COLOR,
+  color: "#181818",
+  "&:hover:not(:disabled)": {
+    color: "#000",
+    borderColor: ACCENT_COLOR,
+    filter: "brightness(1.08)",
+  },
+  "&:disabled": { opacity: 0.6 },
+});

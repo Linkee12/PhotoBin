@@ -9,6 +9,7 @@ import {
   MetadataService,
 } from "./MetadataService";
 import { PartType, partTypeSchema } from "../utils/zod";
+import { AlbumEvent, AlbumEvents } from "./AlbumEvents";
 
 const DEFAULT_ALBUMS_ROOT = path.resolve("./albums");
 /** Album lifetime (`ALBUM_TTL_MS`). */
@@ -32,12 +33,20 @@ const OLD_SUFFIX = ".old";
 const EDITABLE_PART_TYPES = ["edited", "reduced", "thumbnail"] as const;
 type EditablePartType = (typeof EDITABLE_PART_TYPES)[number];
 
-export type EditPatch = {
+/** A rotation: every derived part re-rendered at the new absolute rotation. */
+export type RotationPatch = {
   rotation: 0 | 1 | 2 | 3;
   edited?: FilePart | undefined;
   reduced: FilePart;
   thumbnail: FilePart;
 };
+/** A new thumbnail only (e.g. one that keeps the whole frame instead of an old crop). */
+export type ThumbnailPatch = { thumbnail: FilePart };
+export type EditPatch = RotationPatch | ThumbnailPatch;
+
+function isRotationPatch(patch: EditPatch): patch is RotationPatch {
+  return "rotation" in patch;
+}
 
 type EditLock = { editId: string; startedAt: number };
 
@@ -46,6 +55,15 @@ export class EditInProgressError extends Error {
   constructor() {
     super("Someone is editing this photo");
     this.name = "EditInProgressError";
+  }
+}
+
+/** Thrown by writes into an album that does not exist (never created, expired or deleted). */
+export class AlbumNotFoundError extends Error {
+  readonly code = "ALBUM_NOT_FOUND";
+  constructor() {
+    super("Album not found");
+    this.name = "AlbumNotFoundError";
   }
 }
 
@@ -60,17 +78,39 @@ export class AlbumService {
   private _albumsRoot: string;
   private _editLockTtlMs: number;
   private _orphanTtlMs: number;
+  private _events: AlbumEvents | undefined;
   constructor(
     private _metadataService: MetadataService,
     private _ttlMs: number = DEFAULT_ALBUM_TTL_MS,
-    options: { albumsRoot?: string; editLockTtlMs?: number; orphanTtlMs?: number } = {},
+    options: {
+      albumsRoot?: string;
+      editLockTtlMs?: number;
+      orphanTtlMs?: number;
+      /** Told about every change a client can see (metadata writes, deletion). */
+      events?: AlbumEvents;
+    } = {},
   ) {
     this._albumsRoot = options.albumsRoot ?? DEFAULT_ALBUMS_ROOT;
     this._editLockTtlMs = options.editLockTtlMs ?? DEFAULT_EDIT_LOCK_TTL_MS;
     this._orphanTtlMs = options.orphanTtlMs ?? DEFAULT_ORPHAN_TTL_MS;
+    this._events = options.events;
   }
   getMetaData(albumId: string) {
     return this._metadataService.get(albumId);
+  }
+  /** Creates the album directory and its default metadata; an existing album is left as is. */
+  async createAlbum(albumId: string) {
+    await fs.mkdir(this._safePath(albumId), { recursive: true });
+    // `get` yields the existing metadata, or the default for a missing file.
+    this._metadataService.save(albumId, this._metadataService.get(albumId));
+  }
+  exists(albumId: string) {
+    return this._checkDirectoryExists(this._safePath(albumId));
+  }
+  /** Removes the whole album directory; resolves even when it is already gone. */
+  async deleteAlbum(albumId: string) {
+    await this._deleteDir(albumId);
+    this._publish(albumId, { type: "deleted" });
   }
   async getExpiresAt(albumId: string): Promise<number | null> {
     try {
@@ -82,20 +122,23 @@ export class AlbumService {
     }
   }
   async rename(albumId: string, newTitle: { value: string; iv: string }) {
-    const dir = this._safePath(albumId);
-    const isExist = await this._checkDirectoryExists(dir);
-    if (!isExist) await fs.mkdir(dir, { recursive: true });
+    await this.createAlbum(albumId);
     this._metadataService.renameAlbum(albumId, newTitle);
+    this._publish(albumId, { type: "changed" });
   }
-  finalizeFile(
+  /** Rejects with AlbumNotFoundError so a finalize cannot resurrect a deleted album. */
+  async finalizeFile(
     albumId: string,
     fileMetadata: Metadata["files"][0],
     batch?: Batch & { batchId: string },
   ) {
+    await this._assertAlbumExists(albumId);
     this._metadataService.addFile(albumId, fileMetadata, batch);
+    this._publish(albumId, { type: "changed" });
   }
   renameBatch(albumId: string, batchId: string, name: EncryptedEntry) {
     this._metadataService.renameBatch(albumId, batchId, name);
+    this._publish(albumId, { type: "changed" });
   }
   /**
    * Legacy JSON transport: the part arrives base64-encoded and is stored as
@@ -182,6 +225,7 @@ export class AlbumService {
     for (const imageId of imageIds) {
       await this._deleteImage(albumId, imageId);
     }
+    this._publish(albumId, { type: "changed" });
   }
   /**
    * Deletes expired albums and, inside live albums, file directories that were
@@ -206,6 +250,7 @@ export class AlbumService {
         const s = await fs.stat(albumPath);
         if (now - s.birthtimeMs > ttlMs) {
           await this._deleteDir(dir);
+          this._publish(dir, { type: "deleted" });
         } else if (s.isDirectory()) {
           await this._cleanOrphans(dir, now, orphanTtlMs);
         }
@@ -229,8 +274,9 @@ export class AlbumService {
       .get(albumId)
       .files.find((f) => f.fileId === fileId);
     if (!file) throw new Error("File not found");
-    if (!file.original || file.originalVideo)
-      throw new Error("Only images can be edited");
+    // A video's `original` is its poster frame: its thumbnail may be redone,
+    // but it cannot be rotated (see commitEdit).
+    if (!file.original) throw new Error("Only images and videos can be edited");
 
     const lockPath = this._safePath(albumId, fileId, EDIT_LOCK);
     const editId = randomUUID();
@@ -266,10 +312,21 @@ export class AlbumService {
     } catch (err) {
       if (!isEnoent(err)) throw err;
     }
+    const patched = patch as Partial<Record<EditablePartType, FilePart>>;
     for (const type of EDITABLE_PART_TYPES) {
-      if (patch[type] !== undefined && !staged.has(type)) {
+      if (patched[type] !== undefined && !staged.has(type)) {
         throw new Error(`Part "${type}" is in the patch but was not uploaded`);
       }
+      // Swapped in without a metadata entry, it would not match its iv.
+      if (patched[type] === undefined && staged.has(type)) {
+        throw new Error(`Part "${type}" was uploaded but is not in the patch`);
+      }
+    }
+    if (isRotationPatch(patch)) {
+      const file = this._metadataService
+        .get(albumId)
+        .files.find((f) => f.fileId === fileId);
+      if (file?.originalVideo) throw new Error("Videos cannot be rotated");
     }
 
     for (const type of staged) {
@@ -277,13 +334,15 @@ export class AlbumService {
       await this._swapIn(albumId, fileId, editId, type);
     }
 
-    const metadataPatch: Partial<Metadata["files"][0]> = {
-      rotation: patch.rotation,
-      reduced: patch.reduced,
-      thumbnail: patch.thumbnail,
-      edited: patch.rotation === 0 ? undefined : patch.edited,
-    };
-    if (patch.rotation === 0) {
+    const metadataPatch: Partial<Metadata["files"][0]> = isRotationPatch(patch)
+      ? {
+          rotation: patch.rotation,
+          reduced: patch.reduced,
+          thumbnail: patch.thumbnail,
+          edited: patch.rotation === 0 ? undefined : patch.edited,
+        }
+      : { thumbnail: patch.thumbnail };
+    if (isRotationPatch(patch) && patch.rotation === 0) {
       await fs.rm(this._safePath(albumId, fileId, "edited"), {
         recursive: true,
         force: true,
@@ -293,6 +352,7 @@ export class AlbumService {
 
     await this._removeStaging(albumId, fileId, editId);
     await fs.rm(this._safePath(albumId, fileId, EDIT_LOCK), { force: true });
+    this._publish(albumId, { type: "changed" });
   }
 
   /** Drops the staging dir and, when it belongs to `editId`, the lock. Idempotent. */
@@ -468,9 +528,14 @@ export class AlbumService {
     return resolved;
   }
 
+  private async _assertAlbumExists(albumId: string) {
+    if (!(await this.exists(albumId))) throw new AlbumNotFoundError();
+  }
+
   /**
    * Resolves (and creates) the directory a part is written to: the live
-   * `<type>` dir, or the edit staging dir when `editId` is given.
+   * `<type>` dir, or the edit staging dir when `editId` is given. The album
+   * itself must already exist: a part must not bring a deleted album back.
    */
   private async _preparePartPath(
     params: {
@@ -481,6 +546,7 @@ export class AlbumService {
     },
     name: string,
   ) {
+    await this._assertAlbumExists(params.albumId);
     let dir: string;
     if (params.editId !== undefined) {
       if (!this._isEditablePartType(params.fileType)) {
@@ -538,6 +604,9 @@ export class AlbumService {
     }
   }
 
+  private _publish(albumId: string, event: AlbumEvent) {
+    this._events?.publish(albumId, event);
+  }
   private async _deleteImage(albumId: string, imageId: string) {
     await fs.rm(this._safePath(albumId, imageId), {
       recursive: true,

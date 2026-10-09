@@ -1,5 +1,6 @@
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
 import { PartType } from "./PartTransport";
+import { mimeTypeOf } from "../../../utils/mimeType";
 
 export type AlbumFile = Metadata["files"][number];
 export type Rotation = NonNullable<AlbumFile["rotation"]>;
@@ -49,4 +50,24 @@ export function editedFileName(fileName: string): string {
   const extension = /\.([^.]*)$/.exec(fileName);
   if (extension && KEPT_EXTENSIONS.has(extension[1].toLowerCase())) return fileName;
   return `${extension ? fileName.slice(0, extension.index) : fileName}.jpg`;
+}
+
+/**
+ * Media type of a decrypted part, "" when it cannot be told: the canvas-made
+ * `thumbnail` / `reduced` keep the original's name but not its format, and a
+ * video's `original` is its JPEG poster frame.
+ */
+export function partMimeType(file: AlbumFile, type: PartType, fileName: string): string {
+  switch (type) {
+    case "thumbnail":
+    case "reduced":
+      return "";
+    case "original":
+      return file.originalVideo === undefined ? mimeTypeOf(fileName) : "image/jpeg";
+    case "edited":
+      return mimeTypeOf(editedFileName(fileName));
+    case "originalVideo":
+    case "unsupportedFile":
+      return mimeTypeOf(fileName);
+  }
 }

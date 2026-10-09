@@ -1,8 +1,9 @@
 import express from "express";
 import dotenv from "dotenv";
-import { createBuilder, success, initRpc, apiResponse } from "@cuple/server";
+import { conflict, createBuilder, initRpc, notFound, success } from "@cuple/server";
 import { z } from "zod";
 import {
+  AlbumNotFoundError,
   AlbumService,
   DEFAULT_ALBUM_TTL_MS,
   DEFAULT_EDIT_LOCK_TTL_MS,
@@ -21,6 +22,7 @@ import {
   uuidSchema,
 } from "./utils/zod";
 import { MetadataService } from "./services/MetadataService";
+import { AlbumEvents } from "./services/AlbumEvents";
 import fs from "fs";
 dotenv.config();
 
@@ -36,9 +38,11 @@ app.use(express.json({ limit: "2mb" }));
 
 const builder = createBuilder(app);
 const metadataService = new MetadataService(fs);
+const albumEvents = new AlbumEvents();
 const albumService = new AlbumService(metadataService, albumTtlMs, {
   editLockTtlMs,
   orphanTtlMs,
+  events: albumEvents,
 });
 
 // Binary part transport: chunks travel as application/octet-stream instead of
@@ -87,10 +91,18 @@ app.put(
       });
       res.status(204).end();
     } catch (err) {
+      if (err instanceof AlbumNotFoundError) {
+        res.status(404).json({ message: err.message, code: err.code });
+        return;
+      }
       next(err);
     }
   },
 );
+/** The cuple-shaped 404 for an album that does not exist (never created, expired or deleted). */
+function albumNotFound(err: AlbumNotFoundError = new AlbumNotFoundError()) {
+  return notFound({ result: "album-not-found", message: err.message, code: err.code });
+}
 app.get(PART_ROUTE, async (req, res, next) => {
   try {
     const params = parsePartParams(req.params);
@@ -130,9 +142,36 @@ const routes = {
       }),
     )
     .get(async ({ data }) => {
+      if (!(await albumService.exists(data.query.id))) return albumNotFound();
       const metadata = albumService.getMetaData(data.query.id);
       const expiresAt = await albumService.getExpiresAt(data.query.id);
       return success({ metadata, expiresAt });
+    }),
+  /**
+   * Live updates: `connected`, then `changed` / `deleted` as anyone with the
+   * link changes the album, and a `ping` every heartbeat. Carries no album
+   * data; clients re-fetch the metadata.
+   */
+  albumEvents: builder
+    .querySchema(z.object({ albumId: uuidSchema }))
+    .middleware(async ({ data }) => {
+      if (await albumService.exists(data.query.albumId)) return { next: true as const };
+      return { next: false as const, ...albumNotFound() };
+    })
+    .getSSE(async function* ({ data, disconnectSignal }) {
+      yield* albumEvents.subscribe(data.query.albumId, disconnectSignal);
+    }),
+  createAlbum: builder
+    .bodySchema(z.object({ albumId: uuidSchema }))
+    .post(async ({ data }) => {
+      await albumService.createAlbum(data.body.albumId);
+      return success({});
+    }),
+  deleteAlbum: builder
+    .bodySchema(z.object({ albumId: uuidSchema }))
+    .delete(async ({ data }) => {
+      await albumService.deleteAlbum(data.body.albumId);
+      return success({});
     }),
   getPartOfImage: builder
     .querySchema(
@@ -173,7 +212,12 @@ const routes = {
       }),
     )
     .post(async ({ data }) => {
-      await albumService.uploadFilePart(data.body);
+      try {
+        await albumService.uploadFilePart(data.body);
+      } catch (err) {
+        if (err instanceof AlbumNotFoundError) return albumNotFound(err);
+        throw err;
+      }
       return success({});
     }),
   editAlbumName: builder
@@ -199,11 +243,16 @@ const routes = {
       }),
     )
     .post(async ({ data }) => {
-      albumService.finalizeFile(
-        data.body.albumId,
-        data.body.fileMetadata,
-        data.body.batch,
-      );
+      try {
+        await albumService.finalizeFile(
+          data.body.albumId,
+          data.body.fileMetadata,
+          data.body.batch,
+        );
+      } catch (err) {
+        if (err instanceof AlbumNotFoundError) return albumNotFound(err);
+        throw err;
+      }
       return success({
         message: "File has been uploaded successfully!",
         // Echoed so a client can tell that the batch was actually recorded
@@ -234,7 +283,8 @@ const routes = {
         return success({ editId });
       } catch (err) {
         if (err instanceof EditInProgressError) {
-          return apiResponse("edit-in-progress", 409, {
+          return conflict({
+            result: "edit-in-progress",
             message: err.message,
             code: err.code,
           });

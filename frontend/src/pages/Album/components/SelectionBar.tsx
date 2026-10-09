@@ -4,17 +4,28 @@ import Cloud from "@assets/images/icons/cloud.svg?react";
 import SimpleCloud from "@assets/images/icons/cloud2.svg?react";
 import Trash from "@assets/images/icons/trash.svg?react";
 import UnCheckAll from "@assets/images/icons/unCheckAll.svg?react";
-/** The bottom bar of the selection: delete, download and clear the selected files. */
+/**
+ * The bottom bar of the selection: delete, download, save to Google Photos
+ * (only when it is configured) and clear the selected files.
+ */
 export function SelectionBar(props: {
   selectedCount: number;
   isBusy: boolean;
   onDeleteSelected: () => void;
   onUncheckSelected: () => void;
   onDownloadSelected: () => void;
+  onSaveToGooglePhotos?: () => void;
 }) {
   return (
-    <ToolBar isVisible={props.selectedCount > 0}>
+    <ToolBar
+      isVisible={props.selectedCount > 0}
+      // The notifications stack above it while it is shown.
+      data-selection-bar={props.selectedCount > 0 ? "" : undefined}
+    >
+      {/* Busy: a download or save is reading these files; deleting them
+          now would break it halfway. */}
       <Button
+        disabled={props.isBusy}
         title="Delete selected"
         onClick={() => {
           props.onDeleteSelected();
@@ -22,12 +33,22 @@ export function SelectionBar(props: {
       >
         <ToolbarIcons as={Trash} />
       </Button>
-      <Button disabled={props.isBusy} title="Download selected">
-        <ToolbarIcons as={SimpleCloud} onClick={() => props.onDownloadSelected()} />
+      <Button
+        disabled={props.isBusy}
+        title="Download selected"
+        onClick={() => props.onDownloadSelected()}
+      >
+        <ToolbarIcons as={SimpleCloud} />
       </Button>
-      <Button disabled title="Save to remote storage (coming soon)">
-        <ToolbarIcons as={Cloud} />
-      </Button>
+      {props.onSaveToGooglePhotos && (
+        <Button
+          disabled={props.isBusy}
+          title="Save to Google Photos (a decrypted copy goes to your Google account)"
+          onClick={props.onSaveToGooglePhotos}
+        >
+          <ToolbarIcons as={Cloud} />
+        </Button>
+      )}
       {props.selectedCount} item(s) selected
       <Button>
         <ToolbarIcons as={UnCheckAll} onClick={() => props.onUncheckSelected()} />

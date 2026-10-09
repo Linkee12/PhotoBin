@@ -140,7 +140,7 @@ describe("beginEdit", () => {
     await expect(albumService.beginEdit(albumId, randomUUID())).rejects.toThrow();
   });
 
-  it("refuses non-image files", async () => {
+  it("refuses files without an image (no original)", async () => {
     const videoId = randomUUID();
     metadataService.addFile(albumId, {
       fileId: videoId,
@@ -278,6 +278,90 @@ describe("commitEdit", () => {
       }),
     ).rejects.toThrow();
     expect(exists(filePath(LOCK_FILE))).toBe(true);
+  });
+
+  it("with a thumbnail-only patch swaps the thumbnail and keeps the rotation", async () => {
+    const first = await albumService.beginEdit(albumId, fileId);
+    await stageRotation(first.editId);
+    await albumService.commitEdit(albumId, fileId, first.editId, {
+      rotation: 1,
+      edited: part,
+      reduced: part,
+      thumbnail: part,
+    });
+
+    const second = await albumService.beginEdit(albumId, fileId);
+    await albumService.uploadFilePart({
+      albumId,
+      fileId,
+      editId: second.editId,
+      fileType: "thumbnail",
+      partName: "0",
+      encryptedFile: "THUMB-v3",
+    });
+    const thumb = { iv: "dGh1bWI=", chunkCount: 1 };
+    await albumService.commitEdit(albumId, fileId, second.editId, { thumbnail: thumb });
+
+    expect(fs.readFileSync(filePath("thumbnail", "0"), "utf8")).toBe("THUMB-v3");
+    expect(fs.readFileSync(filePath("edited", "0"), "utf8")).toBe(EDITED_V2);
+    expect(fs.readFileSync(filePath("reduced", "0"), "utf8")).toBe(REDUCED_V2);
+    const file = getFile();
+    expect(file?.thumbnail).toEqual(thumb);
+    expect(file?.rotation).toBe(1);
+    expect(file?.edited).toEqual(part);
+    expect(file?.reduced).toEqual(part);
+    expect(exists(filePath(LOCK_FILE))).toBe(false);
+  });
+
+  it("rejects a staged part the patch does not name, and swaps nothing", async () => {
+    const { editId } = await albumService.beginEdit(albumId, fileId);
+    await stageRotation(editId);
+    await expect(
+      albumService.commitEdit(albumId, fileId, editId, { thumbnail: part }),
+    ).rejects.toThrow();
+    expect(fs.readFileSync(filePath("thumbnail", "0"), "utf8")).toBe(THUMB_V1);
+    expect(fs.readFileSync(filePath("reduced", "0"), "utf8")).toBe(REDUCED_V1);
+  });
+
+  it("refreshes a video's thumbnail but refuses to rotate a video", async () => {
+    const videoId = randomUUID();
+    await fsp.mkdir(path.join(root, albumId, videoId), { recursive: true });
+    metadataService.addFile(albumId, {
+      fileId: videoId,
+      fileName: { value: "", iv: "" },
+      date: { value: "", iv: "" },
+      original: part,
+      originalVideo: part,
+      thumbnail: part,
+    });
+    const stage = (editId: string, fileType: "thumbnail" | "reduced") =>
+      albumService.uploadFilePart({
+        albumId,
+        fileId: videoId,
+        editId,
+        fileType,
+        partName: "0",
+        encryptedFile: "VIDEO-THUMB",
+      });
+
+    const rotate = await albumService.beginEdit(albumId, videoId);
+    await stage(rotate.editId, "thumbnail");
+    await stage(rotate.editId, "reduced");
+    await expect(
+      albumService.commitEdit(albumId, videoId, rotate.editId, {
+        rotation: 1,
+        reduced: part,
+        thumbnail: part,
+      }),
+    ).rejects.toThrow();
+    await albumService.abortEdit(albumId, videoId, rotate.editId);
+
+    const refresh = await albumService.beginEdit(albumId, videoId);
+    await stage(refresh.editId, "thumbnail");
+    await albumService.commitEdit(albumId, videoId, refresh.editId, { thumbnail: part });
+    expect(
+      fs.readFileSync(path.join(root, albumId, videoId, "thumbnail", "0"), "utf8"),
+    ).toBe("VIDEO-THUMB");
   });
 
   it("rejects when a patched part was not staged", async () => {

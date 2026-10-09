@@ -2,14 +2,17 @@
 # prefix the Vite dev server proxies). TLS is left to the reverse proxy in
 # front of this container; see README "Production".
 :80 {
-	encode zstd gzip
-
+	# Not encoded: encrypted parts do not compress, and the albumEvents
+	# stream (text/event-stream) must reach the browser event by event.
 	handle /api/* {
 		uri strip_prefix /api
-		reverse_proxy backend:3001
+		reverse_proxy backend:3001 {
+			flush_interval -1
+		}
 	}
 
 	handle {
+		encode zstd gzip
 		root * /srv
 		try_files {path} /index.html
 		file_server {

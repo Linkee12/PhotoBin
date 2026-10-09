@@ -1,11 +1,23 @@
-/* eslint-disable promise/always-return */
-import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router";
-import { client } from "../../../cuple";
+import { combine, useGet } from "@cuple/react";
+import {
+  createContext,
+  ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { Navigate, useNavigate } from "react-router";
+import { client, store } from "../../../cuple";
+import {
+  forgetVisitedAlbum,
+  rememberVisitedAlbum,
+} from "../../../services/visitedAlbums";
 import { cryptoService } from "../services";
 import { Metadata } from "../../../../../backend/src/services/MetadataService";
-import { toast } from "react-toastify";
 import { DecodedBatches, DecodedFiles } from "../utils/groupFiles";
+import { PrimaryButton } from "../../Home/Home";
+import { StatusButtonLabel, StatusScreen } from "../../../components/StatusScreen";
 
 export type DecodedValues = {
   albumName: string;
@@ -15,29 +27,25 @@ export type DecodedValues = {
   batches: DecodedBatches;
 };
 
-const EMPTY_DECODED: DecodedValues = { albumName: "", files: {}, batches: {} };
-
 export type AlbumContextType = {
+  albumId: string;
   /** AES-GCM key from the URL hash, or `null` for a plain (unencrypted) album. */
   key: string | null;
   isEncrypted: boolean;
-  metadata: Metadata | undefined;
+  metadata: Metadata;
   expiresAt: number | null;
   decodedValues: DecodedValues;
+  /** Re-fetches the metadata; the album stays on screen until the new one is decrypted. */
   refreshMetadata: () => void;
 };
 
-const AlbumContext = createContext<AlbumContextType>({
-  key: null,
-  isEncrypted: false,
-  metadata: undefined,
-  expiresAt: null,
-  decodedValues: EMPTY_DECODED,
-  refreshMetadata: () => undefined,
-});
+const AlbumContext = createContext<AlbumContextType | null>(null);
 
 export function useAlbumContext() {
   const albumContext = useContext(AlbumContext);
+  if (albumContext === null) {
+    throw new Error("useAlbumContext must be used inside AlbumContextProvider");
+  }
   return albumContext;
 }
 
@@ -94,61 +102,143 @@ async function decodeMetadata(metadata: Metadata, key: string | null) {
   };
 }
 
-export function AlbumContextProvider(props: { children: React.ReactNode }) {
-  const { albumId } = useParams();
-  const key = getKeyFromHash();
-  const [metadata, setMetadata] = useState<Metadata>();
-  const [expiresAt, setExpiresAt] = useState<number | null>(null);
-  const [decodedValues, setDecodedValues] = useState<DecodedValues>(EMPTY_DECODED);
-  // Refreshes can overlap (one per finalized file during an upload); only the
-  // latest request may update the state so a slow older response cannot
-  // roll back a newer file list.
-  const latestRequest = useRef(0);
-
-  const refreshMetadataAsync = async () => {
-    if (!albumId) return;
-    const request = ++latestRequest.current;
-    const response = await client.getAlbumMetadata.get({
-      query: {
-        id: albumId,
-      },
-    });
-    if (response.result === "success") {
-      if (key === null && hasEncryptedValues(response.metadata)) {
-        throw new Error("This album is encrypted, but the link is missing its key");
-      }
-      const decoded = await decodeMetadata(response.metadata, key);
-      if (request !== latestRequest.current) return;
-      setMetadata(response.metadata);
-      setExpiresAt(response.expiresAt);
-      setDecodedValues(decoded);
+/**
+ * The album as the page sees it: fetched, checked against the key and
+ * decrypted, in one cached read. `useGet` suspends until it is ready (the
+ * page's `<Boundary>` shows the skeleton), and a refresh keeps the current
+ * album on screen until the new one is decrypted, so overlapping refreshes
+ * (one per finalized file during an upload) never roll the list back.
+ *
+ * An album that does not exist, or a link that cannot open it, is a value
+ * here, not an error: each gets its own screen.
+ */
+export const albumMetadata = combine(
+  async (ctx, args: { albumId: string; key: string | null }) => {
+    const response = await ctx.get(
+      client.getAlbumMetadata,
+      { query: { id: args.albumId } },
+      // Expired, deleted (by anyone with the link) or not an album id at all.
+      { resolveAlso: ["album-not-found", "invalid-query"] },
+    );
+    if (response.result !== "success") return { result: "missing" } as const;
+    const { metadata, expiresAt } = response;
+    if (args.key === null && hasEncryptedValues(metadata)) {
+      return { result: "missing-key" } as const;
     }
-  };
-  const refreshMetadata = () => {
-    refreshMetadataAsync().catch((error) => {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : "Failed to load album");
-      setMetadata(() => {
-        throw error;
-      });
-    });
-  };
+    let decodedValues: DecodedValues;
+    try {
+      decodedValues = await decodeMetadata(metadata, args.key);
+    } catch (error) {
+      console.error("[album] could not decrypt the metadata", error);
+      return { result: "wrong-key" } as const;
+    }
+    return { result: "success", metadata, expiresAt, decodedValues } as const;
+  },
+);
+
+/**
+ * What a change to an album refreshes: the endpoint, which re-runs every
+ * `albumMetadata` read of it. (Naming only the combined read would re-run it
+ * over the cached response.)
+ */
+export const ALBUM_REFRESH = [client.getAlbumMetadata];
+
+/** Re-fetches every album the page shows; the store keeps the old one visible meanwhile. */
+export function refreshAlbumMetadata() {
+  return store.refresh(ALBUM_REFRESH);
+}
+
+/** Suspends while the album loads; render it inside a `<Boundary>`. */
+export function AlbumContextProvider(props: { albumId: string; children: ReactNode }) {
+  // Read once: the hash is the key, and it does not change while the page is open.
+  const [key] = useState(getKeyFromHash);
+  const album = useGet(albumMetadata, { albumId: props.albumId, key });
 
   useEffect(() => {
-    refreshMetadata();
-  }, []);
+    if (album.result !== "success") return;
+    rememberVisitedAlbum({
+      albumId: props.albumId,
+      url: window.location.href,
+      title: album.decodedValues.albumName,
+      expiresAt: album.expiresAt,
+      itemCount: album.metadata.files.length,
+    });
+  }, [album, props.albumId]);
+
+  const value = useMemo((): AlbumContextType | null => {
+    if (album.result !== "success") return null;
+    return {
+      albumId: props.albumId,
+      key,
+      isEncrypted: key !== null,
+      metadata: album.metadata,
+      expiresAt: album.expiresAt,
+      decodedValues: album.decodedValues,
+      refreshMetadata: () => void refreshAlbumMetadata(),
+    };
+  }, [album, key, props.albumId]);
+
+  if (album.result === "missing") return <AlbumGone albumId={props.albumId} />;
+  if (album.result === "missing-key" || album.result === "wrong-key") {
+    return <UnreadableLink missingKey={album.result === "missing-key"} />;
+  }
+  return <AlbumContext.Provider value={value}>{props.children}</AlbumContext.Provider>;
+}
+
+/**
+ * An album with nothing known yet but what this browser remembers, for the
+ * loading skeleton: it renders the page's real components, which read this.
+ */
+export function AlbumPlaceholderProvider(props: {
+  albumId: string;
+  expiresAt: number | null;
+  children: ReactNode;
+}) {
+  const [key] = useState(getKeyFromHash);
+  const value = useMemo(
+    (): AlbumContextType => ({
+      albumId: props.albumId,
+      key,
+      isEncrypted: key !== null,
+      metadata: {
+        albumId: props.albumId,
+        albumName: { value: "", iv: "" },
+        files: [],
+      },
+      expiresAt: props.expiresAt,
+      decodedValues: { albumName: "", files: {}, batches: {} },
+      refreshMetadata: () => undefined,
+    }),
+    [key, props.albumId, props.expiresAt],
+  );
+  return <AlbumContext.Provider value={value}>{props.children}</AlbumContext.Provider>;
+}
+
+/** The album is gone (expired, deleted, or never existed): forget it and say so. */
+function AlbumGone(props: { albumId: string }) {
+  useEffect(() => forgetVisitedAlbum(props.albumId), [props.albumId]);
+  return <Navigate to="/not-found" replace />;
+}
+
+/** The album exists, but this link cannot decrypt it. */
+function UnreadableLink(props: { missingKey: boolean }) {
+  const navigate = useNavigate();
   return (
-    <AlbumContext.Provider
-      value={{
-        refreshMetadata,
-        key,
-        isEncrypted: key !== null,
-        metadata,
-        expiresAt,
-        decodedValues,
-      }}
+    <StatusScreen
+      title={
+        props.missingKey
+          ? "This link is missing its key"
+          : "This link can't open the album"
+      }
+      text={
+        props.missingKey
+          ? "The album is encrypted, and the part of the link after # unlocks it. Ask for the whole link."
+          : "The key in this link doesn't match the album, so its photos can't be decrypted. Ask for the link again."
+      }
     >
-      {props.children}
-    </AlbumContext.Provider>
+      <PrimaryButton type="button" onClick={() => navigate("/")}>
+        <StatusButtonLabel>Go back home</StatusButtonLabel>
+      </PrimaryButton>
+    </StatusScreen>
   );
 }

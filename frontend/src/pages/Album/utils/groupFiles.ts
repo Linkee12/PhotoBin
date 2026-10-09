@@ -33,6 +33,8 @@ export type ThumbnailGroup = {
   /** Set when the group is a named upload batch and can therefore be renamed. */
   batchId: string | undefined;
   thumbnails: Thumbnail[];
+  /** Stands in for groups not loaded yet: title and meta show as placeholder bars. */
+  isPlaceholder?: boolean;
 };
 
 export type DecodedBatches = Record<string, { name: string; createdAt: number }>;

@@ -1,10 +1,4 @@
-import {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-  useCallback,
-  useEffect,
-  useRef,
-} from "react";
+import { PointerEvent as ReactPointerEvent, useCallback, useEffect, useRef } from "react";
 import {
   clampColumns,
   containRect,
@@ -76,6 +70,12 @@ type Options = {
   /** `scrollTop` keeps the anchored tile where the gesture left it once the grid is relaid. */
   onCommit: (columns: number, scrollTop: number) => void;
   onOpen: (fileId: string) => void;
+  /** A pinch began: the click the lifting fingers produce must not open a tile. */
+  swallowNextClick: () => void;
+  /** The tiles are being animated (true) or are back in their layout (false). */
+  onGestureChange?: (active: boolean) => void;
+  /** Tiles that will be on screen one step either way: load their thumbnails now. */
+  onPrefetch?: (fileIds: string[]) => void;
 };
 
 function documentRect(el: Element): Rect {
@@ -131,8 +131,6 @@ export function useGridPinch(options: Options) {
   optionsRef.current = options;
 
   const pointers = useRef(new Map<number, Point>());
-  /** A pinch just happened: the click the lifting fingers produce must not open a tile. */
-  const swallowClick = useRef(false);
   const gesture = useRef<Gesture | null>(null);
   const frame = useRef<number | null>(null);
   const settle = useRef<number | null>(null);
@@ -167,11 +165,13 @@ export function useGridPinch(options: Options) {
     settle.current = null;
     if (overlayRef.current) overlayRef.current.style.opacity = "0";
     if (!g) return;
+    optionsRef.current.onGestureChange?.(false);
     for (const section of g.sections) {
       section.images.style.height = "";
       for (const tile of section.tiles) {
         tile.el.style.transform = "";
         tile.el.style.zIndex = "";
+        tile.el.style.visibility = "";
       }
     }
   }, []);
@@ -265,7 +265,7 @@ export function useGridPinch(options: Options) {
     const width = first.current.width;
     const columns = optionsRef.current.columns ?? measuredColumns(first.images);
     const maxColumns = clampColumns(Infinity, { width, gap });
-    gesture.current = {
+    const g: Gesture = {
       startDistance: distance(a, b),
       columns,
       minColumns: 1,
@@ -279,13 +279,14 @@ export function useGridPinch(options: Options) {
       direction: 0,
       progress: 0,
     };
+    gesture.current = g;
+    optionsRef.current.onGestureChange?.(true);
+    optionsRef.current.onPrefetch?.(tilesShownAfterStep(g));
   }, []);
 
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (!optionsRef.current.enabled || e.pointerType !== "touch") return;
-      // A new touch: the pinch's click, if any, has been and gone.
-      if (pointers.current.size === 0) swallowClick.current = false;
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (
         pointers.current.size === 2 &&
@@ -294,7 +295,7 @@ export function useGridPinch(options: Options) {
       ) {
         const [a, b] = [...pointers.current.values()];
         begin(a, b);
-        swallowClick.current = gesture.current !== null;
+        if (gesture.current !== null) optionsRef.current.swallowNextClick();
       }
     },
     [begin],
@@ -332,13 +333,6 @@ export function useGridPinch(options: Options) {
     [animateTo, clear, finish],
   );
 
-  const onClickCapture = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
-    if (!swallowClick.current) return;
-    swallowClick.current = false;
-    e.stopPropagation();
-    e.preventDefault();
-  }, []);
-
   useEffect(() => clear, [clear]);
 
   return {
@@ -349,7 +343,6 @@ export function useGridPinch(options: Options) {
       onPointerMove,
       onPointerUp,
       onPointerCancel: onPointerUp,
-      onClickCapture,
     },
   };
 }
@@ -364,6 +357,7 @@ function paintFullscreen(
     section.images.style.height = "";
     for (const tile of section.tiles) {
       if (tile !== g.anchor) tile.el.style.transform = "";
+      tile.el.style.visibility = "";
     }
   }
   const anchor = g.anchor;
@@ -377,9 +371,9 @@ function paintFullscreen(
  * Every tile is drawn `p` of the way to its place at the target column count
  * and each grid's height follows, so later sections slide along. The page is
  * scrolled so the anchored tile's centre stays put — that moves the bands
- * with the tiles, which a transform on the tiles alone would not. Tiles that
- * end up far off screen are left untransformed. A `null` target restores the
- * plain layout.
+ * with the tiles, which a transform on the tiles alone would not. Tiles drawn
+ * far off screen are hidden rather than transformed. A `null` target restores
+ * the plain layout.
  */
 function paintColumns(
   g: Gesture,
@@ -390,7 +384,10 @@ function paintColumns(
   if (target === null) {
     for (const section of g.sections) {
       section.images.style.height = "";
-      for (const tile of section.tiles) tile.el.style.transform = "";
+      for (const tile of section.tiles) {
+        tile.el.style.transform = "";
+        tile.el.style.visibility = "";
+      }
     }
     window.scrollTo({ top: g.scrollY, behavior: "auto" });
     return;
@@ -410,8 +407,15 @@ function paintColumns(
     section.images.style.height = `${section.current.height + delta}px`;
     section.tiles.forEach((tile, t) => {
       const rect = lerpRect(tile.current, target.rects[s][t], p);
-      if (overlaps(rect, near)) applyRect(tile, rect, drift);
-      else if (tile.el.style.transform !== "") tile.el.style.transform = "";
+      if (overlaps(rect, near)) {
+        applyRect(tile, rect, drift);
+        tile.el.style.visibility = "";
+      } else {
+        // Drawn far off screen, so not worth a transform; but its layout
+        // place may be on screen, where it would show up in the old grid.
+        tile.el.style.transform = "";
+        tile.el.style.visibility = "hidden";
+      }
     });
     drift += delta;
   });
@@ -445,6 +449,23 @@ function nearestTile(sections: SectionState[], point: Point): TileState | null {
     }
   }
   return best;
+}
+
+/** The tiles on screen once the grid has stepped either way (anchored as the gesture draws it). */
+function tilesShownAfterStep(g: Gesture): string[] {
+  const ids = new Set<string>();
+  for (const direction of [-1, 1] as const) {
+    const target = targetFor(g, direction);
+    if (target?.kind !== "columns") continue;
+    const top = g.scrollY + anchorScrollDelta(g, target);
+    const screen = { left: 0, top, width: g.viewport.width, height: g.viewport.height };
+    g.sections.forEach((section, s) => {
+      section.tiles.forEach((tile, t) => {
+        if (overlaps(target.rects[s][t], screen)) ids.add(tile.id);
+      });
+    });
+  }
+  return [...ids];
 }
 
 /** The target layout one step in `direction`, or `null` when the ladder ends there. */

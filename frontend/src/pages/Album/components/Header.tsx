@@ -7,11 +7,14 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { useAlbumContext } from "../hooks/useAlbumContext";
 import { useTimeLeft } from "../hooks/useTimeLeft";
+import { TextSkeleton } from "../../../components/Skeleton";
 import { pressable, pressableNoScale } from "../../../pressable";
 import { SUN_CENTER_BELOW_HEADER, SUN_X, sunBackground } from "../layout";
 
 type HeaderProps = {
   isEmptyAlbum: boolean;
+  /** The album is still loading: an unknown title shows as a placeholder bar. */
+  isLoading?: boolean;
   title: string;
   selectedAll: boolean;
   /** Some, but not all, photos are selected. */
@@ -71,8 +74,15 @@ export function Header(props: HeaderProps) {
             }}
           />
         ) : (
-          <Text isPlaceholder={isPlaceholder} onClick={() => setIsEdit(true)}>
-            {props.title || "Album title"}
+          <Text
+            isPlaceholder={isPlaceholder && !props.isLoading}
+            onClick={() => setIsEdit(true)}
+          >
+            {props.isLoading && isPlaceholder ? (
+              <TextSkeleton>Album title</TextSkeleton>
+            ) : (
+              props.title || "Album title"
+            )}
           </Text>
         )}
       </TextContainer>
@@ -123,6 +133,11 @@ export function Header(props: HeaderProps) {
       </BottomRow>
       <ShareRow>
         {timeLeft && <TimeLeft>{timeLeft}</TimeLeft>}
+        {!timeLeft && props.isLoading && (
+          <TimeLeft>
+            <TextSkeleton>30 days left</TextSkeleton>
+          </TimeLeft>
+        )}
         <Button
           title="Copy the album link"
           onClick={() => {

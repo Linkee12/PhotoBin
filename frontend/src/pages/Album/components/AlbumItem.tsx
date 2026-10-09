@@ -1,4 +1,5 @@
 import Check from "@assets/images/icons/check.svg?react";
+import { shimmer } from "../../../components/Skeleton";
 import Circle from "@assets/images/icons/circle.svg?react";
 import Zoom from "@assets/images/icons/zoom.svg?react";
 import Play from "@assets/images/icons/play.svg?react";
@@ -127,21 +128,31 @@ export const AlbumItem = memo(function AlbumItem(props: AlbumItemProps) {
   );
 });
 
+// Out of the tile's flow, so the tile's 3:2 box never depends on the picture:
+// a thumbnail keeps its photo's whole frame (a portrait one is taller) and is
+// cropped here, and the pinch gesture can animate the grid's height without
+// the tiles giving way.
 const Image = styled("img", {
   display: "block",
-  transition: "width 0.2s, height 0.2s, padding 0.2s, border-radius 0.2s, filter 0.15s",
+  position: "absolute",
+  transition:
+    "top 0.2s, left 0.2s, width 0.2s, height 0.2s, border-radius 0.2s, filter 0.15s",
   objectFit: "cover",
   variants: {
     isSelected: {
       true: {
         borderRadius: "4px",
+        top: "10px",
+        left: "10px",
         width: "calc(100% - 20px)",
         height: "calc(100% - 20px)",
       },
       false: {
         borderRadius: "10px",
+        top: 0,
+        left: 0,
         width: "100%",
-        height: "auto",
+        height: "100%",
       },
     },
   },
@@ -185,6 +196,10 @@ const highlightPulse = keyframes({
 const Preview = styled("div", {
   ...pressableNoScale,
   ...pressDim,
+  // The pinch gesture writes the tile's transform every frame and clears it
+  // at the commit: a transform transition would trail the fingers, then slide
+  // every tile from the preview into the new grid.
+  transition: "opacity 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease",
   // The picture brightens under the pointer; the tile itself keeps its
   // transform for the pinch gesture, so no scale here.
   "&:hover [data-picture]": { filter: "brightness(1.08)" },
@@ -218,11 +233,16 @@ const Preview = styled("div", {
   width: "100%",
   aspectRatio: "3/2",
   margin: "0.5rem",
+  // A long press selects (useLongPressSelect): no callout, no text selection.
+  WebkitTouchCallout: "none",
+  userSelect: "none",
   // The pinch gesture (useGridPinch) draws the tile elsewhere with a transform
   // measured from its top-left corner.
   transformOrigin: "0 0",
   borderRadius: "10px",
   backgroundColor: "#232323",
+  // Its thumbnail has not arrived yet.
+  "&[data-thumb-placeholder]": shimmer("#232323"),
   boxSizing: "border-box",
   display: "flex",
   justifyContent: "center",

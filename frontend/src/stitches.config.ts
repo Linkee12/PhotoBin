@@ -22,7 +22,7 @@ export const NARROW_MAX_WIDTH_PX = 699;
 export const TOOLBAR_INLINE_MIN_WIDTH_PX = 1200;
 export const TOOLBAR_INLINE_QUERY = `(min-width: ${TOOLBAR_INLINE_MIN_WIDTH_PX}px)`;
 
-export const { styled, keyframes } = createStitches({
+export const { styled, keyframes, globalCss } = createStitches({
   media: {
     narrow: `(max-width: ${NARROW_MAX_WIDTH_PX}px) and (orientation: portrait)`,
     wide: `(min-width: ${NARROW_MAX_WIDTH_PX + 1}px), (orientation: landscape)`,

@@ -31,6 +31,26 @@ const MENU_ICON_WAVE_HEIGHT_PX = 48;
 const MENU_ICON_HEIGHT_PX = 96;
 const MENU_ICON_CENTER_BELOW_CURVE_PX = 24;
 
+/** The sheet's open/close transition (`Sheet`, `grid-template-rows`). */
+const SHEET_TRANSITION_S = 0.4;
+
+/**
+ * What sits on the closed handle (menu icon, time left): gone at once when
+ * the sheet opens, back only once it has slid down, never over its buttons.
+ */
+function handleOverlay(otherTransitions?: string) {
+  const fade = (delay: number) =>
+    [otherTransitions, `opacity 0.15s ease ${delay}s`].filter(Boolean).join(", ");
+  return {
+    true: { opacity: 0, transition: fade(0) },
+    false: {
+      opacity: 1,
+      transition: fade(SHEET_TRANSITION_S - 0.1),
+      "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+    },
+  };
+}
+
 /** Share of the toolbar row the first group's header gets: the part of the wave with the most water above it. */
 const HEADER_SHARE = "33.333%";
 
@@ -41,6 +61,7 @@ type AlbumToolbarProps = {
    */
   headerSlotRef: Ref<HTMLDivElement>;
   onDownloadAll: () => void;
+  /** Opens the add-photos screen (this device or Google Photos). */
   onAddPhoto: () => void;
   isBusy: boolean;
   view: AlbumView;
@@ -81,7 +102,7 @@ type ControlsProps = Pick<
 >;
 
 /**
- * The three controls, in the wide row (`data-toolbar-control`, measured by
+ * The controls, in the wide row (`data-toolbar-control`, measured by
  * the layout check) or in the bottom sheet, where a button fills the width
  * with its label centred between a spacer and the icon, is only tabbable
  * while the sheet is open, and closes the sheet once used.
@@ -110,7 +131,7 @@ function Controls(
       </Button>
       <Button accent onClick={act(props.onAddPhoto)} {...control}>
         {!inRow && <div />}
-        <span>ADD PHOTO</span>
+        <span>ADD PHOTOS</span>
         <AddIcon />
       </Button>
     </>
@@ -147,16 +168,18 @@ export function AlbumToolbar(props: AlbumToolbarProps) {
           }
         }}
       >
-        <PortraitHeader isOpen={isOpen} data-sheet-handle />
-        {!isOpen && timeLeft && <HandleTimeLeft>{timeLeft}</HandleTimeLeft>}
-        {!isOpen && (
-          <MenuIcon
-            width={MENU_ICON_WIDTH_PX}
-            height={MENU_ICON_HEIGHT_PX}
-            waveHeight={MENU_ICON_WAVE_HEIGHT_PX}
-            centerBelowCurve={MENU_ICON_CENTER_BELOW_CURVE_PX}
-          />
+        {timeLeft && (
+          <HandleTimeLeft isOpen={isOpen} aria-hidden={isOpen}>
+            {timeLeft}
+          </HandleTimeLeft>
         )}
+        <MenuIcon
+          isOpen={isOpen}
+          width={MENU_ICON_WIDTH_PX}
+          height={MENU_ICON_HEIGHT_PX}
+          waveHeight={MENU_ICON_WAVE_HEIGHT_PX}
+          centerBelowCurve={MENU_ICON_CENTER_BELOW_CURVE_PX}
+        />
         <Sheet isOpen={isOpen} aria-hidden={!isOpen}>
           <SheetContent>
             <Buttons>
@@ -232,13 +255,16 @@ const PortraitButtonsContainer = styled("div", {
   flexDirection: "column",
   justifyContent: "flex-start",
   alignItems: "center",
-  // Handle (wave with the chevron) on top, the sheet's bar below it.
+  // The closed sheet: its wave (the handle, with the menu icon) over its bar.
   height: `calc(${SHEET_BAR_HEIGHT} * 2)`,
 });
 
 /**
  * Bottom sheet, anchored to the bar so it grows upwards over the album header.
- * Closed it is the empty bar; open it is as tall as its buttons.
+ * Closed it is the empty bar under the wave (the handle); open it is as tall
+ * as its buttons, with a flat top. The wave is the sheet's own top edge,
+ * flattening as the sheet rises (and growing back as it comes down), so the
+ * edge stays one shape: no seam between a handle and the sheet.
  */
 const Sheet = styled("div", {
   position: "absolute",
@@ -248,12 +274,30 @@ const Sheet = styled("div", {
   display: "grid",
   minHeight: SHEET_BAR_HEIGHT,
   backgroundColor: SHELF_COLOR,
-  transition: "grid-template-rows 0.4s",
+  "&::before": {
+    content: '""',
+    position: "absolute",
+    left: 0,
+    right: 0,
+    // 1px into the sheet: no hairline where the two meet.
+    bottom: "calc(100% - 1px)",
+    height: WAVE_HEIGHT,
+    backgroundColor: SHELF_COLOR,
+    maskImage: `url(${albumItemsBg})`,
+    maskRepeat: "no-repeat",
+    maskSize: "100% 100%",
+    maskPosition: "bottom",
+    pointerEvents: "none",
+    transformOrigin: "bottom",
+    transition: `transform ${SHEET_TRANSITION_S}s`,
+    "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+  },
+  transition: `grid-template-rows ${SHEET_TRANSITION_S}s`,
   "@media (prefers-reduced-motion: reduce)": { transition: "none" },
   variants: {
     isOpen: {
-      true: { gridTemplateRows: "1fr" },
-      false: { gridTemplateRows: "0fr" },
+      true: { gridTemplateRows: "1fr", "&::before": { transform: "scaleY(0)" } },
+      false: { gridTemplateRows: "0fr", "&::before": { transform: "scaleY(1)" } },
     },
   },
 });
@@ -280,13 +324,12 @@ const MenuIcon = styled(WaveMenuIcon, {
   pointerEvents: "none",
   zIndex: 1,
   color: "#e0e0e0",
-  transition: "color 0.15s ease, transform 0.15s ease",
   [`${PortraitButtonsContainer}:hover &`]: {
     color: "#fff",
     transform: "translateY(-2px)",
   },
   [`${PortraitButtonsContainer}:active &`]: { transform: "translateY(1px)" },
-  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
+  variants: { isOpen: handleOverlay("color 0.15s ease, transform 0.15s ease") },
 });
 
 // Time left in the handle's wave band, right-aligned, under the menu icon's row.
@@ -301,24 +344,7 @@ const HandleTimeLeft = styled("div", {
   fontSize: "0.8rem",
   whiteSpace: "nowrap",
   pointerEvents: "none",
-});
-
-const PortraitHeader = styled("div", {
-  width: "100%",
-  maskRepeat: "no-repeat",
-  maskSize: "100% 100%",
-  maskPosition: "bottom",
-  height: WAVE_HEIGHT,
-  backgroundColor: SHELF_COLOR,
-  maskImage: `url(${albumItemsBg})`,
-  transition: "height 0.4s",
-  "@media (prefers-reduced-motion: reduce)": { transition: "none" },
-  variants: {
-    isOpen: {
-      true: { height: "0rem", overflow: "hidden" },
-      false: { height: WAVE_HEIGHT },
-    },
-  },
+  variants: { isOpen: handleOverlay() },
 });
 
 // Same shell as the view toggle: border, radius, text size and height.
